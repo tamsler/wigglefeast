@@ -23,6 +23,7 @@
 - [x] 4.1 Bump `VERSION` in `sw.js` (no new files, so `FILES` is unchanged); verify `.github/scripts/check-version.sh main` passes
 - [x] 4.2 Run `node --test "tests/**/*.test.js"`; verify every test passes
 - [ ] 4.3 Manual check on a real iPhone home-screen install, in portrait and landscape (on the deployed site after merge, or on a local server reachable from the phone): buttons clear the notch and home bar, holding boost for several seconds and sliding off it never opens a menu, selects text or zooms, pause and resume work, and nothing overlaps; verify by noting the result in the PR or issue
+  - **Not done (waived 2026-10-17):** no iOS device was available. The change shipped in v1.2.0 based on the headless Chrome tests. Notch and home-bar placement and iOS long-press behaviour remain unverified on a real device.
 
 ## Workflow follow-up
 
