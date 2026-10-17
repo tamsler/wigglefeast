@@ -61,6 +61,21 @@ test('boost indicator', async (t) => {
     await page.waitFor(`!(${shown('#boostBadge')})`, 'badge to hide');
   });
 
+  await t.test('a boosting bot in view shows arrows too; one far off-screen does not', async () => {
+    // A shielded bot that never thinks, so it keeps the boost we give it.
+    await page.eval(`{ const g = window.__game, p = window.__player, b = g.spawnBot(false);
+      Object.assign(b, { shield: 1e9, mass: 200, thinkT: 1e9, wantBoost: true });
+      b.sx = b.sx.map((v, i) => p.sx[0] - i * 8); b.sy = b.sy.map(() => p.sy[0] - 250); b.updateBounds(); }`);
+    await page.waitFor('window.wigglefeastDebug.boostArrows() === 1', 'arrows for the bot');
+    await page.key('keyDown', 'Space');
+    await page.waitFor('window.wigglefeastDebug.boostArrows() === 2', 'arrows for the bot and the player');
+    await page.key('keyUp', 'Space');
+    await page.eval(`{ const b = window.__game.worms.find((w) => w.ai), p = window.__player;
+      b.sx = b.sx.map((v, i) => p.sx[0] + 4000 - i * 8); b.updateBounds(); }`);
+    await page.waitFor('window.wigglefeastDebug.boostArrows() === 0', 'no arrows for the off-screen bot');
+    await page.eval('window.__game.worms = [window.__player]');
+  });
+
   await t.test('the touch boost button shows the badge too', async () => {
     await page.coarsePointer();
     await page.waitFor(shown('#boostBtn'), 'touch buttons');

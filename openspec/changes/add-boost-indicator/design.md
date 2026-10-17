@@ -23,7 +23,7 @@
 ### 1. Arrows in front of the head, drawn with the worm (replaces the v1.3.0 trail, #41)
 `drawWorm()` draws the arrows for a boosting worm right after its body and eyes, so the worm's own body never covers them.
 
-- **Shape:** two chevrons pointing along `w.angle`, centred about 1.6× and 2.4× the head radius ahead of the head centre. Each arm is about 0.7× the radius long, at about 45° to the heading.
+- **Shape:** two chevrons pointing along `w.angle`, centred 2× and 3.1× the head radius ahead of the head centre. Each arm is 1.05× the radius long, at 45° to the heading. (These were raised from 1.6×, 2.4× and 0.7× after screenshots showed the first size was too subtle.)
 - **Look:** each chevron is a wide stroke in the worm's main skin colour under a thin white stroke with round caps. It reads clearly on the dark floor and over food, and is clearly the worm's own.
 - **Animation:** a staggered alpha pulse, back chevron first, so the pair seems to push forward.
 - **Shield:** the arrows use the worm's current drawing alpha, so a shielded worm's arrows are faint like its body.
@@ -50,7 +50,7 @@ The arrows are only pixels on the canvas, so the browser tests can't see them di
 ## Risks / Trade-offs
 
 - **Busy screens:** many bots boosting near the player add many arrows. → Arrows are small, only drawn for worms in view, and their size and offsets are constants that are easy to tune after playtesting.
-- **Edge clipping:** arrows reach about 3× the head radius ahead, past the worm's culling bounds. A worm just outside the view may have its arrows clipped at the screen edge. → Negligible: it lasts a few frames as the worm enters.
+- **Edge clipping:** arrows reach about 3.5× the head radius ahead, past the worm's own bounds. → `drawWorm()` widens its off-screen check by that much for boosting worms, so a worm just outside the view still gets its arrows drawn.
 - **Debug hook:** adds a small global. → It only reads a count, and its name makes it clearly not part of the game.
 - **Order with the tight-turn power-up (#38):** both changes touch the HUD and the touch layout test. Whichever lands second keeps both: the badge showing *and* all power-up timers in the layout test.
 

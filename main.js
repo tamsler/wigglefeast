@@ -659,7 +659,8 @@
   }
 
   function drawWorm(w, t, view) {
-    if (w.maxX < view.x0 || w.minX > view.x1 || w.maxY < view.y0 || w.minY > view.y1) return;
+    const m = w.boosting ? w.r * 3.5 : 0; // boost arrows reach ahead of the head
+    if (w.maxX + m < view.x0 || w.minX - m > view.x1 || w.maxY + m < view.y0 || w.minY - m > view.y1) return;
     const sx = w.sx, sy = w.sy, n = sx.length, r = w.r, cols = w.skin.colors;
     const alpha = w.shield > 0 ? 0.45 + 0.25 * Math.sin(t * 14) : 1;
     ctx.globalAlpha = alpha;
