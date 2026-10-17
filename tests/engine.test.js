@@ -316,3 +316,38 @@ test('food and power-ups refill at the same pace at any update rate (#48)', () =
     assert.ok(r.powerups > 80 && r.powerups < 140, `${hz} updates/s: ${r.powerups} power-ups in a minute`);
   }
 });
+
+test('skins: originals keep their place, new skins are complete, hidden ones are never handed out (#58)', () => {
+  const { PICKABLE_SKINS } = globalThis.WormEngine;
+  // Saves store skins by position, so the original 14 must never move or change.
+  const ORIGINAL = [
+    ['Cherry Pop', ['#ff595e', '#ffca3a']], ['Lagoon', ['#4cc9f0', '#4361ee', '#3a0ca3']], ['Lime Ocean', ['#8ac926', '#1982c4']],
+    ['Rainbow', ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93']], ['Candy Cane', ['#ffffff', '#ef233c']],
+    ['Bumblebee', ['#2b2b2b', '#ffd60a']], ['Neon Night', ['#f72585', '#7209b7', '#3a0ca3', '#4361ee', '#4cc9f0']],
+    ['Mint', ['#2ec4b6', '#cbf3f0']], ['Lavender', ['#ffd6ff', '#e7c6ff', '#c8b6ff', '#b8c0ff']],
+    ['Sailor', ['#e63946', '#f1faee', '#a8dadc', '#457b9d']], ['Tangerine', ['#ff9f1c', '#ffbf69', '#fff3e0']],
+    ['Emerald', ['#06d6a0', '#118ab2']], ['Grape', ['#6a4c93', '#f15bb5']], ['Lava', ['#d00000', '#ffba08', '#dc2f02']],
+  ];
+  ORIGINAL.forEach(([name, colors], i) => {
+    assert.equal(SKINS[i].name, name, `skin ${i}`);
+    assert.deepEqual(SKINS[i].colors, colors, `${name} colours`);
+    assert.equal(SKINS[i].finish, 'stripes', `${name} finish`);
+    assert.deepEqual(SKINS[i].food, colors, `${name} drops its own colours, as before`);
+  });
+  assert.deepEqual(SKINS.slice(14).map((s) => s.name), ['Aurora', 'Sunset Drive', 'Synthwave', 'Toxic', 'Gold Rush', 'Chrome', 'Ladybug', 'Leopard', 'Viper', 'Galaxy', 'Magma', 'Abyss']);
+  const hex = /^#[0-9a-f]{6}$/i;
+  for (const s of SKINS) {
+    assert.ok(['stripes', 'gradient', 'neon', 'metallic', 'spots', 'scales', 'galaxy', 'pulse'].includes(s.finish), `${s.name} finish`);
+    assert.ok([...s.colors, s.accent, ...s.food].every((c) => hex.test(c)), `${s.name} colours are #rrggbb`);
+  }
+  assert.deepEqual(SKINS.filter((s) => s.hidden).map((s) => s.name), ['Rainbow', 'Lavender']);
+  assert.equal(PICKABLE_SKINS.length, 24);
+
+  const game = new Game({ botCount: 5 });
+  for (let i = 0; i < 2000; i++) assert.ok(!game.spawnBot(false).skin.hidden, 'bots never get a hidden skin');
+
+  const synth = new Worm({ name: 'S', skin: SKINS.find((s) => s.name === 'Synthwave'), mass: 300, x: 0, y: 0, angle: 0, worldR: game.R });
+  game.worms = [synth]; game.food = [];
+  game.kill(synth, null);
+  assert.ok(game.food.length > 0 && game.food.every((f) => ['#ff2e88', '#2de2e6'].includes(f.c)), 'death food is bright, not the dark body colour');
+});
