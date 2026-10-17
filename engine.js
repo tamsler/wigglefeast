@@ -752,6 +752,7 @@
       if (w.dead) return;
       w.dead = true;
       w.diedAt = this.time;
+      if (w.mass > w.peak) w.peak = w.mass; // food eaten this tick, before update() saw it
       const total = Math.max(10, w.mass * 0.8);
       const n = w.sx.length;
       const count = clamp(Math.round(total / 2.5), 5, n);
