@@ -245,3 +245,61 @@ test('saves from before the tight-turn power-up load, and saves with it round-tr
   assert.equal(again.worms.find((w) => w.id === snap.worms[0].id).pw.turn, 9.5);
   assert.ok(again.powerups.some((p) => p.type === 'turn'));
 });
+
+test('simultaneous deaths: the player run is recorded after all kills of the tick are credited (#47)', () => {
+  // P's head hits K's body while V's head hits P's body, all in one collision pass.
+  const straight = (name, x, y, angle, mass, isPlayer) => {
+    const w = new Worm({ name, skin: SKINS[0], mass, x, y, angle, worldR: 5000, isPlayer });
+    const sp = w.r * 0.42;
+    w.sx = w.sx.map((v, i) => x - Math.cos(angle) * i * sp);
+    w.sy = w.sy.map((v, i) => y - Math.sin(angle) * i * sp);
+    w.updateBounds();
+    return w;
+  };
+  for (const order of [['P', 'V', 'K'], ['V', 'P', 'K'], ['K', 'V', 'P']]) {
+    const game = new Game({ botCount: 5 });
+    game.food = []; game.powerups = [];
+    const worms = {
+      P: straight('Player', 0, 0, 0, 15, true), // heading +x, body along -x
+      K: straight('Killer', 5, 200, Math.PI / 2, 200), // body crosses just in front of P's head
+      V: straight('Victim', -50, 3, Math.PI / 2, 15), // head lands on P's body
+    };
+    game.worms = order.map((k) => worms[k]);
+    game.player = worms.P;
+    game.maxR = Math.max(...game.worms.map((w) => w.r));
+    game.rebuildFoodGrid();
+    game.rebuildSegGrid();
+    let recordedKills = null;
+    const seen = [];
+    game.on('death', (e) => {
+      seen.push(e.victim.name);
+      if (e.victim === worms.P) recordedKills = worms.P.kills; // what main.js records for the run
+    });
+    game.checkCollisions();
+    assert.deepEqual(seen.sort(), ['Player', 'Victim'], `order ${order}: both die`);
+    assert.equal(recordedKills, 1, `order ${order}: the player's kill is counted when the run is recorded`);
+  }
+});
+
+test('food and power-ups refill at the same pace at any update rate (#48)', () => {
+  // Seeded random numbers, so the comparison doesn't depend on luck.
+  const seeded = (seed) => () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const refill = (hz) => {
+    const random = Math.random;
+    Math.random = seeded(42);
+    try {
+      const game = new Game({ botCount: 5 });
+      Object.assign(game, { worms: [], respawnQueue: [], food: [], powerups: [], naturalFood: 0, foodTarget: 1e6, powerupTarget: 1e6 });
+      game.settings.botCount = 0;
+      for (let i = 0; i < hz * 60; i++) game.update(1 / hz); // one simulated minute
+      return { food: game.food.length, powerups: game.powerups.length };
+    } finally { Math.random = random; }
+  };
+  const r60 = refill(60), r120 = refill(120), r30 = refill(30);
+  // Natural food has a fixed budget: exactly 600 per simulated second at every rate.
+  for (const r of [r30, r60, r120]) assert.equal(r.food, 600 * 60);
+  // Power-ups are random: about 1.83 per second at every rate (expected ~110 per minute).
+  for (const [hz, r] of [[30, r30], [60, r60], [120, r120]]) {
+    assert.ok(r.powerups > 80 && r.powerups < 140, `${hz} updates/s: ${r.powerups} power-ups in a minute`);
+  }
+});
