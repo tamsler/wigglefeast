@@ -120,4 +120,37 @@ test('one active game across tabs (#45)', async (t) => {
     const waited = Date.now() - t0;
     assert.ok(waited >= 1800 && waited < 4000, `waited ${waited} ms`);
   });
+
+  const games = (p) => p.eval(`JSON.parse(localStorage.getItem('wormarena.profile')).totals.games`);
+
+  await t.test('taking over picks up the other window\'s settings', async () => {
+    await b.startRun('Zed'); // B is active: stores name Zed
+    await b.press('KeyP');
+    await b.click('#endRun');
+    await front(a);
+    await a.click('#playHere');
+    await a.waitFor(`document.getElementById('standby').classList.contains('hidden')`, 'A takes over');
+    assert.equal(await a.eval(`document.getElementById('name').value`), 'Zed');
+  });
+
+  await t.test('a run that ends after another window took over is not recorded or shown', async () => {
+    await a.startRun('Late');
+    const before = await games(a);
+    // Another window takes over, and this one dies before noticing (same instant).
+    await a.eval(`localStorage.setItem('wormarena.session', JSON.stringify({ id: 'other', at: Date.now() })); window.__game.kill(window.__player, null)`);
+    await new Promise((r) => setTimeout(r, 1500)); // past the death screen's delay
+    assert.equal(await standby(a), true, 'standby panel');
+    assert.equal(await a.eval(`document.getElementById('death').classList.contains('hidden')`), true, 'no death screen over the panel');
+    assert.equal(await games(a), before, 'the late run is not recorded');
+  });
+
+  await t.test('an import finished after another window took over changes nothing', async () => {
+    const before = await a.eval(`localStorage.getItem('wormarena.profile')`);
+    a.dialogs.length = 0;
+    await a.setFile('#importFile', require('node:path').join(__dirname, '..', 'fixtures', 'save-v1.json'));
+    await new Promise((r) => setTimeout(r, 500));
+    assert.deepEqual(a.dialogs, [], 'no confirmation asked');
+    assert.equal(await a.eval(`localStorage.getItem('wormarena.profile')`), before);
+    assert.equal(await standby(a), true, 'still on the standby panel');
+  });
 });

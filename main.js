@@ -49,8 +49,9 @@
   }
 
   // Rebuilt from checked fields: a corrupted stored value must not stop startup (#26).
-  const settings = { name: '', skin: 0, botCount: 30, difficulty: 'normal' };
-  {
+  const settings = {};
+  function loadSettings() {
+    Object.assign(settings, { name: '', skin: 0, botCount: 30, difficulty: 'normal' });
     const s = store.get('settings', null);
     if (s && typeof s === 'object') {
       if (typeof s.name === 'string') settings.name = s.name.slice(0, 16);
@@ -59,6 +60,7 @@
       if (['easy', 'normal', 'hard'].includes(s.difficulty)) settings.difficulty = s.difficulty;
     }
   }
+  loadSettings();
 
   // ---------------------------------------------------------------------------
   // Profile: lifetime totals, top runs and recent runs. Kept separate from the
@@ -181,8 +183,10 @@
   // Session upkeep: heartbeat, handing over to a window that asks with Play here, and
   // releasing the session on close so a reload becomes active straight away.
   window.addEventListener('pagehide', () => {
-    const s = readKey(SESSION_KEY);
-    if (active && s && s.id === sessionId) removeKey(SESSION_KEY);
+    const s = readKey(SESSION_KEY), h = readKey(HANDOVER_KEY);
+    // Release the session even mid-takeover, so a waiting window's Play here works at once.
+    if (s && s.id === sessionId) removeKey(SESSION_KEY);
+    if (h && h.to === sessionId) removeKey(HANDOVER_KEY); // closed while asking for Play here
     // Just saved; write nothing more (the visibilitychange that follows would re-claim).
     active = false;
   });
@@ -227,6 +231,10 @@
     claimSession();
     $('standby').classList.add('hidden');
     profile = loadProfile();
+    loadSettings(); // the other window may have changed name, skin or world settings
+    $('name').value = settings.name;
+    $('botCount').value = settings.botCount;
+    refreshMenu();
     const saved = loadWorld();
     if (!saved || !restoreWorld(saved)) { newGame(); showMenu(); }
   }
@@ -352,6 +360,8 @@
     // killer.isPlayer, not game.player: the player may have died in the same tick (#47).
     if (killer && killer.isPlayer) feed(`You ate ${victim.name}! (+${Math.round(victim.mass * 0.8)})`, 'good');
     else if (victim.isPlayer) {
+      // Another window took over in the meantime: its last save wins, so this run isn't kept (#45).
+      if (!isActive()) return;
       const isBest = recordRun(victim, killer, cause);
       saveWorld();
       if (cause === 'quit') { showMenu(); return; }
@@ -490,6 +500,7 @@
   function importSave(file) {
     const reader = new FileReader();
     reader.onload = () => {
+      if (!isActive()) return; // another window took over while the file picker was open (#45)
       let data;
       try { data = JSON.parse(reader.result); } catch { alert('That file is not valid JSON.'); return; }
       // Check everything before changing anything: an invalid file leaves stats and world untouched.
@@ -498,7 +509,7 @@
       let worldOk = false;
       if (newProfile && data.world) { try { validateSnapshot(data.world); worldOk = true; } catch (err) { console.warn(err.message); } }
       if (!newProfile || !worldOk) { alert('That file is not a valid Wigglefeast save. Nothing was changed.'); return; }
-      if (!confirm('Replace your current stats and world with this save?')) return;
+      if (!confirm('Replace your current stats and world with this save?') || !isActive()) return;
       if (!restoreWorld(data.world)) { alert('That save could not be loaded. Nothing was changed.'); return; }
       profile = newProfile;
       saveProfile();
@@ -549,7 +560,7 @@
   $('importFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importSave(f); });
   $('playHere').addEventListener('click', playHere);
   $('resetStats').addEventListener('click', () => {
-    if (!confirm('Reset all stats and high scores? This cannot be undone (export a save first if you want a backup).')) return;
+    if (!confirm('Reset all stats and high scores? This cannot be undone (export a save first if you want a backup).') || !isActive()) return;
     profile = emptyProfile();
     saveProfile();
     showStats();
