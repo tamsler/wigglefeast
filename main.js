@@ -72,6 +72,7 @@
     if (storedProfile !== null) { store.set('profile-corrupt', storedProfile); console.warn('Stored profile was invalid; saved it as wormarena.profile-corrupt and started fresh.'); }
     profile = emptyProfile();
     profile.totals.best = Number(store.get('best', 0)) || 0; // carry over the best score from before stats existed
+    if (storedProfile !== null) store.set('profile', profile);
   }
   const saveProfile = () => store.set('profile', profile);
 
