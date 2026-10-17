@@ -89,6 +89,48 @@
   };
 
   // ---------------------------------------------------------------------------
+  // Save files are untrusted input (they can be imported from anywhere), so check
+  // every field load() relies on before building a world from one.
+  function validateSnapshot(snap) {
+    const fail = (why) => { throw new Error('Invalid Wigglefeast save: ' + why); };
+    const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+    const fin = (v) => typeof v === 'number' && Number.isFinite(v);
+    const finArr = (a, max) => Array.isArray(a) && a.length <= max && a.every(fin);
+    const has = (obj, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(obj, k);
+
+    if (!isObj(snap) || !SAVE_APP_IDS.includes(snap.app) || snap.v !== 1) fail('not a world snapshot');
+    const s = snap.settings;
+    if (!isObj(s) || !Number.isInteger(s.botCount) || s.botCount < 5 || s.botCount > 60 || !has(DIFFICULTY, s.difficulty)) fail('settings');
+    if (!fin(snap.time) || snap.time < 0) fail('time');
+    if (snap.nextId !== undefined && !fin(snap.nextId)) fail('nextId');
+
+    if (!Array.isArray(snap.worms) || snap.worms.length > 200) fail('worms');
+    let players = 0;
+    for (const w of snap.worms) {
+      if (!isObj(w) || typeof w.name !== 'string' || w.name.length > 40) fail('worm name');
+      if (!Number.isInteger(w.skin) || w.skin < 0 || w.skin >= SKINS.length) fail('worm skin');
+      for (const k of ['id', 'mass', 'angle', 'targetAngle', 'kills', 'eaten', 'dropAcc', 'shield', 'born', 'peak']) if (!fin(w[k])) fail('worm ' + k);
+      if (w.mass < 1 || w.mass > 1e7) fail('worm mass');
+      if (!finArr(w.sx, 20000) || !finArr(w.sy, 20000) || w.sx.length !== w.sy.length || w.sx.length < 2) fail('worm body');
+      if (!isObj(w.pw) || Object.keys(w.pw).some((k) => !has(POWERUP_WEIGHTS, k) || !fin(w.pw[k]))) fail('worm power-ups');
+      if (w.isPlayer === true) players++;
+      if (w.ai != null) {
+        const a = w.ai;
+        if (!isObj(a) || !['skill', 'aggro', 'interval', 'wx', 'wy', 'huntUntil'].every((k) => fin(a[k])) || !(a.prey == null || fin(a.prey))) fail('bot state');
+      }
+    }
+    if (players > 1) fail('more than one player');
+
+    if (!Array.isArray(snap.palette) || snap.palette.length > 1000 || !snap.palette.every((c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c))) fail('colours');
+    const F = snap.food;
+    if (!finArr(F, 7 * 50000) || F.length % 7 !== 0) fail('food');
+    for (let i = 0; i < F.length; i += 7) if (F[i + 2] <= 0 || F[i + 2] > 1e6 || (F[i + 4] < 0 && F[i + 4] !== -1)) fail('food values');
+    if (!Array.isArray(snap.powerups) || snap.powerups.length > 500 ||
+      !snap.powerups.every((p) => isObj(p) && has(POWERUP_WEIGHTS, p.type) && fin(p.x) && fin(p.y) && fin(p.ph))) fail('power-ups');
+    if (snap.respawnQueue !== undefined && !finArr(snap.respawnQueue, 500)) fail('respawn queue');
+  }
+
+  // ---------------------------------------------------------------------------
   // Uniform grid storing (a, b) integer pairs per cell. Rebuilt every tick.
   class Grid {
     constructor(cell, half) {
@@ -380,7 +422,10 @@
   // ---------------------------------------------------------------------------
   class Game {
     constructor(settings, snapshot) {
-      if (snapshot) settings = snapshot.settings;
+      if (snapshot) {
+        validateSnapshot(snapshot); // before its settings size the world
+        settings = snapshot.settings;
+      }
       this.settings = Object.assign({ botCount: 30, difficulty: 'normal' }, settings);
       const bc = this.settings.botCount;
       this.R = 1800 + 60 * bc;
@@ -469,15 +514,15 @@
     }
 
     load(snap) {
-      if (!snap || !SAVE_APP_IDS.includes(snap.app) || snap.v !== 1) throw new Error('Not a Wigglefeast save');
       this.time = snap.time || 0;
       nextId = Math.max(nextId, snap.nextId || 1);
       const byId = new Map();
       for (const d of snap.worms) {
         const w = new Worm({
-          id: d.id, name: d.name, skin: SKINS[d.skin] || SKINS[0], isPlayer: d.isPlayer, mass: d.mass,
+          id: d.id, name: d.name, skin: SKINS[d.skin], isPlayer: d.isPlayer === true, mass: d.mass,
           angle: d.angle, targetAngle: d.targetAngle, kills: d.kills, eaten: d.eaten, dropAcc: d.dropAcc,
-          shield: d.shield, pw: d.pw, time: d.born, peak: d.peak, ai: d.ai ? Object.assign({}, d.ai) : null,
+          shield: d.shield, pw: d.pw, time: d.born, peak: d.peak,
+          ai: d.ai ? { skill: d.ai.skill, aggro: d.ai.aggro, interval: d.ai.interval, wx: d.ai.wx, wy: d.ai.wy, prey: d.ai.prey, huntUntil: d.ai.huntUntil } : null,
           sx: d.sx.slice(), sy: d.sy.slice(), worldR: this.R,
         });
         byId.set(w.id, w);
@@ -491,7 +536,7 @@
         this.food.push({ x: F[i], y: F[i + 1], v, r: foodRadius(v), c: pal[F[i + 3]] || FOOD_COLORS[0], life: F[i + 4] < 0 ? Infinity : F[i + 4], ph: F[i + 5], dead: false, natural });
         if (natural) this.naturalFood++;
       }
-      for (const p of snap.powerups) if (POWERUP_WEIGHTS[p.type]) this.powerups.push({ x: p.x, y: p.y, type: p.type, ph: p.ph, dead: false });
+      for (const p of snap.powerups) this.powerups.push({ x: p.x, y: p.y, type: p.type, ph: p.ph, dead: false });
       this.respawnQueue = (snap.respawnQueue || []).slice();
     }
 
@@ -742,5 +787,5 @@
     rankOf(w) { return this.leaderboard.indexOf(w) + 1; }
   }
 
-  root.WormEngine = { CFG, SKINS, SAVE_APP_IDS, Game, Worm, radiusFor, lengthFor, angleDiff, TAU };
+  root.WormEngine = { CFG, SKINS, SAVE_APP_IDS, validateSnapshot, Game, Worm, radiusFor, lengthFor, angleDiff, TAU };
 })(typeof window !== 'undefined' ? window : globalThis);

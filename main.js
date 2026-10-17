@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const { Game, SKINS, SAVE_APP_IDS, TAU } = window.WormEngine;
+  const { Game, SKINS, SAVE_APP_IDS, validateSnapshot, TAU } = window.WormEngine;
   const $ = (id) => document.getElementById(id);
 
   const canvas = $('game');
@@ -37,13 +37,41 @@
     top: [],
     recent: [],
   });
-  function validProfile(p) {
-    return p && p.v === PROFILE_VERSION && p.totals && Array.isArray(p.top) && Array.isArray(p.recent);
+  // Profiles can come from imported files, so rebuild them from checked fields only.
+  // Returns a clean copy, or null if anything is missing or the wrong type.
+  function cleanProfile(p) {
+    const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+    const num = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+    const str = (v) => typeof v === 'string' && v.length <= 40;
+    if (!isObj(p) || p.v !== PROFILE_VERSION || !isObj(p.totals) || !Array.isArray(p.top) || !Array.isArray(p.recent)) return null;
+    if (p.top.length > 1000 || p.recent.length > 1000) return null;
+    const t = p.totals, bd = isObj(t.bestByDiff) ? t.bestByDiff : null;
+    if (!['games', 'kills', 'time', 'eaten', 'best'].every((k) => num(t[k])) || !bd) return null;
+    if (!['easy', 'normal', 'hard'].every((d) => bd[d] === undefined || num(bd[d]))) return null;
+    const cleanRun = (r) => {
+      if (!isObj(r) || !['date', 'score', 'peak', 'kills', 'eaten', 'time'].every((k) => num(r[k]))) return null;
+      if (!str(r.name) || !str(r.by) || !['easy', 'normal', 'hard'].includes(r.diff) || !Number.isInteger(r.bots) || r.bots < 0 || r.bots > 1000) return null;
+      return { date: r.date, name: r.name, score: r.score, peak: r.peak, kills: r.kills, eaten: r.eaten, time: r.time, by: r.by, diff: r.diff, bots: r.bots };
+    };
+    const top = p.top.map(cleanRun), recent = p.recent.map(cleanRun);
+    if (top.includes(null) || recent.includes(null)) return null;
+    return {
+      v: PROFILE_VERSION,
+      totals: {
+        games: t.games, kills: t.kills, time: t.time, eaten: t.eaten, best: t.best,
+        bestByDiff: { easy: bd.easy || 0, normal: bd.normal || 0, hard: bd.hard || 0 },
+      },
+      top: top.slice(0, 10),
+      recent: recent.slice(0, 50),
+    };
   }
-  let profile = store.get('profile', null);
-  if (!validProfile(profile)) {
+  const storedProfile = store.get('profile', null);
+  let profile = cleanProfile(storedProfile);
+  if (!profile) {
+    // Keep unreadable data aside instead of crashing on it or throwing it away.
+    if (storedProfile !== null) { store.set('profile-corrupt', storedProfile); console.warn('Stored profile was invalid; saved it as wormarena.profile-corrupt and started fresh.'); }
     profile = emptyProfile();
-    profile.totals.best = store.get('best', 0); // carry over the best score from before stats existed
+    profile.totals.best = Number(store.get('best', 0)) || 0; // carry over the best score from before stats existed
   }
   const saveProfile = () => store.set('profile', profile);
 
@@ -309,23 +337,26 @@
     const d = new Date(ms);
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   }
+  // Every value is escaped: profiles can come from imported files (see #18).
+  const fmtNum = (v) => Math.round(Number(v) || 0).toLocaleString();
   function runsTable(runs, ranked) {
     if (!runs.length) return '<tr><td class="empty">No games yet. Go eat something!</td></tr>';
+    const e = escapeHtml;
     let h = `<tr>${ranked ? '<th>#</th>' : ''}<th class="num">Peak</th><th class="num">Kills</th><th class="num">Time</th><th>Killed by</th><th class="hide-sm">Mode</th><th class="hide-sm">Date</th></tr>`;
     runs.forEach((r, i) => {
-      h += `<tr>${ranked ? `<td class="dim">${i + 1}</td>` : ''}<td class="num"><b>${r.peak.toLocaleString()}</b></td><td class="num">${r.kills}</td><td class="num">${fmtDuration(r.time)}</td>` +
-        `<td>${escapeHtml(r.by)}</td><td class="hide-sm dim">${r.diff} · ${r.bots}</td><td class="hide-sm dim">${fmtDate(r.date)}</td></tr>`;
+      h += `<tr>${ranked ? `<td class="dim">${i + 1}</td>` : ''}<td class="num"><b>${e(fmtNum(r.peak))}</b></td><td class="num">${e(fmtNum(r.kills))}</td><td class="num">${e(fmtDuration(r.time))}</td>` +
+        `<td>${e(r.by)}</td><td class="hide-sm dim">${e(r.diff)} · ${e(r.bots)}</td><td class="hide-sm dim">${e(fmtDate(r.date))}</td></tr>`;
     });
     return h;
   }
   function showStats() {
     const t = profile.totals;
     const avg = t.games ? Math.round(profile.recent.reduce((s, r) => s + r.peak, 0) / Math.max(1, profile.recent.length)) : 0;
-    const tile = (v, label) => `<div><b>${v}</b><small>${label}</small></div>`;
-    $('totals').innerHTML = tile(t.best.toLocaleString(), 'best') + tile(t.games, 'games') + tile(t.kills, 'kills') + tile(fmtDuration(t.time), 'played') +
-      tile(avg.toLocaleString(), 'avg (recent)') + tile(t.eaten.toLocaleString(), 'food eaten') + tile(t.games ? (t.kills / t.games).toFixed(1) : '0', 'kills / game') +
+    const tile = (v, label) => `<div><b>${escapeHtml(v)}</b><small>${escapeHtml(label)}</small></div>`;
+    $('totals').innerHTML = tile(fmtNum(t.best), 'best') + tile(fmtNum(t.games), 'games') + tile(fmtNum(t.kills), 'kills') + tile(fmtDuration(t.time), 'played') +
+      tile(fmtNum(avg), 'avg (recent)') + tile(fmtNum(t.eaten), 'food eaten') + tile(t.games ? (t.kills / t.games).toFixed(1) : '0', 'kills / game') +
       tile(t.games ? fmtDuration(Math.round(t.time / t.games)) : '0s', 'avg survival');
-    $('bestByDiff').innerHTML = ['easy', 'normal', 'hard'].map((d) => tile((t.bestByDiff[d] || 0).toLocaleString(), d)).join('');
+    $('bestByDiff').innerHTML = ['easy', 'normal', 'hard'].map((d) => tile(fmtNum(t.bestByDiff[d]), d)).join('');
     $('topRuns').innerHTML = runsTable(profile.top, true);
     $('recentRuns').innerHTML = runsTable(profile.recent.slice(0, 15), false);
     $('menu').classList.add('hidden');
@@ -350,11 +381,16 @@
     reader.onload = () => {
       let data;
       try { data = JSON.parse(reader.result); } catch { alert('That file is not valid JSON.'); return; }
-      if (!data || !SAVE_APP_IDS.includes(data.app) || data.kind !== 'save' || !validProfile(data.profile)) { alert('That file is not a Wigglefeast save.'); return; }
+      // Check everything before changing anything: an invalid file leaves stats and world untouched.
+      const newProfile = data && SAVE_APP_IDS.includes(data.app) && data.kind === 'save' ? cleanProfile(data.profile) : null;
+      let worldOk = !data || !data.world;
+      if (newProfile && data.world) { try { validateSnapshot(data.world); worldOk = true; } catch (err) { console.warn(err.message); } }
+      if (!newProfile || !worldOk) { alert('That file is not a valid Wigglefeast save. Nothing was changed.'); return; }
       if (!confirm('Replace your current stats and world with this save?')) return;
-      profile = data.profile;
+      if (data.world && !restoreWorld(data.world)) { alert('That save could not be loaded. Nothing was changed.'); return; }
+      profile = newProfile;
       saveProfile();
-      if (data.world && restoreWorld(data.world)) saveWorld();
+      if (data.world) saveWorld();
       if (mode === 'menu') showStats();
     };
     reader.readAsText(file);
@@ -702,7 +738,7 @@
     return `<li class="${me ? 'me' : ''}"><span class="r">${rank}</span><span class="n">${escapeHtml(w.name)}</span><span class="m">${Math.round(w.mass).toLocaleString()}</span></li>`;
   }
   function escapeHtml(s) {
-    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
   function feed(text, cls) {
