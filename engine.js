@@ -10,6 +10,10 @@
     CELL: 96,
     POWERUP_TIME: 16,
     TURN_POWER_MULT: 2, // turn-rate multiplier while the tight-turn power-up runs (#38)
+    // Refill rates per simulated second, so pacing doesn't depend on the display's refresh rate (#48).
+    // Equal to the old per-update amounts at 60 updates per second: 10 food, and a 3% power-up chance.
+    FOOD_REFILL_RATE: 600,
+    POWERUP_SPAWN_RATE: -Math.log(0.97) * 60,
     POWERUP_REACH: 60, // power-ups slide toward heads this far beyond the head's edge (just past their glow)
     MAGNET_REACH: 230, // extra pull range for food and power-ups while the magnet runs
     SPAWN_SHIELD: 2.5,
@@ -473,6 +477,7 @@
       this.maxR = 20;
       this.respawnQueue = [];
       this.naturalFood = 0;
+      this.foodBudget = 0; // natural food owed by the refill rate
       this.listeners = {};
       this.leaderboard = [];
 
@@ -677,8 +682,11 @@
       if (this.worms.some((w) => w.dead)) this.worms = this.worms.filter((w) => !w.dead);
 
       this.cleanFood(dt);
-      for (let i = 0; i < 10 && this.naturalFood < this.foodTarget; i++) this.spawnNaturalFood();
-      if (this.powerups.length < this.powerupTarget && Math.random() < 0.03) this.spawnPowerup();
+      if (this.naturalFood < this.foodTarget) {
+        this.foodBudget += CFG.FOOD_REFILL_RATE * dt; // reset below once the food is back at its target
+        for (; this.foodBudget >= 1 && this.naturalFood < this.foodTarget; this.foodBudget--) this.spawnNaturalFood();
+      } else this.foodBudget = 0;
+      if (this.powerups.length < this.powerupTarget && Math.random() < 1 - Math.exp(-CFG.POWERUP_SPAWN_RATE * dt)) this.spawnPowerup();
 
       let bots = 0;
       for (const w of this.worms) if (w.ai) bots++;
@@ -785,11 +793,21 @@
         });
         if (killer) deaths.push([w, killer]);
       }
-      for (const [w, k] of deaths) this.kill(w, k);
+      // Settle every death and kill credit first, then report them, so listeners
+      // (stats, saving) never see a half-resolved tick (#47).
+      const events = [];
+      for (const [w, k] of deaths) { const e = this.die(w, k); if (e) events.push(e); }
+      for (const e of events) this.emit('death', e);
     }
 
     kill(w, killer, cause) {
-      if (w.dead) return;
+      const e = this.die(w, killer, cause);
+      if (e) this.emit('death', e);
+    }
+
+    // Applies a death without reporting it; returns the event to emit, or null if already dead.
+    die(w, killer, cause) {
+      if (w.dead) return null;
       w.dead = true;
       w.diedAt = this.time;
       if (w.mass > w.peak) w.peak = w.mass; // food eaten this tick, before update() saw it
@@ -803,7 +821,7 @@
       }
       if (killer) killer.kills++;
       if (w.isPlayer) { this.player = null; this.lastPlayer = w; }
-      this.emit('death', { victim: w, killer, cause: cause || (killer ? 'eaten' : 'wall') });
+      return { victim: w, killer, cause: cause || (killer ? 'eaten' : 'wall') };
     }
 
     cleanFood(dt) {

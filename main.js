@@ -254,8 +254,8 @@
   }
 
   function onDeath({ victim, killer, cause }) {
-    const p = game.player;
-    if (killer && killer === p) feed(`You ate ${victim.name}! (+${Math.round(victim.mass * 0.8)})`, 'good');
+    // killer.isPlayer, not game.player: the player may have died in the same tick (#47).
+    if (killer && killer.isPlayer) feed(`You ate ${victim.name}! (+${Math.round(victim.mass * 0.8)})`, 'good');
     else if (victim.isPlayer) {
       const isBest = recordRun(victim, killer, cause);
       saveWorld();
