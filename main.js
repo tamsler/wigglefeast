@@ -731,12 +731,83 @@
     render(now / 1000);
     if (mode !== 'menu') renderMinimap();
     updateHud(dt);
+    syncUpdateBanner();
     requestAnimationFrame(frame);
   }
 
-  // Installable / offline support (only when served over http(s), not from file://).
+  // ---------------------------------------------------------------------------
+  // Releases: offline support, update checks and the "Update available" banner.
+  // Only when served over http(s); opened from file:// there is no service worker.
+  const updates = { reg: null, ready: false, dismissed: false, reloading: false, shown: false, lastCheck: 0 };
+
+  function askVersion(worker) {
+    return new Promise((resolve) => {
+      if (!worker) { resolve(null); return; }
+      const ch = new MessageChannel();
+      const timer = setTimeout(() => resolve(null), 3000); // older workers don't answer
+      ch.port1.onmessage = (e) => { clearTimeout(timer); resolve(e.data && e.data.version); };
+      worker.postMessage({ type: 'version' }, [ch.port2]);
+    });
+  }
+
+  function checkForUpdate() {
+    if (!updates.reg) return;
+    updates.lastCheck = Date.now();
+    updates.reg.update().catch(() => {}); // offline or unreachable: try again later
+  }
+
+  async function onUpdateReady(worker) {
+    updates.ready = true;
+    const v = await askVersion(worker);
+    $('updateText').textContent = v ? `Version ${v} is ready` : 'A new version is ready';
+  }
+
+  // A worker that finishes installing while a controller exists is an update;
+  // with no controller it is the very first install.
+  function watchInstalling(worker) {
+    if (!worker) return;
+    worker.addEventListener('statechange', () => {
+      if (worker.state === 'installed' && navigator.serviceWorker.controller) onUpdateReady(worker);
+    });
+  }
+
+  function applyUpdate() {
+    const waiting = updates.reg && updates.reg.waiting;
+    saveWorld();
+    if (!waiting) { location.reload(); return; }
+    updates.reloading = true;
+    waiting.postMessage({ type: 'skipWaiting' });
+  }
+
+  // Banner shows when an update is ready, unless dismissed or a run is being played.
+  function syncUpdateBanner() {
+    const show = updates.ready && !updates.dismissed && mode !== 'playing';
+    if (show !== updates.shown) {
+      updates.shown = show;
+      $('updateBanner').classList.toggle('hidden', !show);
+    }
+  }
+
+  $('updateReload').addEventListener('click', applyUpdate);
+  $('updateDismiss').addEventListener('click', () => { updates.dismissed = true; });
+
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register('sw.js').catch((err) => console.warn('Service worker failed:', err));
+    const sw = navigator.serviceWorker;
+    sw.register('sw.js').then((reg) => {
+      updates.reg = reg;
+      if (reg.waiting && sw.controller) onUpdateReady(reg.waiting);
+      watchInstalling(reg.installing);
+      reg.addEventListener('updatefound', () => watchInstalling(reg.installing));
+      checkForUpdate();
+    }).catch((err) => console.warn('Service worker failed:', err));
+    sw.addEventListener('controllerchange', () => { if (updates.reloading) location.reload(); });
+    sw.ready.then((reg) => askVersion(sw.controller || reg.active)).then((v) => { $('version').textContent = v ? `v${v}` : ''; });
+    setInterval(checkForUpdate, 30 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && Date.now() - updates.lastCheck > 5 * 60 * 1000) checkForUpdate();
+    });
+  } else {
+    $('version').textContent = 'local';
   }
   // Ask the browser not to evict saves when it is low on space.
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});

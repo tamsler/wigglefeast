@@ -1,0 +1,21 @@
+name: Version check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  version-bumped:
+    name: Release version bumped
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Shipped changes must bump VERSION in sw.js
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: .github/scripts/check-version.sh "origin/$BASE_REF"
