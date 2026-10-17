@@ -1,0 +1,25 @@
+name: Tag release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag and release new VERSION
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create v<VERSION> tag and GitHub Release if new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/release-tag.sh "$GITHUB_SHA"
