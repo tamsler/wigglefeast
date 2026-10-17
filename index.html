@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Worm Arena</title>
+  <meta name="description" content="Eat, grow and outsmart AI worms. Plays offline.">
+  <meta name="theme-color" content="#0b0f1c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Worm Arena">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/favicon-64.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- In-game HUD -->
+  <div id="hud" class="hidden">
+    <div id="powerups"></div>
+    <div id="stats">
+      <div class="score"><span id="score">0</span><small>score</small></div>
+      <div class="line">Rank <b id="rank">-</b> of <b id="total">-</b> · Kills <b id="kills">0</b></div>
+    </div>
+    <div id="leaderboard"><h3>Leaderboard</h3><ol id="lb"></ol></div>
+    <canvas id="minimap" width="160" height="160"></canvas>
+    <div id="feed"></div>
+  </div>
+
+  <!-- Main menu -->
+  <div id="menu" class="overlay">
+    <div class="panel">
+      <h1>Worm<span>Arena</span></h1>
+      <p class="tag">Eat. Grow. Outsmart the bots.</p>
+      <input id="name" maxlength="16" placeholder="Your nickname" autocomplete="off" spellcheck="false">
+      <div class="label">Skin <span id="skinName"></span></div>
+      <div id="skins"></div>
+      <div class="label">Bots <span id="botCountVal">30</span></div>
+      <input type="range" id="botCount" min="5" max="60" step="1" value="30">
+      <div class="label">Difficulty</div>
+      <div class="seg" id="difficulty">
+        <button data-v="easy">Easy</button>
+        <button data-v="normal">Normal</button>
+        <button data-v="hard">Hard</button>
+      </div>
+      <button id="play" class="primary">Play</button>
+      <button id="openStats" class="ghost">📊 Stats &amp; high scores</button>
+      <div class="help">
+        <div><kbd>Mouse</kbd> steer · <kbd>Hold click</kbd> / <kbd>Space</kbd> boost</div>
+        <div><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> keyboard steer · <kbd>P</kbd> pause</div>
+        <div class="touch">Touch: drag to steer, add a second finger to boost</div>
+      </div>
+      <div id="best"></div>
+    </div>
+  </div>
+
+  <!-- Death screen -->
+  <div id="death" class="overlay hidden">
+    <div class="panel">
+      <h2 id="deathTitle">You were eaten!</h2>
+      <div class="grid">
+        <div><b id="dScore">0</b><small>final score</small></div>
+        <div><b id="dPeak">0</b><small>peak score</small></div>
+        <div><b id="dKills">0</b><small>kills</small></div>
+        <div><b id="dTime">0s</b><small>survived</small></div>
+      </div>
+      <div id="dBest"></div>
+      <button id="again" class="primary">Play again</button>
+      <button id="toMenu" class="ghost">Main menu</button>
+    </div>
+  </div>
+
+  <div id="paused" class="overlay hidden">
+    <div class="panel small">
+      <h2 id="pausedTitle">Paused</h2>
+      <p id="pausedText">Press <kbd>P</kbd> or <kbd>Esc</kbd> to resume</p>
+      <button id="resume" class="primary">Resume</button>
+      <button id="endRun" class="ghost">End run &amp; go to menu</button>
+    </div>
+  </div>
+
+  <!-- Stats & high scores -->
+  <div id="statsScreen" class="overlay hidden">
+    <div class="panel wide">
+      <h2>Stats &amp; high scores</h2>
+      <div class="grid four" id="totals"></div>
+      <h3>Best by difficulty</h3>
+      <div class="grid three" id="bestByDiff"></div>
+      <h3>Top runs</h3>
+      <table class="runs" id="topRuns"></table>
+      <h3>Recent games</h3>
+      <table class="runs" id="recentRuns"></table>
+      <div class="buttons">
+        <button id="exportSave" class="ghost">⬇ Export save</button>
+        <button id="importSave" class="ghost">⬆ Import save</button>
+        <button id="resetStats" class="ghost danger">Reset stats</button>
+      </div>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <button id="closeStats" class="primary">Back</button>
+    </div>
+  </div>
+
+  <script src="engine.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
