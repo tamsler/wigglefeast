@@ -103,6 +103,19 @@ test('real saves pass validation and malformed ones are rejected', () => {
       'negative food value': (s) => { s.food[2] = -5; },
       'unknown power-up type': (s) => { s.powerups[0] = { x: 0, y: 0, ph: 0, type: 'constructor' }; },
       'worms not an array': (s) => { s.worms = {}; },
+      // Finite but extreme values (#31)
+      'heading that overflows to NaN': (s) => { s.worms[0].angle = 1e308; s.worms[0].targetAngle = -1e308; },
+      'body far outside the arena': (s) => { s.worms[0].sx[0] = 1e300; },
+      'mass that outgrows the body limit': (s) => { s.worms[0].mass = 1e7; },
+      'huge dropAcc': (s) => { s.worms[0].dropAcc = 2e6; },
+      'bot skill out of range': (s) => { s.worms.find((w) => w.ai).ai.skill = 1e6; },
+      'bot thinking every step': (s) => { s.worms.find((w) => w.ai).ai.interval = 0; },
+      'bot wander point far away': (s) => { s.worms.find((w) => w.ai).ai.wx = 1e300; },
+      'food far outside the arena': (s) => { s.food[0] = 1e300; },
+      'duplicate worm ids': (s) => { s.worms[1].id = s.worms[0].id; },
+      'worm id zero': (s) => { s.worms[0].id = 0; },
+      'fractional nextId': (s) => { s.nextId = 1.5; },
+      'bot without a brain': (s) => { s.worms.find((w) => w.ai).ai = null; },
     };
     for (const [name, mutate] of Object.entries(bad)) {
       const s = clone(snap);
@@ -130,4 +143,40 @@ test('peak score includes food eaten on the tick of death (#24)', () => {
   assert.ok(victim, 'player died');
   assert.equal(Math.round(victim.mass), 115);
   assert.ok(victim.peak >= victim.mass, `peak ${victim.peak} < final score ${victim.mass}`);
+});
+
+test('a world loaded from a valid save keeps producing valid saves (#31)', () => {
+  // Food at the limit: natural respawns and death drops must not push it over.
+  const full = fixture().world;
+  const extra = 50000 - full.food.length / 7;
+  for (let i = 0; i < extra; i++) full.food.push(0, 0, 1, 0, 50, 0, 0);
+  const g = new Game(null, full);
+  g.worms.find((w) => w.ai).mass = 3000; // dies on the next tick, dropping food
+  g.kill(g.worms.find((w) => w.ai), null);
+  for (let i = 0; i < 30; i++) g.update(1 / 60);
+  assert.doesNotThrow(() => validateSnapshot(clone(g)), 'food stays within the limit');
+
+  // Mass at the limit: eating more must not grow the worm past it.
+  const big = fixture().world;
+  const p = big.worms.find((w) => w.isPlayer);
+  p.mass = 1e6;
+  p.pw.x5 = 10;
+  p.shield = 10;
+  big.food.push(p.sx[0], p.sy[0], 1e6, 0, -1, 0, 1);
+  const g2 = new Game(null, big);
+  for (let i = 0; i < 5; i++) g2.update(1 / 60);
+  assert.ok(g2.player && g2.player.mass <= 1e6, 'mass capped');
+  assert.doesNotThrow(() => validateSnapshot(clone(g2)), 'big worm still saves');
+});
+
+test('worms loaded without nextId never share an id with new worms (#31)', () => {
+  // Ids are global to the engine, so aim just ahead of the next one it would hand out.
+  const upcoming = new Game({ botCount: 5 }).spawnBot(false).id + 1;
+  const snap = fixture().world;
+  snap.worms[0].id = upcoming + 3;
+  delete snap.nextId;
+  const g = new Game(null, snap);
+  for (let i = 0; i < 20; i++) g.spawnBot(false);
+  const ids = g.worms.map((w) => w.id);
+  assert.equal(new Set(ids).size, ids.length);
 });

@@ -397,15 +397,16 @@
       let data;
       try { data = JSON.parse(reader.result); } catch { alert('That file is not valid JSON.'); return; }
       // Check everything before changing anything: an invalid file leaves stats and world untouched.
+      // Every export includes the world, so a file without one isn't a save (#29).
       const newProfile = data && SAVE_APP_IDS.includes(data.app) && data.kind === 'save' ? cleanProfile(data.profile) : null;
-      let worldOk = !data || !data.world;
+      let worldOk = false;
       if (newProfile && data.world) { try { validateSnapshot(data.world); worldOk = true; } catch (err) { console.warn(err.message); } }
       if (!newProfile || !worldOk) { alert('That file is not a valid Wigglefeast save. Nothing was changed.'); return; }
       if (!confirm('Replace your current stats and world with this save?')) return;
-      if (data.world && !restoreWorld(data.world)) { alert('That save could not be loaded. Nothing was changed.'); return; }
+      if (!restoreWorld(data.world)) { alert('That save could not be loaded. Nothing was changed.'); return; }
       profile = newProfile;
       saveProfile();
-      if (data.world) saveWorld();
+      saveWorld();
       if (mode === 'menu') showStats();
     };
     reader.readAsText(file);
@@ -476,7 +477,7 @@
     // Touch is captured implicitly; mouse and pen are not.
     if (e.pointerType !== 'touch') { try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ } }
     if (e.pointerType === 'mouse') {
-      input.mouseBoost = true;
+      if (e.button === 0) input.mouseBoost = true; // only the main button boosts (#30)
       input.mx = e.clientX; input.my = e.clientY; input.useMouse = true;
     } else {
       if (input.steerId === null || !pointers.has(input.steerId)) steerWith(e.pointerId);
@@ -489,6 +490,8 @@
     if (e.pointerType === 'mouse' || e.pointerId === input.steerId) {
       input.mx = e.clientX; input.my = e.clientY; input.useMouse = true;
     }
+    // Pressing or releasing a second mouse button only fires pointermove (#30).
+    if (e.pointerType === 'mouse' && pointers.has(e.pointerId)) input.mouseBoost = (e.buttons & 1) !== 0;
   });
   const pointerEnd = (e) => {
     if (!pointers.delete(e.pointerId) && e.pointerType !== 'mouse') return;
