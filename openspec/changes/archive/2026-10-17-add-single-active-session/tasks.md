@@ -22,7 +22,8 @@
 
 - [x] 5.1 Update the README "Saving" section to describe the one-active-window behaviour; verify the text matches the behaviour
 - [x] 5.2 Bump `VERSION` in `sw.js` to the next minor version (no new files); run `node --test "tests/**/*.test.js"` and verify every test passes, including the existing persistence, import and update tests, and that `.github/scripts/check-version.sh main` passes after committing
-- [ ] 5.3 Manual check: an installed app window plus a browser tab of the deployed site, and two tabs opened from disk: the second copy shows the panel, Play here hands over a run in progress, and stats from both copies survive; verify by noting the result in the PR
+- [x] 5.3 Manual check: an installed app window plus a browser tab of the deployed site, and two tabs opened from disk: the second copy shows the panel, Play here hands over a run in progress, and stats from both copies survive; verify by noting the result in the PR
+  - Confirmed by the user on 2026-10-17 ("they all look good").
 
 ## Workflow follow-up
 
