@@ -1,4 +1,12 @@
 * { box-sizing: border-box; }
+/* Brand (#59): the Hot Sauce gradient, for the wordmark and primary buttons. */
+:root {
+  --brand-a: #ff2e88;
+  --brand-b: #ff9f1c;
+  --brand: linear-gradient(90deg, var(--brand-a), var(--brand-b));
+  --brand-ink: #1a0612;    /* text on the gradient (about 5.3:1 on the pink end) */
+  --brand-shadow: #a3134f; /* the pressed 3D edge */
+}
 html, body {
   margin: 0;
   height: 100%;
@@ -151,7 +159,7 @@ button.ghost.danger { color: #ff8fa3; border-color: rgba(255,90,120,.35); }
   .buttons { flex-direction: column; }
 }
 h1 { margin: 0; font-size: 44px; font-weight: 900; letter-spacing: -.02em; }
-h1 span { background: linear-gradient(90deg, #ff595e, #ffca3a, #8ac926, #4cc9f0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+h1 span { background: var(--brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
 h2 { margin: 0 0 14px; font-size: 26px; }
 .tag { margin: 4px 0 18px; opacity: .65; }
 .label { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; opacity: .65; margin: 14px 0 6px; }
@@ -184,11 +192,11 @@ input[type=range] { width: 100%; accent-color: #4cc9f0; }
 
 button.primary, button.ghost {
   width: 100%; margin-top: 18px; padding: 14px; font: inherit; font-size: 19px; font-weight: 800; cursor: pointer;
-  border: 0; border-radius: 14px; color: #10142a;
-  background: linear-gradient(90deg, #8ac926, #2ec4b6);
-  box-shadow: 0 6px 0 #1b7f6c; transition: transform .08s, box-shadow .08s;
+  border: 0; border-radius: 14px; color: var(--brand-ink);
+  background: var(--brand);
+  box-shadow: 0 6px 0 var(--brand-shadow); transition: transform .08s, box-shadow .08s;
 }
-button.primary:active { transform: translateY(4px); box-shadow: 0 2px 0 #1b7f6c; }
+button.primary:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--brand-shadow); }
 button.ghost { margin-top: 10px; background: transparent; color: #cfd6f5; box-shadow: none; font-size: 15px; font-weight: 600; border: 1px solid rgba(255,255,255,.15); }
 
 .help { margin-top: 16px; font-size: 12.5px; opacity: .65; line-height: 1.9; }
@@ -212,7 +220,7 @@ kbd {
 #updateBanner button {
   font: inherit; cursor: pointer; border: 0; border-radius: 999px; padding: 7px 14px;
 }
-#updateReload { color: #10142a; background: linear-gradient(90deg, #8ac926, #2ec4b6); }
+#updateReload { color: var(--brand-ink); background: var(--brand); }
 #updateDismiss { color: #cfd6f5; background: transparent; padding: 7px 10px !important; }
 
 #best, #dBest { margin-top: 10px; font-size: 13px; color: #ffd60a; min-height: 1em; }
