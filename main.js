@@ -25,7 +25,17 @@
     get(k, d) { try { const v = localStorage.getItem('wormarena.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
     set(k, v) { try { localStorage.setItem('wormarena.' + k, JSON.stringify(v)); } catch { /* ignore */ } },
   };
-  const settings = Object.assign({ name: '', skin: 0, botCount: 30, difficulty: 'normal' }, store.get('settings', {}));
+  // Rebuilt from checked fields: a corrupted stored value must not stop startup (#26).
+  const settings = { name: '', skin: 0, botCount: 30, difficulty: 'normal' };
+  {
+    const s = store.get('settings', null);
+    if (s && typeof s === 'object') {
+      if (typeof s.name === 'string') settings.name = s.name.slice(0, 16);
+      if (Number.isInteger(s.skin) && s.skin >= 0 && s.skin < SKINS.length) settings.skin = s.skin;
+      if (Number.isInteger(s.botCount) && s.botCount >= 5 && s.botCount <= 60) settings.botCount = s.botCount;
+      if (['easy', 'normal', 'hard'].includes(s.difficulty)) settings.difficulty = s.difficulty;
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Profile: lifetime totals, top runs and recent runs. Kept separate from the
@@ -65,14 +75,18 @@
       recent: recent.slice(0, 50),
     };
   }
-  const storedProfile = store.get('profile', null);
-  let profile = cleanProfile(storedProfile);
+  let rawProfile = null;
+  try { rawProfile = localStorage.getItem('wormarena.profile'); } catch { /* storage unavailable */ }
+  let profile = cleanProfile(store.get('profile', null));
   if (!profile) {
-    // Keep unreadable data aside instead of crashing on it or throwing it away.
-    if (storedProfile !== null) { store.set('profile-corrupt', storedProfile); console.warn('Stored profile was invalid; saved it as wormarena.profile-corrupt and started fresh.'); }
+    // Keep unreadable data aside (as the raw text, even if it isn't JSON) instead of crashing on it or losing it.
+    if (rawProfile !== null) {
+      try { localStorage.setItem('wormarena.profile-corrupt', rawProfile); } catch { /* storage full or unavailable */ }
+      console.warn('Stored profile was invalid; saved it as wormarena.profile-corrupt and started fresh.');
+    }
     profile = emptyProfile();
     profile.totals.best = Number(store.get('best', 0)) || 0; // carry over the best score from before stats existed
-    if (storedProfile !== null) store.set('profile', profile);
+    if (rawProfile !== null) store.set('profile', profile);
   }
   const saveProfile = () => store.set('profile', profile);
 
@@ -458,9 +472,10 @@
 
   canvas.addEventListener('pointerdown', (e) => {
     pointers.set(e.pointerId, { type: e.pointerType, x: e.clientX, y: e.clientY });
+    // Capture so the release reaches us even outside the canvas or window (#22).
+    // Touch is captured implicitly; mouse and pen are not.
+    if (e.pointerType !== 'touch') { try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ } }
     if (e.pointerType === 'mouse') {
-      // Capture so the release reaches us even outside the canvas or window (#22).
-      try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
       input.mouseBoost = true;
       input.mx = e.clientX; input.my = e.clientY; input.useMouse = true;
     } else {
@@ -506,6 +521,8 @@
   window.addEventListener('blur', () => {
     heldKeys.clear();
     syncKeys();
+    pointers.clear();
+    input.steerId = null;
     input.mouseBoost = input.touchBoost = false;
     setPaused(true);
   });

@@ -184,10 +184,11 @@ kbd {
   .tag { margin: 0 0 8px; font-size: 13px; }
   #name { padding: 8px 12px; font-size: 15px; }
   .label { margin: 8px 0 4px; }
-  #skins { grid-template-columns: repeat(14, 1fr); gap: 4px; }
+  #skins { gap: 5px; }
   .seg button { padding: 6px 0; }
   button.primary { margin-top: 10px; padding: 9px; font-size: 16px; }
   button.ghost { margin-top: 6px; padding: 7px; }
+  .buttons button.ghost { padding: 7px 6px; }
   .help { margin-top: 8px; line-height: 1.6; }
   .grid div { padding: 6px 4px; }
   .grid b { font-size: 18px; }
