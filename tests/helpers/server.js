@@ -12,9 +12,12 @@ function serve() {
   let online = true;
   const server = http.createServer((req, res) => {
     if (!online) { req.socket.destroy(); return; }
-    let rel = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\/+/, '') || 'index.html';
-    const file = path.join(REPO, rel);
-    if (!file.startsWith(REPO) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404).end(); return; }
+    const rel = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\/+/, '') || 'index.html';
+    const file = path.resolve(REPO, rel);
+    const inside = path.relative(REPO, file);
+    // Only files inside the repo, and never hidden ones such as .git/.
+    if (!inside || inside.startsWith('..') || path.isAbsolute(inside) || inside.split(path.sep).some((part) => part.startsWith('.')) ||
+      !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404).end(); return; }
     let body = fs.readFileSync(file);
     if (rel === 'sw.js' && version) body = body.toString().replace(/^const VERSION = '[^']*';/m, `const VERSION = '${version}';`);
     res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });

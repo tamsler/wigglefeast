@@ -1,7 +1,7 @@
 // Menus stay usable on short screens (#21). Run with `node --test "tests/**/*.test.js"`.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { launch, gameUrl, sleep } = require('../helpers/browser');
+const { launch, gameUrl } = require('../helpers/browser');
 
 const MEASURE = `(() => {
   const out = {};
@@ -21,10 +21,11 @@ const MEASURE = `(() => {
 // Phone landscape sizes, a typical laptop browser viewport, and a larger desktop.
 for (const [width, height] of [[844, 390], [667, 375], [1280, 713], [1440, 900]]) {
   test(`menus fit and every control is reachable at ${width}x${height}`, async (t) => {
-    const page = await launch({ width, height });
-    t.after(() => page.close());
+    let page;
+    t.after(() => page && page.close());
+    page = await launch({ width, height });
     await page.goto(gameUrl());
-    await sleep(300);
+    await page.frames(5);
     const m = await page.eval(MEASURE);
     for (const name of ['menu', 'stats']) {
       assert.ok(m[name].inView, `${name} panel fits the screen`);

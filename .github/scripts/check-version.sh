@@ -4,6 +4,7 @@
 set -euo pipefail
 
 base="${1:-origin/main}"
+# Paths below never ship to players. tests/ must never hold files the game loads.
 shipped=$(git diff --name-only "$base"...HEAD | grep -vE '^(README\.md|LICENSE|\.gitignore|openspec/|\.github/|\.claude/|tests/)' || true)
 
 if [ -z "$shipped" ]; then

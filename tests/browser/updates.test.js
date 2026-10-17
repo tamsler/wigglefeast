@@ -8,7 +8,9 @@ const path = require('node:path');
 const { launch, gameUrl, sleep } = require('../helpers/browser');
 const { serve } = require('../helpers/server');
 
-const CURRENT = fs.readFileSync(path.join(__dirname, '..', '..', 'sw.js'), 'utf8').match(/^const VERSION = '([^']+)';/m)[1];
+const SW = fs.readFileSync(path.join(__dirname, '..', '..', 'sw.js'), 'utf8');
+const CURRENT = SW.match(/^const VERSION = '([^']+)';/m)[1];
+const FILES = [...SW.match(/const FILES = \[([\s\S]*?)\];/)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
 
 const caches = (page) => page.eval(`caches.keys().then((k) => k.sort())`);
 const waiting = (page) => page.eval(`navigator.serviceWorker.getRegistration().then((r) => !!(r && r.waiting))`);
@@ -17,10 +19,11 @@ const bannerShown = (page) => page.eval(`!document.getElementById('updateBanner'
 const versionLabel = (page) => page.eval(`document.getElementById('version').textContent`);
 
 test('offline play and release updates', async (t) => {
-  const server = await serve();
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'wigglefeast-updates-'));
-  let page = await launch({ profile });
-  t.after(async () => { await page.close(); await server.close(); fs.rmSync(profile, { recursive: true, force: true }); });
+  let page, server;
+  t.after(async () => { if (page) await page.close(); if (server) await server.close(); fs.rmSync(profile, { recursive: true, force: true }); });
+  server = await serve();
+  page = await launch({ profile });
 
   await t.test('first visit installs the whole release and does not reload itself', async () => {
     await page.goto(server.url);
@@ -29,7 +32,8 @@ test('offline play and release updates', async (t) => {
     await page.waitFor(`document.getElementById('version').textContent`, 'version label');
     assert.equal(await versionLabel(page), `v${CURRENT}`);
     assert.deepEqual(await caches(page), [`wigglefeast-${CURRENT}`]);
-    assert.equal(await page.eval(`caches.open('wigglefeast-${CURRENT}').then((c) => c.keys()).then((k) => k.length)`), 9);
+    const cached = await page.eval(`caches.open('wigglefeast-${CURRENT}').then((c) => c.keys()).then((k) => k.map((r) => new URL(r.url).pathname.slice(1)).sort())`);
+    assert.deepEqual(cached, [...FILES].sort(), 'every file in FILES is cached, and nothing else');
     await sleep(1500);
     assert.equal(await page.eval('window.__marker'), 1, 'page was not reloaded');
   });
@@ -51,17 +55,18 @@ test('offline play and release updates', async (t) => {
     await page.startRun();
     await checkForUpdate(page);
     await page.waitFor(`navigator.serviceWorker.getRegistration().then((r) => !!(r && r.waiting))`, 'new release downloaded');
-    await sleep(300);
+    await page.frames(10);
     assert.equal(await bannerShown(page), false, 'no banner during a run');
     await page.press('KeyP');
     await page.waitFor(`!document.getElementById('updateBanner').classList.contains('hidden')`, 'banner on pause');
     assert.equal(await page.eval(`document.getElementById('updateText').textContent`), 'Version 90.0.0-test is ready');
     const score = await page.eval(`document.getElementById('score').textContent`);
     await page.click('#updateReload');
-    await sleep(1500);
     await page.waitFor(`document.getElementById('version').textContent === 'v90.0.0-test'`, 'new version after reload');
+    await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'resume panel after reload');
     assert.match(await page.eval(`document.getElementById('pausedTitle').textContent`), /Welcome back/);
     assert.equal(await page.eval(`document.getElementById('score').textContent`), score, 'same score after reload');
+    assert.equal(await page.eval(`window.__player && window.__player.name`), 'Tester', 'restored player visible to tests');
     assert.deepEqual(await caches(page), ['wigglefeast-90.0.0-test']);
   });
 
@@ -71,11 +76,11 @@ test('offline play and release updates', async (t) => {
     server.setVersion('91.0.0-test');
     await checkForUpdate(page);
     await page.waitFor(`navigator.serviceWorker.getRegistration().then((r) => !!(r && r.waiting))`, 'new release downloaded');
+    await page.frames(10);
     assert.equal(await bannerShown(page), false, 'no banner during a run');
     await page.eval('window.__game.kill(window.__player, null)');
     await page.waitFor(`!document.getElementById('updateBanner').classList.contains('hidden')`, 'banner on death screen');
     await page.click('#updateReload');
-    await sleep(1500);
     await page.waitFor(`document.getElementById('version').textContent === 'v91.0.0-test'`, 'new version after reload');
     assert.equal(await page.eval(`!document.getElementById('menu').classList.contains('hidden')`), true, 'back on the main menu');
   });
@@ -86,7 +91,7 @@ test('offline play and release updates', async (t) => {
     await page.waitFor(`navigator.serviceWorker.getRegistration().then((r) => !!(r && r.waiting))`, 'new release downloaded');
     await page.waitFor(`!document.getElementById('updateBanner').classList.contains('hidden')`, 'banner on menu');
     await page.click('#updateDismiss');
-    await sleep(200);
+    await page.frames(5);
     assert.equal(await bannerShown(page), false, 'dismissed');
     assert.equal(await versionLabel(page), 'v91.0.0-test', 'still the current release');
     await page.close();

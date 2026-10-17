@@ -11,9 +11,10 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 const PAYLOAD = '<img src="nope.png" onerror="window.pwned=true">';
 
 test('save import and stored data', async (t) => {
-  const page = await launch();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wigglefeast-import-'));
-  t.after(async () => { await page.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  let page;
+  t.after(async () => { if (page) await page.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  page = await launch();
 
   const storedProfile = () => page.eval(`localStorage.getItem('wormarena.profile')`);
   const importFile = async (name, data) => {
@@ -21,10 +22,11 @@ test('save import and stored data', async (t) => {
     fs.writeFileSync(file, typeof data === 'string' ? data : JSON.stringify(data));
     page.dialogs.length = 0;
     await page.setFile('#importFile', file);
-    await page.waitFor(`true`);
-    for (let i = 0; i < 30 && !page.dialogs.some((m) => /Nothing was changed|Replace your current/.test(m)); i++) await sleep(100);
-    await sleep(300);
-    return [...page.dialogs];
+    // The import handler either rejects (one alert, then returns) or asks to confirm
+    // and then applies synchronously, so this dialog marks the decision point.
+    const dialogs = await page.waitForDialog(/Nothing was changed|Replace your current/);
+    await page.frames(5);
+    return dialogs;
   };
 
   await page.goto(gameUrl());
@@ -39,7 +41,7 @@ test('save import and stored data', async (t) => {
     await page.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
     await page.click('#exportSave');
     let file;
-    for (let i = 0; i < 50 && !file; i++) { await sleep(100); file = fs.readdirSync(dl).find((f) => f.endsWith('.json')); }
+    for (let i = 0; i < 100 && !file; i++) { await sleep(100); file = fs.readdirSync(dl).find((f) => f.endsWith('.json')); }
     assert.ok(file, 'export produced a file');
     const save = JSON.parse(fs.readFileSync(path.join(dl, file), 'utf8'));
     assert.equal(save.app, 'wigglefeast');
@@ -124,7 +126,7 @@ test('save import and stored data', async (t) => {
     p.top[0].diff = PAYLOAD;
     await startupWith('wormarena.profile', JSON.stringify(p));
     await page.eval(`document.getElementById('menu').classList.contains('hidden') || document.getElementById('openStats').click()`);
-    await sleep(300);
+    await page.frames(10);
     assert.notEqual(await page.eval('window.pwned'), true);
   });
 

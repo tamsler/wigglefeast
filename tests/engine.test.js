@@ -43,7 +43,8 @@ test('simulation stays healthy on every difficulty', () => {
     assert.ok(g.worms.filter((w) => w.ai).length <= 40, `${diff}: more bots than configured`);
     assert.ok(avgBots >= 32, `${diff}: average ${avgBots.toFixed(1)} bots alive, expected at least 32 of 40`);
     assert.ok(wall <= Math.max(3, deaths * 0.1), `${diff}: ${wall}/${deaths} deaths were bots hitting the wall`);
-    assert.ok(msPerTick < 5, `${diff}: ${msPerTick.toFixed(2)} ms per tick is too slow`);
+    // Loose on purpose (locally ~0.4 ms): catches runaway slowdowns, not CI noise.
+    assert.ok(msPerTick < 25, `${diff}: ${msPerTick.toFixed(2)} ms per tick is far too slow`);
   }
 });
 

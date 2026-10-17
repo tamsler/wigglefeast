@@ -16,20 +16,28 @@ const CHROME_CANDIDATES = [
 
 // Runs before the game's scripts on every page load: exposes the running game and
 // player as window.__game / window.__player so tests can inspect and steer state.
+// Covers new worlds, worlds restored from saves, and players spawned later.
 const HOOK = `(() => {
   let engine;
   Object.defineProperty(window, 'WormEngine', {
     configurable: true,
     get() { return engine; },
     set(v) {
-      engine = v;
-      const spawnPlayer = v.Game.prototype.spawnPlayer;
-      v.Game.prototype.spawnPlayer = function (...args) {
-        const p = spawnPlayer.apply(this, args);
-        window.__game = this;
-        window.__player = p;
-        return p;
-      };
+      const Base = v.Game;
+      class Game extends Base {
+        constructor(...args) {
+          super(...args);
+          window.__game = this;
+          window.__player = this.player;
+        }
+        spawnPlayer(...args) {
+          const p = super.spawnPlayer(...args);
+          window.__game = this;
+          window.__player = p;
+          return p;
+        }
+      }
+      engine = { ...v, Game };
     },
   });
 })();`;
@@ -45,7 +53,7 @@ async function launch({ width = 1280, height = 800, mobile = false, profile } = 
   const userDataDir = profile || fs.mkdtempSync(path.join(os.tmpdir(), 'wigglefeast-chrome-'));
   const args = ['--headless=new', '--disable-gpu', '--remote-debugging-port=0', `--user-data-dir=${userDataDir}`,
     `--window-size=${width},${height}`, '--no-first-run', '--no-default-browser-check'];
-  if (process.env.CI) args.push('--no-sandbox');
+  if (process.env.CI) args.push('--no-sandbox', '--disable-dev-shm-usage');
   args.push('about:blank');
   const proc = spawn(chrome, args, { stdio: ['ignore', 'ignore', 'pipe'] });
 
@@ -139,15 +147,34 @@ class Page {
     await sleep(300);
   }
 
-  // Polls an expression until it is truthy; returns its value or throws with `what`.
+  // Polls an expression until it is truthy; returns its value or throws with `what`
+  // (and the last page error, if the expression itself kept failing).
   async waitFor(expression, what = expression, timeout = 15000) {
     const t0 = Date.now();
+    let lastError = null;
     for (;;) {
-      const v = await this.eval(expression).catch(() => undefined);
+      let v;
+      try { v = await this.eval(expression); lastError = null; } catch (err) { lastError = err; }
       if (v) return v;
-      if (Date.now() - t0 > timeout) throw new Error('Timed out waiting for: ' + what);
+      if (Date.now() - t0 > timeout) throw new Error('Timed out waiting for: ' + what + (lastError ? ` (last error: ${lastError.message})` : ''));
       await sleep(100);
     }
+  }
+
+  // Waits for n rendered frames: the game applies input once per frame, so this is
+  // a deterministic "let the game catch up" instead of a fixed delay.
+  frames(n = 10) {
+    return this.eval(`new Promise((r) => { let i = 0; const f = () => (++i >= ${n} ? r(i) : requestAnimationFrame(f)); requestAnimationFrame(f); })`);
+  }
+
+  // Waits for a dialog (alert/confirm) whose text matches re; returns all dialogs seen.
+  async waitForDialog(re, timeout = 10000) {
+    const t0 = Date.now();
+    while (!this.dialogs.some((m) => re.test(m))) {
+      if (Date.now() - t0 > timeout) throw new Error(`No dialog matching ${re}; saw ${JSON.stringify(this.dialogs)}`);
+      await sleep(50);
+    }
+    return [...this.dialogs];
   }
 
   click(selector) { return this.eval(`document.querySelector(${JSON.stringify(selector)}).click()`); }
