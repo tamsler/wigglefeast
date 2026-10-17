@@ -25,4 +25,12 @@ if [ "$old" = "$new" ]; then
   echo "$shipped" | sed 's/^/  /'
   exit 1
 fi
+if ! echo "$new" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+  echo "::error file=sw.js::VERSION '$new' must look like 1.2.3 (optionally with a suffix such as 1.2.3-beta.1)."
+  exit 1
+fi
+if git rev-parse -q --verify "refs/tags/v$new" >/dev/null; then
+  echo "::error file=sw.js::Version $new was already released (tag v$new). Use a higher version; versions are never reused."
+  exit 1
+fi
 echo "Release version changed: ${old:-none} -> $new"
