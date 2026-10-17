@@ -49,8 +49,9 @@
     recent: [],
   });
   // Profiles can come from imported files, so rebuild them from checked fields only.
-  // Returns a clean copy, or null if anything is missing or the wrong type.
-  function cleanProfile(p) {
+  // Returns a clean copy, or null if anything is missing or the wrong type. With
+  // keepGoodRuns, invalid runs are dropped instead of rejecting the whole profile (#46).
+  function cleanProfile(p, keepGoodRuns = false) {
     const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
     const num = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
     const str = (v) => typeof v === 'string' && v.length <= 40;
@@ -65,28 +66,33 @@
       return { date: r.date, name: r.name, score: r.score, peak: r.peak, kills: r.kills, eaten: r.eaten, time: r.time, by: r.by, diff: r.diff, bots: r.bots };
     };
     const top = p.top.map(cleanRun), recent = p.recent.map(cleanRun);
-    if (top.includes(null) || recent.includes(null)) return null;
+    if (!keepGoodRuns && (top.includes(null) || recent.includes(null))) return null;
     return {
       v: PROFILE_VERSION,
       totals: {
         games: t.games, kills: t.kills, time: t.time, eaten: t.eaten, best: t.best,
         bestByDiff: { easy: bd.easy || 0, normal: bd.normal || 0, hard: bd.hard || 0 },
       },
-      top: top.slice(0, 10),
-      recent: recent.slice(0, 50),
+      top: top.filter(Boolean).slice(0, 10),
+      recent: recent.filter(Boolean).slice(0, 50),
     };
   }
   let rawProfile = null;
   try { rawProfile = localStorage.getItem('wormarena.profile'); } catch { /* storage unavailable */ }
-  let profile = cleanProfile(store.get('profile', null));
+  const storedProfile = store.get('profile', null);
+  let profile = cleanProfile(storedProfile);
   if (!profile) {
     // Keep unreadable data aside (as the raw text, even if it isn't JSON) instead of crashing on it or losing it.
     if (rawProfile !== null) {
       try { localStorage.setItem('wormarena.profile-corrupt', rawProfile); } catch { /* storage full or unavailable */ }
-      console.warn('Stored profile was invalid; saved it as wormarena.profile-corrupt and started fresh.');
+      console.warn('Stored profile was invalid; saved it as wormarena.profile-corrupt and kept what was readable.');
     }
-    profile = emptyProfile();
-    profile.totals.best = Number(store.get('best', 0)) || 0; // carry over the best score from before stats existed
+    // A bad run costs only that run, not every stat (#46). Imports stay strict (importSave).
+    profile = cleanProfile(storedProfile, true);
+    if (!profile) {
+      profile = emptyProfile();
+      profile.totals.best = Number(store.get('best', 0)) || 0; // carry over the best score from before stats existed
+    }
     if (rawProfile !== null) store.set('profile', profile);
   }
   const saveProfile = () => store.set('profile', profile);
@@ -99,7 +105,7 @@
       peak: Math.round(w.peak),
       kills: w.kills,
       eaten: w.eaten,
-      time: Math.round(game.time - w.born),
+      time: Math.max(0, Math.round(game.time - w.born)),
       by: cause === 'quit' ? 'Quit' : killer ? killer.name : 'Wall',
       diff: game.settings.difficulty,
       bots: game.settings.botCount,

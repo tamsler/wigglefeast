@@ -101,11 +101,13 @@
   const MAX_SEGMENTS = 20000;
   const MAX_FOOD = 50000;
   const MAX_ID = 1e9;
+  const MAX_TIME = 1e9; // seconds of world time; keeps the save rounding (x100) finite
 
   // ---------------------------------------------------------------------------
   // Save files are untrusted input (they can be imported from anywhere), so check
   // every field load() relies on before building a world from one. Numbers are
-  // range-checked too: finite but extreme values overflow to NaN or stall bots (#31).
+  // range-checked too: finite but extreme values overflow to NaN or stall bots (#31),
+  // and values must be consistent and survive being saved again (#46).
   function validateSnapshot(snap) {
     const fail = (why) => { throw new Error('Invalid Wigglefeast save: ' + why); };
     const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -118,7 +120,7 @@
     if (!isObj(snap) || !SAVE_APP_IDS.includes(snap.app) || snap.v !== 1) fail('not a world snapshot');
     const s = snap.settings;
     if (!isObj(s) || !Number.isInteger(s.botCount) || s.botCount < 5 || s.botCount > 60 || !has(DIFFICULTY, s.difficulty)) fail('settings');
-    if (!fin(snap.time) || snap.time < 0) fail('time');
+    if (!inRange(snap.time, 0, MAX_TIME)) fail('time');
     if (snap.nextId !== undefined && !isId(snap.nextId)) fail('nextId');
     // Everything lives inside the arena; twice its radius leaves plenty of slack.
     const B = 2 * (1800 + 60 * s.botCount);
@@ -137,9 +139,12 @@
       if (w.mass < 1 || w.mass > MAX_MASS) fail('worm mass');
       if (!angle(w.angle) || !angle(w.targetAngle)) fail('worm heading');
       if (w.dropAcc < 0 || w.dropAcc > 1000) fail('worm dropAcc');
+      if (![w.kills, w.eaten].every((v) => Number.isInteger(v) && v >= 0 && v <= 1e9)) fail('worm counters');
+      if (w.born < 0 || w.born > snap.time) fail('worm born'); // a run can't start after the save
+      if (!inRange(w.peak, 0, 1e7) || !inRange(w.shield, 0, 1e6)) fail('worm peak or shield');
       if (!finArr(w.sx, MAX_SEGMENTS) || !finArr(w.sy, MAX_SEGMENTS) || w.sx.length !== w.sy.length || w.sx.length < 2 ||
         !w.sx.every(coord) || !w.sy.every(coord)) fail('worm body');
-      if (!isObj(w.pw) || Object.keys(w.pw).some((k) => !has(POWERUP_WEIGHTS, k) || !fin(w.pw[k]))) fail('worm power-ups');
+      if (!isObj(w.pw) || Object.keys(w.pw).some((k) => !has(POWERUP_WEIGHTS, k) || !inRange(w.pw[k], 0, 1e6))) fail('worm power-ups');
       if (w.isPlayer === true) players++;
       if ((w.isPlayer === true) === (w.ai != null)) fail('worm kind'); // players have no brain, bots do
       if (w.ai != null) {
@@ -154,11 +159,13 @@
     const F = snap.food;
     if (!finArr(F, 7 * MAX_FOOD) || F.length % 7 !== 0) fail('food');
     for (let i = 0; i < F.length; i += 7) {
-      if (!coord(F[i]) || !coord(F[i + 1]) || F[i + 2] <= 0 || F[i + 2] > 1e6 || (F[i + 4] < 0 && F[i + 4] !== -1)) fail('food values');
+      // Value >= 0.01 so it can't round to 0 when saved again; life is -1 (natural food) or a timer.
+      if (!coord(F[i]) || !coord(F[i + 1]) || F[i + 2] < 0.01 || F[i + 2] > 1e6 ||
+        !(F[i + 4] === -1 || inRange(F[i + 4], 0, 1e6)) || !inRange(F[i + 5], -1e6, 1e6)) fail('food values');
     }
     if (!Array.isArray(snap.powerups) || snap.powerups.length > 500 ||
-      !snap.powerups.every((p) => isObj(p) && has(POWERUP_WEIGHTS, p.type) && coord(p.x) && coord(p.y) && fin(p.ph))) fail('power-ups');
-    if (snap.respawnQueue !== undefined && !finArr(snap.respawnQueue, 500)) fail('respawn queue');
+      !snap.powerups.every((p) => isObj(p) && has(POWERUP_WEIGHTS, p.type) && coord(p.x) && coord(p.y) && inRange(p.ph, -1e6, 1e6))) fail('power-ups');
+    if (snap.respawnQueue !== undefined && !(finArr(snap.respawnQueue, 500) && snap.respawnQueue.every((t) => inRange(t, 0, 2 * MAX_TIME)))) fail('respawn queue');
   }
 
   // ---------------------------------------------------------------------------

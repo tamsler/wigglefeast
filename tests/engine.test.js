@@ -116,6 +116,19 @@ test('real saves pass validation and malformed ones are rejected', () => {
       'worm id zero': (s) => { s.worms[0].id = 0; },
       'fractional nextId': (s) => { s.nextId = 1.5; },
       'bot without a brain': (s) => { s.worms.find((w) => w.ai).ai = null; },
+      // Inconsistent, or would not survive being saved again (#46)
+      'run born after the save': (s) => { s.worms[0].born = s.time + 60; },
+      'negative kills': (s) => { s.worms[0].kills = -1; },
+      'fractional food eaten': (s) => { s.worms[0].eaten = 1.5; },
+      'time that overflows when saved': (s) => { s.time = 1e308; },
+      'food value that rounds to zero': (s) => { s.food[2] = 0.001; },
+      'food life that overflows': (s) => { s.food[4] = 1e308; },
+      'huge power-up timer': (s) => { s.worms[0].pw.magnet = 1e308; },
+      'negative power-up timer': (s) => { s.worms[0].pw.magnet = -5; },
+      'huge peak': (s) => { s.worms[0].peak = 1e308; },
+      'negative shield': (s) => { s.worms[0].shield = -1; },
+      'power-up phase that overflows': (s) => { s.powerups[0].ph = 1e308; },
+      'respawn time that overflows': (s) => { s.respawnQueue = [1e308]; },
     };
     for (const [name, mutate] of Object.entries(bad)) {
       const s = clone(snap);

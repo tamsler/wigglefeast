@@ -135,6 +135,17 @@ test('save import and stored data', async (t) => {
     assert.equal(await page.eval(`JSON.parse(localStorage.getItem('wormarena.profile')).totals.games`), 0);
   });
 
+  await t.test('a stored profile with one bad run keeps everything else (#46)', async () => {
+    const p = clone(fixture.profile);
+    p.recent.push({ ...p.recent[0], time: -60, date: 1 }); // e.g. recorded from an inconsistent world
+    await startupWith('wormarena.profile', JSON.stringify(p));
+    assert.ok(await page.eval(`localStorage.getItem('wormarena.profile-corrupt') !== null`), 'raw profile kept as backup');
+    const kept = await page.eval(`JSON.parse(localStorage.getItem('wormarena.profile'))`);
+    assert.equal(kept.recent.length, fixture.profile.recent.length, 'only the bad run is dropped');
+    assert.equal(kept.top.length, fixture.profile.top.length);
+    assert.deepEqual(kept.totals, fixture.profile.totals);
+  });
+
   await t.test('a stored payload never runs (#18)', async () => {
     const p = clone(fixture.profile);
     p.top[0].diff = PAYLOAD;
