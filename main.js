@@ -460,7 +460,7 @@
 
   // ---------------------------------------------------------------------------
   // Input
-  const input = { mx: W / 2 + 100, my: H / 2, mouseBoost: false, keyBoost: false, touchBoost: false, left: false, right: false, useMouse: true, keyAngle: 0, steerId: null };
+  const input = { mx: W / 2 + 100, my: H / 2, mouseBoost: false, keyBoost: false, touchBoost: false, buttonBoost: false, left: false, right: false, useMouse: true, keyAngle: 0, steerId: null };
   // Active pointers by id. Touch: the first finger steers and any second finger boosts;
   // if the steering finger lifts, a remaining finger takes over steering (#20).
   const pointers = new Map();
@@ -510,6 +510,34 @@
   canvas.addEventListener('lostpointercapture', pointerEnd);
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
+  // On-screen buttons for touch screens (#11); CSS shows them only for a coarse pointer.
+  // Their events never reach the canvas, so the boost finger is never counted as steering.
+  const boostBtn = $('boostBtn');
+  boostBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    // Keep the release even if the finger slides off the button.
+    try { boostBtn.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+    input.buttonBoost = true;
+    boostBtn.classList.add('on');
+  });
+  function boostButtonEnd() {
+    input.buttonBoost = false;
+    boostBtn.classList.remove('on');
+  }
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) boostBtn.addEventListener(type, boostButtonEnd);
+  boostBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+  $('pauseBtn').addEventListener('click', () => setPaused(true));
+
+  // Shown only while a run is being played; hiding them ends any boost they were giving.
+  let touchControlsShown = false;
+  function syncTouchControls() {
+    const show = mode === 'playing' && !!game.player;
+    if (show === touchControlsShown) return;
+    touchControlsShown = show;
+    $('touchControls').classList.toggle('hidden', !show);
+    if (!show) boostButtonEnd();
+  }
+
   // Keys are tracked individually so releasing one alias (e.g. W) doesn't cancel
   // another that is still held (e.g. Space) (#23).
   const KEYS = { boost: ['Space', 'ArrowUp', 'KeyW'], left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'] };
@@ -527,6 +555,7 @@
     pointers.clear();
     input.steerId = null;
     input.mouseBoost = input.touchBoost = false;
+    boostButtonEnd();
     setPaused(true);
   });
 
@@ -560,7 +589,7 @@
       const dx = input.mx - sx, dy = input.my - sy;
       if (dx * dx + dy * dy > 16) p.targetAngle = Math.atan2(dy, dx);
     } else p.targetAngle = input.keyAngle;
-    p.wantBoost = input.mouseBoost || input.keyBoost || input.touchBoost;
+    p.wantBoost = input.mouseBoost || input.keyBoost || input.touchBoost || input.buttonBoost;
   }
 
   // ---------------------------------------------------------------------------
@@ -822,6 +851,7 @@
     if (mode !== 'menu') renderMinimap();
     updateHud(dt);
     syncUpdateBanner();
+    syncTouchControls();
     requestAnimationFrame(frame);
   }
 

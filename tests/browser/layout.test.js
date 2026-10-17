@@ -34,3 +34,54 @@ for (const [width, height] of [[844, 390], [667, 375], [1280, 713], [1440, 900]]
     }
   });
 }
+
+// In-game HUD on touch screens (#11): the touch buttons and every HUD element fit
+// inside the screen without overlapping, in portrait and landscape. The feed is
+// transient and ignores taps, so it is left out.
+const HUD = ['#boostBtn', '#pauseBtn', '#stats', '#leaderboard', '#minimap', '#powerups'];
+const MEASURE_HUD = `(() => Object.fromEntries(${JSON.stringify(HUD)}.map((s) => {
+  const el = document.querySelector(s), r = el.getBoundingClientRect();
+  return [s, { shown: el.getClientRects().length > 0, left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }];
+})))()`;
+
+async function startTouchRun(t, width, height, coarse) {
+  const page = await launch({ width, height });
+  t.after(() => page.close());
+  if (coarse) await page.coarsePointer();
+  await page.goto(gameUrl());
+  await page.startRun();
+  // Shielded, with three power-ups running so their timers take space in the HUD.
+  await page.eval(`Object.assign(window.__player, { shield: 1e9 }); Object.assign(window.__player.pw, { magnet: 15, x2: 15, speed: 15 })`);
+  await page.waitFor(`document.querySelectorAll('#powerups .pw').length === 3`, 'power-up timers');
+  await page.frames(5);
+  return page;
+}
+
+for (const [width, height] of [[390, 844], [360, 640], [844, 390], [667, 375], [640, 360]]) {
+  test(`touch HUD fits without overlaps at ${width}x${height}`, async (t) => {
+    const page = await startTouchRun(t, width, height, true);
+    const m = await page.eval(MEASURE_HUD);
+    for (const s of HUD) {
+      const r = m[s];
+      assert.ok(r.shown, `${s} is shown`);
+      assert.ok(r.left >= 0 && r.top >= 0 && r.right <= width + 0.5 && r.bottom <= height + 0.5, `${s} inside the screen: ${JSON.stringify(r)}`);
+    }
+    for (const s of ['#boostBtn', '#pauseBtn']) assert.ok(m[s].width >= 44 && m[s].height >= 44, `${s} at least 44px`);
+    for (let i = 0; i < HUD.length; i++) {
+      for (let j = i + 1; j < HUD.length; j++) {
+        const a = m[HUD[i]], b = m[HUD[j]];
+        const overlap = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+        assert.ok(!overlap, `${HUD[i]} overlaps ${HUD[j]}: ${JSON.stringify(a)} ${JSON.stringify(b)}`);
+      }
+    }
+  });
+}
+
+for (const [width, height] of [[1280, 713], [1440, 900]]) {
+  test(`no touch buttons with a mouse at ${width}x${height}`, async (t) => {
+    const page = await startTouchRun(t, width, height, false);
+    const m = await page.eval(MEASURE_HUD);
+    assert.equal(m['#boostBtn'].shown, false, 'boost button hidden');
+    assert.equal(m['#pauseBtn'].shown, false, 'pause button hidden');
+  });
+}

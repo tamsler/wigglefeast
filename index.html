@@ -28,6 +28,11 @@
     <div id="leaderboard"><h3>Leaderboard</h3><ol id="lb"></ol></div>
     <canvas id="minimap" width="160" height="160"></canvas>
     <div id="feed"></div>
+    <!-- Touch screens only, and only while playing -->
+    <div id="touchControls" class="hidden">
+      <button id="pauseBtn" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+      <button id="boostBtn" aria-label="Boost (hold)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18l6-6 6 6M6 11l6-6 6 6"/></svg></button>
+    </div>
   </div>
 
   <!-- Main menu -->
@@ -51,7 +56,7 @@
       <div class="help">
         <div><kbd>Mouse</kbd> steer · <kbd>Hold click</kbd> / <kbd>Space</kbd> boost</div>
         <div><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> keyboard steer · <kbd>P</kbd> pause</div>
-        <div class="touch">Touch: drag to steer, add a second finger to boost</div>
+        <div class="touch">Touch: drag to steer · hold the boost button (or add a second finger) · pause button top left</div>
       </div>
       <div id="best"></div>
       <div id="version"></div>

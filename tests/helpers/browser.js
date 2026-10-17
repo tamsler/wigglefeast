@@ -191,6 +191,16 @@ class Page {
     return this.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons, clickCount: 1 });
   }
 
+  // Makes the page report a touch screen as its main pointer, so `(pointer: coarse)` matches.
+  coarsePointer(on = true) {
+    return this.send('Emulation.setTouchEmulationEnabled', on ? { enabled: true, maxTouchPoints: 5 } : { enabled: false });
+  }
+
+  // Centre of an element in viewport coordinates, for touching or clicking it.
+  center(selector) {
+    return this.eval(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`);
+  }
+
   touch(type, points) {
     return this.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([id, x, y]) => ({ id, x, y })) });
   }
