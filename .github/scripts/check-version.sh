@@ -4,7 +4,7 @@
 set -euo pipefail
 
 base="${1:-origin/main}"
-shipped=$(git diff --name-only "$base"...HEAD | grep -vE '^(README\.md|LICENSE|\.gitignore|openspec/|\.github/|\.claude/)' || true)
+shipped=$(git diff --name-only "$base"...HEAD | grep -vE '^(README\.md|LICENSE|\.gitignore|openspec/|\.github/|\.claude/|tests/)' || true)
 
 if [ -z "$shipped" ]; then
   echo "No shipped game files changed; no version bump needed."
