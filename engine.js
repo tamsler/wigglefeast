@@ -9,6 +9,8 @@
     MIN_BOOST_MASS: 12,
     CELL: 96,
     POWERUP_TIME: 16,
+    POWERUP_REACH: 60, // power-ups slide toward heads this far beyond the head's edge (just past their glow)
+    MAGNET_REACH: 230, // extra pull range for food and power-ups while the magnet runs
     SPAWN_SHIELD: 2.5,
     // Food / power-up density per unit of world area (tuned for a 3600 radius world).
     FOOD_DENSITY: 2600 / (Math.PI * 3600 * 3600),
@@ -669,7 +671,7 @@
 
       this.rebuildSegGrid();
       this.eatFood(dt);
-      this.pickPowerups();
+      this.pickPowerups(dt);
       this.checkCollisions();
       if (this.worms.some((w) => w.dead)) this.worms = this.worms.filter((w) => !w.dead);
 
@@ -714,7 +716,7 @@
       for (const w of this.worms) {
         if (w.dead) continue;
         const hx = w.sx[0], hy = w.sy[0], r = w.r;
-        const A = r * 2.2 + 24 + (w.pw.magnet > 0 ? 230 : 0);
+        const A = r * 2.2 + 24 + (w.pw.magnet > 0 ? CFG.MAGNET_REACH : 0);
         const mult = w.multiplier;
         this.foodGrid.query(hx, hy, A, (i) => {
           const f = food[i];
@@ -736,18 +738,28 @@
       }
     }
 
-    pickPowerups() {
+    // Like food, a power-up slides toward the nearest head within reach (much farther
+    // with the magnet) and is collected when it touches that head (#35).
+    pickPowerups(dt) {
       let any = false;
       for (const p of this.powerups) {
-        for (const w of this.worms) {
-          if (w.dead) continue;
-          const dx = w.sx[0] - p.x, dy = w.sy[0] - p.y, rr = w.r + 24;
-          if (dx * dx + dy * dy < rr * rr) {
-            w.pw[p.type] = CFG.POWERUP_TIME;
-            p.dead = any = true;
-            this.emit('powerup', { worm: w, type: p.type });
-            break;
-          }
+        let w = null, wd2 = Infinity, A = 0;
+        for (const o of this.worms) {
+          if (o.dead) continue;
+          const dx = o.sx[0] - p.x, dy = o.sy[0] - p.y, d2 = dx * dx + dy * dy;
+          const reach = o.r + CFG.POWERUP_REACH + (o.pw.magnet > 0 ? CFG.MAGNET_REACH : 0);
+          if (d2 < reach * reach && d2 < wd2) { w = o; wd2 = d2; A = reach; }
+        }
+        if (!w) continue;
+        const dx = w.sx[0] - p.x, dy = w.sy[0] - p.y, d = Math.sqrt(wd2);
+        if (d < w.r + 24) {
+          w.pw[p.type] = CFG.POWERUP_TIME;
+          p.dead = any = true;
+          this.emit('powerup', { worm: w, type: p.type });
+        } else {
+          const step = Math.min(d, (700 + 900 * (1 - d / A)) * dt);
+          p.x += (dx / d) * step;
+          p.y += (dy / d) * step;
         }
       }
       if (any) this.powerups = this.powerups.filter((p) => !p.dead);

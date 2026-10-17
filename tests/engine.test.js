@@ -180,3 +180,26 @@ test('worms loaded without nextId never share an id with new worms (#31)', () =>
   const ids = g.worms.map((w) => w.id);
   assert.equal(new Set(ids).size, ids.length);
 });
+
+test('power-ups slide toward a passing head, from much farther with the magnet (#35)', () => {
+  // A lone shielded worm drives straight along +x past a power-up beside its path.
+  const pass = (offset, magnet) => {
+    const game = new Game({ botCount: 5 });
+    game.worms = []; game.food = []; game.powerups = [];
+    const w = new Worm({ name: 'Player', skin: SKINS[0], mass: 15, x: 0, y: 0, angle: 0, worldR: game.R, isPlayer: true, shield: 1e9 });
+    w.pw.magnet = magnet ? 10 : 0;
+    game.worms = [w];
+    game.player = w;
+    const p = { x: 150, y: offset, type: 'x2', ph: 0, dead: false };
+    game.powerups = [p];
+    game.rebuildFoodGrid();
+    game.rebuildSegGrid();
+    for (let i = 0; i < 50; i++) game.update(1 / 60);
+    return { collected: p.dead && w.pw.x2 > 0, moved: p.x !== 150 || p.y !== offset };
+  };
+  // Beside the path, close enough to brush the glow: it used to need head radius + 24 (~38).
+  assert.equal(pass(55, false).collected, true);
+  // Far beside the path: left alone without the magnet, pulled in with it.
+  assert.deepEqual(pass(200, false), { collected: false, moved: false });
+  assert.equal(pass(200, true).collected, true);
+});
