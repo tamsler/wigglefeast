@@ -445,52 +445,85 @@
   // ---------------------------------------------------------------------------
   // Input
   const input = { mx: W / 2 + 100, my: H / 2, mouseBoost: false, keyBoost: false, touchBoost: false, left: false, right: false, useMouse: true, keyAngle: 0, steerId: null };
-  const pointers = new Set();
+  // Active pointers by id. Touch: the first finger steers and any second finger boosts;
+  // if the steering finger lifts, a remaining finger takes over steering (#20).
+  const pointers = new Map();
+  const touchIds = () => [...pointers].filter(([, p]) => p.type !== 'mouse').map(([id]) => id);
+  function steerWith(id) {
+    const p = pointers.get(id);
+    input.steerId = id;
+    input.mx = p.x; input.my = p.y; input.useMouse = true;
+  }
 
   canvas.addEventListener('pointerdown', (e) => {
-    pointers.add(e.pointerId);
+    pointers.set(e.pointerId, { type: e.pointerType, x: e.clientX, y: e.clientY });
     if (e.pointerType === 'mouse') {
+      // Capture so the release reaches us even outside the canvas or window (#22).
+      try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
       input.mouseBoost = true;
       input.mx = e.clientX; input.my = e.clientY; input.useMouse = true;
-    } else if (input.steerId === null) {
-      input.steerId = e.pointerId;
-      input.mx = e.clientX; input.my = e.clientY; input.useMouse = true;
-    } else input.touchBoost = true;
+    } else {
+      if (input.steerId === null || !pointers.has(input.steerId)) steerWith(e.pointerId);
+      input.touchBoost = touchIds().length >= 2;
+    }
   });
   canvas.addEventListener('pointermove', (e) => {
+    const p = pointers.get(e.pointerId);
+    if (p) { p.x = e.clientX; p.y = e.clientY; }
     if (e.pointerType === 'mouse' || e.pointerId === input.steerId) {
       input.mx = e.clientX; input.my = e.clientY; input.useMouse = true;
     }
   });
   const pointerEnd = (e) => {
-    pointers.delete(e.pointerId);
+    if (!pointers.delete(e.pointerId) && e.pointerType !== 'mouse') return;
     if (e.pointerType === 'mouse') input.mouseBoost = false;
     else {
-      if (e.pointerId === input.steerId) input.steerId = null;
-      if (pointers.size < 2) input.touchBoost = false;
+      const rest = touchIds();
+      if (e.pointerId === input.steerId) {
+        input.steerId = null;
+        if (rest.length) steerWith(rest[0]);
+      }
+      input.touchBoost = rest.length >= 2;
     }
   };
   canvas.addEventListener('pointerup', pointerEnd);
   canvas.addEventListener('pointercancel', pointerEnd);
+  canvas.addEventListener('lostpointercapture', pointerEnd);
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  window.addEventListener('blur', () => { input.mouseBoost = input.keyBoost = input.left = input.right = false; setPaused(true); });
+
+  // Keys are tracked individually so releasing one alias (e.g. W) doesn't cancel
+  // another that is still held (e.g. Space) (#23).
+  const KEYS = { boost: ['Space', 'ArrowUp', 'KeyW'], left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'] };
+  const ALL_KEYS = [...KEYS.boost, ...KEYS.left, ...KEYS.right];
+  const heldKeys = new Set();
+  function syncKeys() {
+    input.keyBoost = KEYS.boost.some((k) => heldKeys.has(k));
+    input.left = KEYS.left.some((k) => heldKeys.has(k));
+    input.right = KEYS.right.some((k) => heldKeys.has(k));
+  }
+
+  window.addEventListener('blur', () => {
+    heldKeys.clear();
+    syncKeys();
+    input.mouseBoost = input.touchBoost = false;
+    setPaused(true);
+  });
 
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT') return;
+    if (ALL_KEYS.includes(e.code)) {
+      heldKeys.add(e.code);
+      syncKeys();
+      if (KEYS.boost.includes(e.code)) e.preventDefault();
+      return;
+    }
     switch (e.code) {
-      case 'Space': case 'ArrowUp': case 'KeyW': input.keyBoost = true; e.preventDefault(); break;
-      case 'ArrowLeft': case 'KeyA': input.left = true; break;
-      case 'ArrowRight': case 'KeyD': input.right = true; break;
       case 'KeyP': case 'Escape': setPaused(mode === 'playing'); break;
       case 'Enter': if (mode === 'dead' && !$('death').classList.contains('hidden')) startPlaying(); break;
     }
   });
   window.addEventListener('keyup', (e) => {
-    switch (e.code) {
-      case 'Space': case 'ArrowUp': case 'KeyW': input.keyBoost = false; break;
-      case 'ArrowLeft': case 'KeyA': input.left = false; break;
-      case 'ArrowRight': case 'KeyD': input.right = false; break;
-    }
+    if (heldKeys.delete(e.code)) syncKeys();
   });
 
   function applyInput(dt) {
