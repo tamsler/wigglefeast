@@ -22,7 +22,7 @@
 ## 4. Integration verification
 
 - [x] 4.1 Headless end-to-end check on a local server: install release A, change the version to B on the server, relaunch with the same browser profile, confirm the banner shows B, click Reload, and confirm the menu shows B and only B's cache remains
-- [ ] 4.2 Manual check in a real browser (Chrome desktop, plus an iPhone home-screen install if available) on the deployed site after merge: banner appears for the next release and Reload keeps the run and stats
+- [x] 4.2 Manual check in a real browser (Chrome desktop, plus an iPhone home-screen install if available) on the deployed site after merge: banner appears for the next release and Reload keeps the run and stats
 - [x] 4.3 Run the headless engine checks (`sim` and save round-trip) to confirm nothing regressed, even though `engine.js` is not expected to change
 
 ## Workflow follow-up
