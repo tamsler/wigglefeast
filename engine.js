@@ -1,4 +1,4 @@
-/* Worm Arena — game simulation. No DOM access here so it can run headless. */
+/* Wigglefeast — game simulation. No DOM access here so it can run headless. */
 (function (root) {
   'use strict';
 
@@ -76,6 +76,9 @@
     '#ff595e', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93', '#f72585', '#4cc9f0',
     '#ff9f1c', '#2ec4b6', '#ffd6ff', '#b8f2e6', '#f15bb5', '#00f5d4', '#fee440',
   ];
+
+  // Save files written before the rename used 'worm-arena'; both load fine.
+  const SAVE_APP_IDS = ['wigglefeast', 'worm-arena'];
 
   const POWERUP_WEIGHTS = { magnet: 30, x2: 22, x5: 5, speed: 20, zoom: 14 };
 
@@ -433,7 +436,7 @@
         food.push(Math.round(f.x), Math.round(f.y), r2(f.v), colorIndex(f.c), f.life === Infinity ? -1 : r1(f.life), r2(f.ph), f.natural ? 1 : 0);
       }
       return {
-        app: 'worm-arena',
+        app: 'wigglefeast',
         v: 1,
         savedAt: Date.now(),
         settings: { botCount: this.settings.botCount, difficulty: this.settings.difficulty },
@@ -466,7 +469,7 @@
     }
 
     load(snap) {
-      if (!snap || snap.app !== 'worm-arena' || snap.v !== 1) throw new Error('Not a Worm Arena save');
+      if (!snap || !SAVE_APP_IDS.includes(snap.app) || snap.v !== 1) throw new Error('Not a Wigglefeast save');
       this.time = snap.time || 0;
       nextId = Math.max(nextId, snap.nextId || 1);
       const byId = new Map();
@@ -739,5 +742,5 @@
     rankOf(w) { return this.leaderboard.indexOf(w) + 1; }
   }
 
-  root.WormEngine = { CFG, SKINS, Game, Worm, radiusFor, lengthFor, angleDiff, TAU };
+  root.WormEngine = { CFG, SKINS, SAVE_APP_IDS, Game, Worm, radiusFor, lengthFor, angleDiff, TAU };
 })(typeof window !== 'undefined' ? window : globalThis);

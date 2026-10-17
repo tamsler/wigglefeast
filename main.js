@@ -1,8 +1,8 @@
-/* Worm Arena — rendering, input and UI. */
+/* Wigglefeast — rendering, input and UI. */
 (function () {
   'use strict';
 
-  const { Game, SKINS, TAU } = window.WormEngine;
+  const { Game, SKINS, SAVE_APP_IDS, TAU } = window.WormEngine;
   const $ = (id) => document.getElementById(id);
 
   const canvas = $('game');
@@ -20,6 +20,7 @@
 
   // ---------------------------------------------------------------------------
   // Settings (remembered between sessions when storage is available)
+  // Storage keys keep their original 'wormarena.' prefix so saves from before the rename still load.
   const store = {
     get(k, d) { try { const v = localStorage.getItem('wormarena.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
     set(k, v) { try { localStorage.setItem('wormarena.' + k, JSON.stringify(v)); } catch { /* ignore */ } },
@@ -333,11 +334,11 @@
 
   function exportSave() {
     saveWorld();
-    const data = { app: 'worm-arena', kind: 'save', v: 1, exportedAt: new Date().toISOString(), profile, world: JSON.parse(JSON.stringify(game)) };
+    const data = { app: 'wigglefeast', kind: 'save', v: 1, exportedAt: new Date().toISOString(), profile, world: JSON.parse(JSON.stringify(game)) };
     const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `worm-arena-save-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `wigglefeast-save-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -349,7 +350,7 @@
     reader.onload = () => {
       let data;
       try { data = JSON.parse(reader.result); } catch { alert('That file is not valid JSON.'); return; }
-      if (!data || data.app !== 'worm-arena' || data.kind !== 'save' || !validProfile(data.profile)) { alert('That file is not a Worm Arena save.'); return; }
+      if (!data || !SAVE_APP_IDS.includes(data.app) || data.kind !== 'save' || !validProfile(data.profile)) { alert('That file is not a Wigglefeast save.'); return; }
       if (!confirm('Replace your current stats and world with this save?')) return;
       profile = data.profile;
       saveProfile();

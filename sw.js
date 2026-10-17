@@ -1,7 +1,7 @@
-/* Worm Arena service worker: makes the game work offline.
+/* Wigglefeast service worker: makes the game work offline.
    Files are served from the cache immediately and refreshed in the background,
    so a new version you push shows up on the next launch. */
-const CACHE = 'worm-arena-v1';
+const CACHE = 'wigglefeast-v1';
 const FILES = [
   './',
   'index.html',

@@ -1,10 +1,10 @@
-# Worm Arena
+# Wigglefeast
 
-A single-player, offline take on wormate.io / slither-style games. You play against AI worms; there's no server.
+A single-player snake-style .io game you can play offline. Eat, grow, and outsmart AI worms; there's no server.
 
 ## Play
 
-**Online:** https://tamsler.github.io/worm-arena/
+**Online:** https://tamsler.github.io/wigglefeast/
 
 **Install it as an app** (works offline afterwards):
 - Chrome / Edge (Mac, Windows, Linux): click the install icon in the address bar
@@ -33,7 +33,7 @@ Everything is saved automatically in the browser's `localStorage`, so there's no
 - **Stats** (lifetime totals, best score per difficulty, top 10 runs, last 50 games) are saved whenever a run ends. Open them from **Stats & high scores** in the menu.
 - **Export / Import** on the stats screen writes everything to a `.json` file and loads it back. Use it as a backup or to move to another browser/computer. Clearing your browser's site data erases the in-browser save.
 
-Storage keys: `wormarena.world`, `wormarena.profile`, `wormarena.settings`.
+Storage keys: `wormarena.world`, `wormarena.profile`, `wormarena.settings` (the prefix predates the rename and is kept so existing saves load).
 
 ## Files
 
