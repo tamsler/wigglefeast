@@ -54,4 +54,13 @@ test('keyboard', async (t) => {
     await key('keyUp', 'Space');
     await page.waitFor('window.__player.wantBoost === false', 'boost to stop on release');
   });
+
+  await t.test('Space presses a focused Play again button (#50)', async () => {
+    await page.eval('window.__game.kill(window.__player, null)');
+    await page.waitFor(`!${hidden('death')}`, 'death screen');
+    await page.eval(`document.getElementById('again').focus()`);
+    await key('keyDown', 'Space');
+    await key('keyUp', 'Space');
+    await page.waitFor(`${hidden('death')} && window.__player && !window.__player.dead`, 'new run from Play again');
+  });
 });

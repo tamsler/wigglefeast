@@ -571,8 +571,8 @@
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT') return;
     if (ALL_KEYS.includes(e.code)) {
-      // Outside a run, a focused button keeps its own keys, e.g. Space presses it (#50).
-      if (mode !== 'playing' && e.target.closest && e.target.closest('button, a[href], select, textarea')) return;
+      // Outside a run, Space on a focused button presses it instead of boosting (#50).
+      if (e.code === 'Space' && mode !== 'playing' && e.target.closest && e.target.closest('button, a[href]')) return;
       heldKeys.add(e.code);
       syncKeys();
       if (KEYS.boost.includes(e.code)) e.preventDefault();
