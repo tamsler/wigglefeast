@@ -571,11 +571,14 @@
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT') return;
     if (ALL_KEYS.includes(e.code)) {
+      // Outside a run, a focused button keeps its own keys, e.g. Space presses it (#50).
+      if (mode !== 'playing' && e.target.closest && e.target.closest('button, a[href], select, textarea')) return;
       heldKeys.add(e.code);
       syncKeys();
       if (KEYS.boost.includes(e.code)) e.preventDefault();
       return;
     }
+    if (e.repeat) return; // holding a toggle key must not flip it back and forth (#49)
     switch (e.code) {
       case 'KeyP': case 'Escape': setPaused(mode === 'playing'); break;
       case 'Enter': if (mode === 'dead' && !$('death').classList.contains('hidden')) startPlaying(); break;
