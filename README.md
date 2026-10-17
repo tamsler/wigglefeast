@@ -31,6 +31,7 @@ Everything is saved automatically in the browser's `localStorage`, so there's no
 
 - **The world** (every worm, food, power-ups, your current run) is saved every 10 seconds, whenever the tab is hidden, and when the tab is closed or reloaded. When you reopen the game you land on a paused "Welcome back" screen and can resume your run (with a 2-second shield) or end it.
 - **Stats** (lifetime totals, best score per difficulty, top 10 runs, last 50 games) are saved whenever a run ends. Open them from **Stats & high scores** in the menu.
+- **One window at a time:** if the game is open in two tabs or windows (say, the installed app and a browser tab), only one plays and saves. The other shows *"Wigglefeast is open in another window"*; **Play here** asks the active one to save, then continues there with the same run and stats, so neither copy can overwrite the other.
 - **Export / Import** on the stats screen writes everything to a `.json` file and loads it back. Use it as a backup or to move to another browser/computer. Clearing your browser's site data erases the in-browser save.
 
 Storage keys: `wormarena.world`, `wormarena.profile`, `wormarena.settings` (the prefix predates the rename and is kept so existing saves load).

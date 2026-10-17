@@ -73,7 +73,22 @@ async function launch({ width = 1280, height = 800, mobile = false, profile } = 
     try { target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page'); } catch { /* not ready */ }
     if (!target) await sleep(100);
   }
-  const page = new Page(new WebSocket(target.webSocketDebuggerUrl));
+  const page = await attach(target.webSocketDebuggerUrl, { width, height, mobile });
+  page.port = port;
+  page.close = async () => {
+    try { page.ws.close(); } catch { /* already closed */ }
+    proc.kill();
+    await new Promise((r) => (proc.exitCode !== null ? r() : proc.once('exit', r)));
+    if (ownProfile) fs.rmSync(userDataDir, { recursive: true, force: true });
+  };
+  return page;
+}
+
+// Connects to a tab and sets it up the same way for every test.
+async function attach(wsUrl, opts) {
+  const { width, height, mobile } = opts;
+  const page = new Page(new WebSocket(wsUrl));
+  page.opts = opts;
   await page.ready;
   await page.send('Page.enable');
   await page.send('Runtime.enable');
@@ -82,12 +97,6 @@ async function launch({ width = 1280, height = 800, mobile = false, profile } = 
   // Exact viewport size, so layout results don't depend on the machine's window chrome.
   await page.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile || width < 1000 ? 2 : 1, mobile: mobile || width < 1000 });
   await page.send('Page.addScriptToEvaluateOnNewDocument', { source: HOOK });
-  page.close = async () => {
-    try { page.ws.close(); } catch { /* already closed */ }
-    proc.kill();
-    await new Promise((r) => (proc.exitCode !== null ? r() : proc.once('exit', r)));
-    if (ownProfile) fs.rmSync(userDataDir, { recursive: true, force: true });
-  };
   return page;
 }
 
@@ -209,6 +218,20 @@ class Page {
     const { root } = await this.send('DOM.getDocument');
     const { nodeId } = await this.send('DOM.querySelector', { nodeId: root.nodeId, selector });
     await this.send('DOM.setFileInputFiles', { files: [file], nodeId });
+  }
+
+  // Opens another tab in the same browser (same profile and storage), set up like this one.
+  // Close it with tab.close(); the browser itself is closed by the first page's close().
+  async newTab() {
+    const base = `http://127.0.0.1:${this.port}`;
+    const target = await (await fetch(`${base}/json/new?about:blank`, { method: 'PUT' })).json();
+    const tab = await attach(target.webSocketDebuggerUrl, this.opts);
+    tab.port = this.port;
+    tab.close = async () => {
+      try { await fetch(`${base}/json/close/${target.id}`); } catch { /* already gone */ }
+      try { tab.ws.close(); } catch { /* already closed */ }
+    };
+    return tab;
   }
 
   // Starts a run from the main menu and waits for the player to exist.
