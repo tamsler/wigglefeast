@@ -513,18 +513,26 @@
   // On-screen buttons for touch screens (#11); CSS shows them only for a coarse pointer.
   // Their events never reach the canvas, so the boost finger is never counted as steering.
   const boostBtn = $('boostBtn');
+  const boostIds = new Set(); // fingers on the button: boost lasts until the last one lifts
   boostBtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     // Keep the release even if the finger slides off the button.
     try { boostBtn.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+    boostIds.add(e.pointerId);
     input.buttonBoost = true;
     boostBtn.classList.add('on');
   });
   function boostButtonEnd() {
+    boostIds.clear();
     input.buttonBoost = false;
     boostBtn.classList.remove('on');
   }
-  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) boostBtn.addEventListener(type, boostButtonEnd);
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+    boostBtn.addEventListener(type, (e) => {
+      boostIds.delete(e.pointerId);
+      if (!boostIds.size) boostButtonEnd();
+    });
+  }
   boostBtn.addEventListener('contextmenu', (e) => e.preventDefault());
   $('pauseBtn').addEventListener('click', () => setPaused(true));
 

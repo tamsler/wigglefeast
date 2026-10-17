@@ -63,6 +63,22 @@ test('touch buttons', async (t) => {
     await page.touch('touchEnd', []);
   });
 
+  await t.test('with two fingers on the button, boost lasts until both lift', async () => {
+    const ids = [];
+    await page.eval(`window.__boostIds = []`);
+    const [x, y] = await page.center('#boostBtn');
+    await page.touch('touchStart', [[1, x - 10, y]]);
+    await page.touch('touchStart', [[1, x - 10, y], [2, x + 10, y]]);
+    await page.waitFor('window.__player.wantBoost === true', 'boost while held');
+    ids.push(...(await page.eval('window.__boostIds')));
+    assert.equal(ids.length, 2, 'both fingers reached the button');
+    await page.eval(`document.getElementById('boostBtn').dispatchEvent(new PointerEvent('pointerup', { pointerId: ${ids[0]}, pointerType: 'touch', bubbles: true }))`);
+    await page.frames(10);
+    assert.equal(await boosting(), true, 'still boosting with one finger left');
+    await page.touch('touchEnd', []);
+    await page.waitFor('window.__player.wantBoost === false', 'boost to stop when both lift');
+  });
+
   await t.test('the pause button pauses; Resume continues the run', async () => {
     const [x, y] = await page.center('#pauseBtn');
     await page.touch('touchStart', [[1, x, y]]);

@@ -50,9 +50,9 @@ async function startTouchRun(t, width, height, coarse) {
   if (coarse) await page.coarsePointer();
   await page.goto(gameUrl());
   await page.startRun();
-  // Shielded, with three power-ups running so their timers take space in the HUD.
-  await page.eval(`Object.assign(window.__player, { shield: 1e9 }); Object.assign(window.__player.pw, { magnet: 15, x2: 15, speed: 15 })`);
-  await page.waitFor(`document.querySelectorAll('#powerups .pw').length === 3`, 'power-up timers');
+  // Shielded, with every power-up running so their timers take the most space in the HUD.
+  await page.eval(`Object.assign(window.__player, { shield: 1e9 }); Object.assign(window.__player.pw, { magnet: 15, x2: 15, x5: 15, speed: 15, zoom: 15 })`);
+  await page.waitFor(`document.querySelectorAll('#powerups .pw').length === 5`, 'power-up timers');
   await page.frames(5);
   return page;
 }
