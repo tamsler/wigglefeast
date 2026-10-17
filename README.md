@@ -15,7 +15,7 @@ A single-player snake-style .io game you can play offline. Eat, grow, and outsma
 **Locally:** open `index.html` in a browser (double-click works, nothing to build). Offline/install support needs it served over http(s), e.g. `python3 -m http.server`.
 
 - **Mouse**: steer toward the cursor
-- **Hold click / Space / W / ↑**: boost (burns mass, drops food behind you)
+- **Hold click / Space / W / ↑**: boost (burns mass, drops food behind you); a speed trail streams from boosting worms and a **BOOST** badge shows next to your score
 - **A / D or ← / →**: keyboard steering
 - **P / Esc**: pause
 - **Touch**: drag to steer; hold the boost button (bottom right) or add a second finger to boost; the pause button is top left

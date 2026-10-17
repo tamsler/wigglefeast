@@ -21,6 +21,11 @@ html, body {
 #stats .score { font-size: 38px; font-weight: 800; line-height: 1; }
 #stats .score small { font-size: 13px; font-weight: 600; opacity: .7; margin-left: 6px; text-transform: uppercase; letter-spacing: .08em; }
 #stats .line { margin-top: 6px; font-size: 14px; opacity: .85; }
+#boostBadge {
+  display: inline-block; margin-left: 10px; padding: 3px 9px; vertical-align: middle; border-radius: 999px;
+  font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; text-shadow: none;
+  color: #10142a; background: #4cc9f0; box-shadow: 0 0 12px rgba(76, 201, 240, .7);
+}
 
 #leaderboard {
   position: absolute; right: calc(16px + env(safe-area-inset-right)); top: calc(16px + env(safe-area-inset-top)); width: 220px;

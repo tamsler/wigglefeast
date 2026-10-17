@@ -53,6 +53,10 @@ async function startTouchRun(t, width, height, coarse) {
   // Shielded, with every power-up running so their timers take the most space in the HUD.
   await page.eval(`Object.assign(window.__player, { shield: 1e9 }); Object.assign(window.__player.pw, { magnet: 15, x2: 15, x5: 15, speed: 15, zoom: 15 })`);
   await page.waitFor(`document.querySelectorAll('#powerups .pw').length === 5`, 'power-up timers');
+  // Boosting, so the BOOST badge next to the score takes its space too (#37).
+  await page.eval('window.__player.mass = 300');
+  await page.key('keyDown', 'Space');
+  await page.waitFor(`!document.getElementById('boostBadge').classList.contains('hidden')`, 'boost badge');
   await page.frames(5);
   return page;
 }
@@ -61,6 +65,7 @@ for (const [width, height] of [[390, 844], [360, 640], [844, 390], [667, 375], [
   test(`touch HUD fits without overlaps at ${width}x${height}`, async (t) => {
     const page = await startTouchRun(t, width, height, true);
     const m = await page.eval(MEASURE_HUD);
+    assert.ok(await page.eval(`document.getElementById('boostBadge').getClientRects().length > 0`), 'boost badge shown');
     for (const s of HUD) {
       const r = m[s];
       assert.ok(r.shown, `${s} is shown`);
