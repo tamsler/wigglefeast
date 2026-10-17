@@ -490,6 +490,8 @@
     if (e.pointerType === 'mouse' || e.pointerId === input.steerId) {
       input.mx = e.clientX; input.my = e.clientY; input.useMouse = true;
     }
+    // Pressing or releasing a second mouse button only fires pointermove (#30).
+    if (e.pointerType === 'mouse' && pointers.has(e.pointerId)) input.mouseBoost = (e.buttons & 1) !== 0;
   });
   const pointerEnd = (e) => {
     if (!pointers.delete(e.pointerId) && e.pointerType !== 'mouse') return;

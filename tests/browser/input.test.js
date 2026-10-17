@@ -51,6 +51,16 @@ test('player input', async (t) => {
     await page.waitFor('window.__player.wantBoost === false', 'boost to stop');
   });
 
+  await t.test('releasing left while right is held stops boosting (#30)', async () => {
+    const send = (type, button, buttons) => page.send('Input.dispatchMouseEvent', { type, x: 900, y: 400, button, buttons, clickCount: 1 });
+    await send('mousePressed', 'left', 1);
+    await page.waitFor('window.__player.wantBoost === true', 'boost while left is down');
+    await send('mousePressed', 'right', 3);
+    await send('mouseReleased', 'left', 2);
+    await page.waitFor('window.__player.wantBoost === false', 'boost to stop with only right held');
+    await send('mouseReleased', 'right', 0);
+  });
+
   // Chrome's touch emulation can't lift one of several fingers, so fingers after
   // the first two are driven with pointer events using the ids the page received.
   await page.eval(`window.__downs = []; document.getElementById('game').addEventListener('pointerdown', (e) => e.pointerType === 'touch' && window.__downs.push(e.pointerId))`);
