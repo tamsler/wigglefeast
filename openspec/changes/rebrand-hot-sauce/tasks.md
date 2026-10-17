@@ -12,7 +12,7 @@
 
 ## 3. Release and integration
 
-- [ ] 3.1 Bump `VERSION` in `sw.js` to the next minor version (`FILES` unchanged); run `node --test "tests/**/*.test.js"` and verify every test passes and `.github/scripts/check-version.sh main` passes after committing
+- [x] 3.1 Bump `VERSION` in `sw.js` to the next minor version (`FILES` unchanged); run `node --test "tests/**/*.test.js"` and verify every test passes and `.github/scripts/check-version.sh main` passes after committing
 - [ ] 3.2 Manual check: the menu, buttons and update banner in the new colours on desktop and a phone, and a fresh install showing the new icon (Chrome/Android, plus iOS if available); verify by noting the result in the PR
 
 ## Workflow follow-up
