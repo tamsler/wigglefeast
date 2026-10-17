@@ -60,7 +60,9 @@ test('offline play and release updates', async (t) => {
     await page.press('KeyP');
     await page.waitFor(`!document.getElementById('updateBanner').classList.contains('hidden')`, 'banner on pause');
     assert.equal(await page.eval(`document.getElementById('updateText').textContent`), 'Version 90.0.0-test is ready');
-    const score = await page.eval(`document.getElementById('score').textContent`);
+    // The HUD refreshes every 0.15 s, so wait until it shows the paused worm's real score.
+    const score = await page.waitFor(`(() => { const t = document.getElementById('score').textContent;
+      return t === Math.round(window.__player.mass).toLocaleString() && t; })()`, 'HUD score to catch up');
     await page.click('#updateReload');
     await page.waitFor(`document.getElementById('version').textContent === 'v90.0.0-test'`, 'new version after reload');
     await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'resume panel after reload');
