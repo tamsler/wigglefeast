@@ -9,6 +9,7 @@
     MIN_BOOST_MASS: 12,
     CELL: 96,
     POWERUP_TIME: 16,
+    TURN_POWER_MULT: 2, // turn-rate multiplier while the tight-turn power-up runs (#38)
     POWERUP_REACH: 60, // power-ups slide toward heads this far beyond the head's edge (just past their glow)
     MAGNET_REACH: 230, // extra pull range for food and power-ups while the magnet runs
     SPAWN_SHIELD: 2.5,
@@ -82,7 +83,7 @@
   // Save files written before the rename used 'worm-arena'; both load fine.
   const SAVE_APP_IDS = ['wigglefeast', 'worm-arena'];
 
-  const POWERUP_WEIGHTS = { magnet: 30, x2: 22, x5: 5, speed: 20, zoom: 14 };
+  const POWERUP_WEIGHTS = { magnet: 30, x2: 22, x5: 5, speed: 20, zoom: 14, turn: 14 };
 
   const DIFFICULTY = {
     easy: { skill: [0.12, 0.45], aggro: [0.0, 0.35] },
@@ -218,7 +219,7 @@
       this.eaten = o.eaten || 0;
       this.dropAcc = o.dropAcc || 0;
       this.shield = o.shield || 0;
-      this.pw = Object.assign({ magnet: 0, x2: 0, x5: 0, speed: 0, zoom: 0 }, o.pw);
+      this.pw = Object.assign({ magnet: 0, x2: 0, x5: 0, speed: 0, zoom: 0, turn: 0 }, o.pw);
       this.ai = o.ai || null;
       this.thinkT = Math.random() * 0.3;
       this.born = o.time || 0;
@@ -264,7 +265,7 @@
       const r = (this.r = radiusFor(this.mass));
       const sp = spacingFor(r);
 
-      const maxTurn = turnRateFor(r) * dt * (this.boosting ? 0.85 : 1);
+      const maxTurn = turnRateFor(r) * dt * (this.boosting ? 0.85 : 1) * (pw.turn > 0 ? CFG.TURN_POWER_MULT : 1);
       this.angle += clamp(angleDiff(this.angle, this.targetAngle), -maxTurn, maxTurn);
       if (this.angle > Math.PI) this.angle -= TAU;
       else if (this.angle < -Math.PI) this.angle += TAU;

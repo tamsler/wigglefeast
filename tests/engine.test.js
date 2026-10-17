@@ -203,3 +203,45 @@ test('power-ups slide toward a passing head, from much farther with the magnet (
   assert.deepEqual(pass(200, false), { collected: false, moved: false });
   assert.equal(pass(200, true).collected, true);
 });
+
+test('the tight-turn power-up doubles the turn rate for 16 seconds (#38)', () => {
+  const g = { addFood() {} };
+  const pair = () => ['a', 'b'].map((name) => {
+    const w = new Worm({ name, skin: SKINS[0], mass: 300, x: 0, y: 0, angle: 0, worldR: 5000 });
+    w.targetAngle = 3; // nearly behind: keeps turning at the maximum rate
+    return w;
+  });
+  const turned = (w, ticks) => { const a0 = w.angle; for (let i = 0; i < ticks; i++) w.update(1 / 60, g); return w.angle - a0; };
+
+  for (const boost of [false, true]) {
+    const [plain, tight] = pair();
+    tight.pw.turn = 16;
+    plain.wantBoost = tight.wantBoost = boost;
+    const a = turned(plain, 5), b = turned(tight, 5);
+    assert.ok(a > 0.1, `turning at all (boost ${boost})`);
+    assert.ok(Math.abs(b / a - 2) < 1e-9, `2:1 turn rate with boost ${boost}: ${b} vs ${a}`);
+  }
+
+  // The effect ends with the timer: afterwards both turn at the same rate.
+  const [plain, tight] = pair();
+  tight.pw.turn = 0.04; // runs out within three ticks
+  turned(plain, 3); turned(tight, 3);
+  assert.equal(tight.pw.turn, 0);
+  assert.ok(Math.abs(turned(tight, 3) - turned(plain, 3)) < 1e-9, 'same rate once the timer runs out');
+});
+
+test('saves from before the tight-turn power-up load, and saves with it round-trip (#38)', () => {
+  const old = fixture().world;
+  assert.ok(old.worms.every((w) => !('turn' in w.pw)), 'fixture predates the power-up');
+  const g = new Game(null, old);
+  assert.ok(g.worms.every((w) => w.pw.turn === 0), 'loaded worms start without the effect');
+
+  const snap = fixture().world;
+  snap.worms[0].pw.turn = 9.5;
+  snap.powerups.push({ x: 10, y: 20, type: 'turn', ph: 1 });
+  assert.doesNotThrow(() => validateSnapshot(snap));
+  const again = clone(new Game(null, snap));
+  assert.doesNotThrow(() => validateSnapshot(again));
+  assert.equal(again.worms.find((w) => w.id === snap.worms[0].id).pw.turn, 9.5);
+  assert.ok(again.powerups.some((p) => p.type === 'turn'));
+});

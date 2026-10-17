@@ -23,7 +23,7 @@ A single-player snake-style .io game you can play offline. Eat, grow, and outsma
 Run into another worm's body and you die. Make others run into yours and eat what they leave behind.
 Head-on collisions are won by the bigger worm. The red ring is the arena edge.
 
-Power-ups: 🧲 magnet · x2 / x5 food multiplier · ⚡ free boost + speed · 🔭 zoom out (16s each).
+Power-ups: 🧲 magnet · x2 / x5 food multiplier · ⚡ free boost + speed · 🔭 zoom out · 🌀 tight turns (16s each).
 
 ## Saving
 

@@ -16,6 +16,7 @@
     x5: { icon: 'x5', label: 'Food x5', color: '#ff9f1c' },
     speed: { icon: '⚡', label: 'Free boost', color: '#4cc9f0' },
     zoom: { icon: '🔭', label: 'Zoom out', color: '#b388ff' },
+    turn: { icon: '🌀', label: 'Tight turns', color: '#8ac926' },
   };
 
   // ---------------------------------------------------------------------------

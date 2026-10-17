@@ -107,6 +107,12 @@ html, body {
   #lb li:nth-child(n+6):not(.me) { display: none; }
   #minimap { width: 110px; height: 110px; }
 }
+/* Short touch screens: compact power-up timers so all six fit above the score (#38). */
+@media (pointer: coarse) and (max-height: 520px) {
+  #powerups { gap: 4px; }
+  .pw { padding: 3px 8px; font-size: 12px; min-width: 130px; }
+  .pw .ic { font-size: 14px; }
+}
 
 /* ---------- Overlays ---------- */
 .overlay {
