@@ -26,6 +26,28 @@
     get(k, d) { try { const v = localStorage.getItem('wormarena.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
     set(k, v) { try { localStorage.setItem('wormarena.' + k, JSON.stringify(v)); } catch { /* ignore */ } },
   };
+  // One active game at a time (#45): only the window that owns the session writes the
+  // world, stats and settings. Others wait on the "open in another window" panel.
+  const SESSION_KEY = 'wormarena.session', HANDOVER_KEY = 'wormarena.handover';
+  const STALE_MS = 3000, HANDOVER_WAIT_MS = 2000;
+  const sessionId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const readKey = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
+  const writeKey = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } };
+  const removeKey = (k) => { try { localStorage.removeItem(k); } catch { /* storage unavailable */ } };
+  const claimSession = () => writeKey(SESSION_KEY, { id: sessionId, at: Date.now() });
+  // Active unless another window holds a fresh session (a closed or crashed one goes stale).
+  let active = (() => { const s = readKey(SESSION_KEY); return !s || Date.now() - s.at >= STALE_MS; })();
+  if (active) claimSession();
+  // Before every write: still ours? If another window took over, stop and stand by.
+  function isActive() {
+    if (!active) return false;
+    const s = readKey(SESSION_KEY);
+    if (!s) { claimSession(); return true; } // cleared, or storage unavailable: nothing to protect
+    if (s.id === sessionId) return true;
+    goStandby();
+    return false;
+  }
+
   // Rebuilt from checked fields: a corrupted stored value must not stop startup (#26).
   const settings = { name: '', skin: 0, botCount: 30, difficulty: 'normal' };
   {
@@ -77,25 +99,29 @@
       recent: recent.filter(Boolean).slice(0, 50),
     };
   }
-  let rawProfile = null;
-  try { rawProfile = localStorage.getItem('wormarena.profile'); } catch { /* storage unavailable */ }
-  const storedProfile = store.get('profile', null);
-  let profile = cleanProfile(storedProfile);
-  if (!profile) {
-    // Keep unreadable data aside (as the raw text, even if it isn't JSON) instead of crashing on it or losing it.
-    if (rawProfile !== null) {
+  function loadProfile() {
+    let rawProfile = null;
+    try { rawProfile = localStorage.getItem('wormarena.profile'); } catch { /* storage unavailable */ }
+    const storedProfile = store.get('profile', null);
+    let p = cleanProfile(storedProfile);
+    if (p) return p;
+    // Keep unreadable data aside (as the raw text, even if it isn't JSON) instead of crashing on it
+    // or losing it. Only the active window writes (#45).
+    if (rawProfile !== null && active) {
       try { localStorage.setItem('wormarena.profile-corrupt', rawProfile); } catch { /* storage full or unavailable */ }
       console.warn('Stored profile was invalid; saved it as wormarena.profile-corrupt and kept what was readable.');
     }
     // A bad run costs only that run, not every stat (#46). Imports stay strict (importSave).
-    profile = cleanProfile(storedProfile, true);
-    if (!profile) {
-      profile = emptyProfile();
-      profile.totals.best = Number(store.get('best', 0)) || 0; // carry over the best score from before stats existed
+    p = cleanProfile(storedProfile, true);
+    if (!p) {
+      p = emptyProfile();
+      p.totals.best = Number(store.get('best', 0)) || 0; // carry over the best score from before stats existed
     }
-    if (rawProfile !== null) store.set('profile', profile);
+    if (rawProfile !== null && active) store.set('profile', p);
+    return p;
   }
-  const saveProfile = () => store.set('profile', profile);
+  let profile = loadProfile();
+  const saveProfile = () => { if (isActive()) store.set('profile', profile); };
 
   function recordRun(w, killer, cause) {
     const run = {
@@ -110,6 +136,9 @@
       diff: game.settings.difficulty,
       bots: game.settings.botCount,
     };
+    // Add to the stats as they are stored now, so runs recorded by another window are kept (#45).
+    const stored = cleanProfile(store.get('profile', null), true);
+    if (stored) profile = stored;
     const t = profile.totals;
     const isBest = run.peak > t.best;
     t.games++;
@@ -131,7 +160,7 @@
   // World persistence: autosave every 10s, when the tab is hidden, and on close.
   const WORLD_KEY = 'wormarena.world';
   function saveWorld() {
-    if (!game) return;
+    if (!game || !isActive()) return;
     try {
       localStorage.setItem(WORLD_KEY, JSON.stringify(game));
     } catch {
@@ -148,6 +177,66 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveWorld(); });
   window.addEventListener('pagehide', saveWorld);
   window.addEventListener('beforeunload', saveWorld);
+
+  // Session upkeep: heartbeat, handing over to a window that asks with Play here, and
+  // releasing the session on close so a reload becomes active straight away.
+  window.addEventListener('pagehide', () => {
+    const s = readKey(SESSION_KEY);
+    if (active && s && s.id === sessionId) removeKey(SESSION_KEY);
+    // Just saved; write nothing more (the visibilitychange that follows would re-claim).
+    active = false;
+  });
+  window.addEventListener('pageshow', (e) => {
+    if (!e.persisted) return; // restored from the back/forward cache: decide again
+    const s = readKey(SESSION_KEY);
+    if (!s || s.id === sessionId || Date.now() - s.at >= STALE_MS) becomeActive(); else goStandby();
+  });
+  function answerHandover() {
+    const h = readKey(HANDOVER_KEY);
+    if (!active || !h || h.to === sessionId || Date.now() - h.at > 2 * HANDOVER_WAIT_MS) return;
+    saveWorld();
+    saveProfile();
+    writeKey(SESSION_KEY, { id: h.to, at: Date.now() });
+    goStandby();
+  }
+  window.addEventListener('storage', (e) => {
+    if (e.key === HANDOVER_KEY) answerHandover();
+    else if (e.key === SESSION_KEY) isActive(); // another window took over: stand by
+  });
+  setInterval(() => {
+    answerHandover(); // also covers browsers that don't deliver the storage event
+    if (isActive()) claimSession();
+  }, 1000);
+
+  async function playHere() {
+    $('playHere').disabled = true;
+    writeKey(HANDOVER_KEY, { to: sessionId, at: Date.now() });
+    // Wait for the active window to save and hand over; take over anyway if it's gone or stuck.
+    for (const t0 = Date.now(); Date.now() - t0 < HANDOVER_WAIT_MS;) {
+      const s = readKey(SESSION_KEY);
+      if (!s || s.id === sessionId || Date.now() - s.at >= STALE_MS) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    removeKey(HANDOVER_KEY);
+    $('playHere').disabled = false;
+    becomeActive();
+  }
+  // Take over: continue from whatever the previous window saved.
+  function becomeActive() {
+    active = true;
+    claimSession();
+    $('standby').classList.add('hidden');
+    profile = loadProfile();
+    const saved = loadWorld();
+    if (!saved || !restoreWorld(saved)) { newGame(); showMenu(); }
+  }
+  function goStandby() {
+    active = false;
+    mode = 'standby';
+    clearTimeout(deathTimer);
+    for (const id of ['menu', 'death', 'hud', 'paused', 'statsScreen']) $(id).classList.add('hidden');
+    $('standby').classList.remove('hidden');
+  }
 
   // ---------------------------------------------------------------------------
   let W = 0, H = 0, DPR = 1;
@@ -247,7 +336,7 @@
   // ---------------------------------------------------------------------------
   // Game state
   let game = null;
-  let mode = 'menu'; // menu | playing | dead | paused
+  let mode = 'menu'; // menu | playing | dead | paused | standby (another window is active, #45)
   const cam = { x: 0, y: 0, z: 0.6 };
   let spectate = null;
 
@@ -279,7 +368,7 @@
 
   function startPlaying() {
     settings.name = $('name').value.trim().slice(0, 16);
-    store.set('settings', settings);
+    if (isActive()) store.set('settings', settings);
     if (!game || game.settings.botCount !== settings.botCount || game.settings.difficulty !== settings.difficulty) newGame();
     const p = game.spawnPlayer(settings.name || 'You', settings.skin);
     cam.x = p.x; cam.y = p.y;
@@ -458,6 +547,7 @@
   $('exportSave').addEventListener('click', exportSave);
   $('importSave').addEventListener('click', () => $('importFile').click());
   $('importFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importSave(f); });
+  $('playHere').addEventListener('click', playHere);
   $('resetStats').addEventListener('click', () => {
     if (!confirm('Reset all stats and high scores? This cannot be undone (export a save first if you want a backup).')) return;
     profile = emptyProfile();
@@ -897,7 +987,7 @@
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (mode !== 'paused') {
+    if (mode !== 'paused' && mode !== 'standby') {
       applyInput(dt);
       const steps = Math.max(1, Math.ceil(dt / (1 / 60) - 0.01));
       const h = dt / steps;
@@ -905,7 +995,7 @@
       updateCamera(dt);
     }
     render(now / 1000);
-    if (mode !== 'menu') renderMinimap();
+    if (mode !== 'menu' && mode !== 'standby') renderMinimap();
     updateHud(dt);
     syncUpdateBanner();
     syncTouchControls();
@@ -990,7 +1080,14 @@
   // Ask the browser not to evict saves when it is low on space.
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
-  const saved = loadWorld();
-  if (!saved || !restoreWorld(saved)) { newGame(); showMenu(); }
+  if (active) {
+    const saved = loadWorld();
+    if (!saved || !restoreWorld(saved)) { newGame(); showMenu(); }
+    // Two windows opened in the same instant can both claim: the last claim wins, the other stands by.
+    setTimeout(() => { const s = readKey(SESSION_KEY); if (s && s.id !== sessionId) goStandby(); }, 50 + Math.random() * 100);
+  } else {
+    newGame(); // a world to show behind the panel; never saved
+    goStandby();
+  }
   requestAnimationFrame(frame);
 })();
