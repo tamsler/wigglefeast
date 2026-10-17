@@ -46,7 +46,7 @@ Bot count (5–60) and difficulty (easy/normal/hard) are set in the menu. The ar
 
 ## Releasing
 
-Merging to `main` deploys to GitHub Pages, but installed copies only pick up a release whose version changed:
+`main` is protected: every change lands through a pull request, and the **Tests** and **Release version bumped** checks (the *Tests* and *Version check* workflows) must pass before it can merge. Merging to `main` deploys to GitHub Pages, but installed copies only pick up a release whose version changed:
 
 1. Bump `VERSION` at the top of `sw.js` (e.g. `'1.1.0'` → `'1.2.0'`) in the same PR as the change. The **Version check** on the PR fails with "Bump VERSION in sw.js" if you change a game file without doing this. Changes to `README.md`, `LICENSE`, `openspec/`, `.github/`, `.claude/` and `tests/` don't need a bump.
 2. Merge. The **Tag release** workflow tags the commit `v<VERSION>` and publishes a [GitHub Release](https://github.com/tamsler/wigglefeast/releases) with notes generated from the merged PRs (versions with a suffix like `1.2.0-beta.1` are marked pre-release). Players get the new release downloaded in the background and see an **Update available → Reload** banner (never mid-run). Ignoring it is fine; it takes over on the next launch.
