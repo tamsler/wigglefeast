@@ -40,7 +40,8 @@ test('check-version.sh accepts higher versions and rejects lower or reused ones'
     git('checkout', '-q', 'pr'); git('reset', '-q', '--hard', 'main');
     write(file, `changed ${v}\n`);
     if (v) version(v);
-    git('commit', '-qam', `try ${v}`);
+    git('add', '-A');
+    git('commit', '-qm', `try ${v}`);
     return check();
   };
   const ok = (r, what) => assert.equal(r.status, 0, `${what}: ${r.stdout}${r.stderr}`);
@@ -53,4 +54,6 @@ test('check-version.sh accepts higher versions and rejects lower or reused ones'
   rejected(attempt(null), 'no bump', /did not/);
   rejected(attempt('1.5.2'), 'reused tag', /already released/);
   ok(attempt(null, 'README.md'), 'docs-only change without a bump');
+  fs.mkdirSync(path.join(repo, 'tools'), { recursive: true });
+  ok(attempt(null, 'tools/make-icons.js'), 'tools-only change without a bump (#59)');
 });

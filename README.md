@@ -49,13 +49,17 @@ Bot count (5–60) and difficulty (easy/normal/hard) are set in the menu. The ar
 
 `main` is protected: every change lands through a pull request, and the **Tests** and **Release version bumped** checks (the *Tests* and *Version check* workflows) must pass before it can merge. Merging to `main` deploys to GitHub Pages, but installed copies only pick up a release whose version changed:
 
-1. Bump `VERSION` at the top of `sw.js` (e.g. `'1.1.0'` → `'1.2.0'`) in the same PR as the change. The **Version check** on the PR fails with "Bump VERSION in sw.js" if you change a game file without doing this. Changes to `README.md`, `LICENSE`, `openspec/`, `.github/`, `.claude/` and `tests/` don't need a bump.
+1. Bump `VERSION` at the top of `sw.js` (e.g. `'1.1.0'` → `'1.2.0'`) in the same PR as the change. The **Version check** on the PR fails with "Bump VERSION in sw.js" if you change a game file without doing this. Changes to `README.md`, `LICENSE`, `openspec/`, `.github/`, `.claude/`, `tests/` and `tools/` don't need a bump.
 2. Merge. The **Tag release** workflow tags the commit `v<VERSION>` and publishes a [GitHub Release](https://github.com/tamsler/wigglefeast/releases) with notes generated from the merged PRs (versions with a suffix like `1.2.0-beta.1` are marked pre-release). Players get the new release downloaded in the background and see an **Update available → Reload** banner (never mid-run). Ignoring it is fine; it takes over on the next launch.
 3. Never reuse or lower a version: the PR check rejects a version that already has a tag or isn't higher than the one on `main` (SemVer order, so `1.6.0-beta.1` < `1.6.0`). To roll back, publish the old code under a **higher** version.
 
 When a release adds a new file the game loads, add it to `FILES` in `sw.js` too, or it won't work offline.
 
 You can run the checks locally: `.github/scripts/check-version.sh main` and `DRY_RUN=1 .github/scripts/release-tag.sh`.
+
+### App icons
+
+The icons in `icons/` (192 and 512 px, Apple touch icon, favicon) are drawn in the brand colours by a script: run `node tools/make-icons.js` (it needs Google Chrome, like the tests) and commit the PNGs it writes, with a `VERSION` bump. Keep the file names: the manifest and service worker refer to them. Chrome and Android pick up a new icon with the update; iOS keeps the old home-screen icon until the app is removed and added again.
 
 ## Tests
 
