@@ -5,6 +5,7 @@ context: |
   It must keep working when index.html is opened directly from disk (file://); service-worker/install features only apply over http(s).
   Production is GitHub Pages serving the main branch of github.com/tamsler/wigglefeast; merging to main deploys to every installed copy.
   Work is tracked in GitHub Issues on that repo; each change links its issue and lands via a PR that closes it.
+  Every release that changes a shipped file must bump VERSION in sw.js (never reuse one; roll back as a higher version), and new game files must be added to FILES in sw.js. A PR check enforces the bump.
   Saved data must stay backward compatible: localStorage keys keep the 'wormarena.' prefix and save files with app id 'worm-arena' must still load.
   Do not use names, branding or assets from other games (wormate.io, slither.io, Worms).
 

@@ -40,6 +40,22 @@ Storage keys: `wormarena.world`, `wormarena.profile`, `wormarena.settings` (the 
 - `engine.js`: simulation (worms, food, collisions, bot AI). No DOM, so it can run headless in Node.
 - `main.js`: canvas rendering, camera, input, HUD and menus.
 - `index.html`, `style.css`: page and UI.
-- `manifest.webmanifest`, `sw.js`, `icons/`: installable app + offline support. Bump `CACHE` in `sw.js` if you ever need to force every installed copy to drop its cache.
+- `manifest.webmanifest`, `sw.js`, `icons/`: installable app + offline support and release versioning.
 
 Bot count (5–60) and difficulty (easy/normal/hard) are set in the menu. The arena size scales with the bot count.
+
+## Releasing
+
+Merging to `main` deploys to GitHub Pages, but installed copies only pick up a release whose version changed:
+
+1. Bump `VERSION` at the top of `sw.js` (e.g. `'1.1.0'` → `'1.2.0'`) in the same PR as the change. The **Version check** on the PR fails with "Bump VERSION in sw.js" if you change a game file without doing this. Changes to `README.md`, `openspec/`, `.github/` and `.claude/` don't need a bump.
+2. Merge. Players get the new release downloaded in the background and see an **Update available → Reload** banner (never mid-run). Ignoring it is fine; it takes over on the next launch.
+3. Never reuse a version. To roll back, publish the old code under a **higher** version.
+
+When a release adds a new file the game loads, add it to `FILES` in `sw.js` too, or it won't work offline.
+
+You can run the check locally: `.github/scripts/check-version.sh main`.
+
+## Planning
+
+Work is tracked in GitHub Issues. Feature-sized changes are planned with [OpenSpec](https://github.com/Fission-AI/OpenSpec) under `openspec/` (`/opsx:propose`, `/opsx:apply`, `/opsx:archive` in Claude Code); `openspec/specs/` describes how the game currently behaves.

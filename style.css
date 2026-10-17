@@ -143,6 +143,23 @@ kbd {
   display: inline-block; padding: 0 5px; margin: 0 1px; border-radius: 5px; font: inherit; font-size: 11px;
   background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.15);
 }
+#version { margin-top: 6px; font-size: 11px; opacity: .35; letter-spacing: .05em; min-height: 1em; }
+
+#updateBanner {
+  position: fixed; z-index: 20; left: 50%; transform: translateX(-50%);
+  top: calc(14px + env(safe-area-inset-top));
+  display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px);
+  background: rgba(16, 21, 42, .95); border: 1px solid rgba(76, 201, 240, .5);
+  border-radius: 999px; padding: 6px 6px 6px 16px; font-size: 14px; font-weight: 700;
+  box-shadow: 0 8px 30px rgba(0,0,0,.45); animation: feedIn .25s ease-out;
+}
+#updateBanner span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#updateBanner button {
+  font: inherit; cursor: pointer; border: 0; border-radius: 999px; padding: 7px 14px;
+}
+#updateReload { color: #10142a; background: linear-gradient(90deg, #8ac926, #2ec4b6); }
+#updateDismiss { color: #cfd6f5; background: transparent; padding: 7px 10px !important; }
+
 #best, #dBest { margin-top: 10px; font-size: 13px; color: #ffd60a; min-height: 1em; }
 
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

@@ -1,9 +1,9 @@
-/* Wigglefeast service worker: makes the game work offline.
-   Files are served from the cache immediately and refreshed in the background,
-   so a new version you push shows up on the next launch. */
-const CACHE = 'wigglefeast-v1';
+/* Wigglefeast service worker: offline play and versioned releases.
+   Bump VERSION for every release that changes a shipped file (a PR check enforces this).
+   Never reuse a version; roll back by publishing the old code under a higher version. */
+const VERSION = '1.1.0';
+const CACHE = `wigglefeast-${VERSION}`;
 const FILES = [
-  './',
   'index.html',
   'style.css',
   'engine.js',
@@ -15,29 +15,34 @@ const FILES = [
   'icons/favicon-64.png',
 ];
 
+// Download the whole release, bypassing the HTTP cache, before it can be used.
+// If any file fails the install fails, and the current release keeps running.
+// No skipWaiting() here: the page asks for it when the player chooses Reload.
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))));
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('wigglefeast-') && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
 
+self.addEventListener('message', (e) => {
+  const msg = e.data || {};
+  if (msg.type === 'skipWaiting') self.skipWaiting();
+  else if (msg.type === 'version' && e.ports[0]) e.ports[0].postMessage({ version: VERSION });
+});
+
+// Serve this release's files only, so a page never mixes two releases.
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
   e.respondWith(
-    caches.open(CACHE).then(async (cache) => {
-      const cached = await cache.match(req, { ignoreSearch: true });
-      const network = fetch(req)
-        .then((res) => { if (res.ok) cache.put(req, res.clone()); return res; })
-        .catch(() => cached);
-      if (cached) { e.waitUntil(network); return cached; }
-      return network;
-    }),
+    caches.open(CACHE)
+      .then((c) => c.match(req.mode === 'navigate' ? 'index.html' : req, { ignoreSearch: true }))
+      .then((hit) => hit || fetch(req)),
   );
 });
