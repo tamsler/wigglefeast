@@ -43,7 +43,7 @@ If the player dismisses or ignores the banner, the current release SHALL keep ru
 - **THEN** the new release runs
 
 ### Requirement: Update checks
-The game SHALL check for a newer release when it launches, when its tab becomes visible again, and at least every 30 minutes while it stays open, provided it is served over http(s) and online.
+The game SHALL check for a newer release when it launches, when its tab becomes visible again (at most once every 5 minutes), and at least every 30 minutes while it stays open, provided it is served over http(s) and online.
 
 #### Scenario: Game left open
 - **WHEN** a new release is deployed while the game has been open for an hour
@@ -52,6 +52,10 @@ The game SHALL check for a newer release when it launches, when its tab becomes 
 #### Scenario: Offline
 - **WHEN** the device is offline
 - **THEN** update checks fail silently and the game keeps working
+
+#### Scenario: Returning to the tab
+- **WHEN** the player returns to the game's tab
+- **THEN** it checks for a newer release, unless it already checked in the last 5 minutes
 
 ### Requirement: Version display
 The main menu SHALL show the version of the release that is running. When the game is opened from disk, it SHALL show "local" instead.
