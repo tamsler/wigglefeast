@@ -249,7 +249,6 @@
     game = snapshot ? new Game(null, snapshot) : new Game({ botCount: settings.botCount, difficulty: settings.difficulty });
     game.on('death', onDeath);
     game.on('powerup', onPowerup);
-    trail.length = 0; // sparks belong to the previous world
     spectate = game.leaderboard[0] || null;
     if (spectate) { cam.x = spectate.x; cam.y = spectate.y; }
   }
@@ -626,66 +625,31 @@
 
   // ---------------------------------------------------------------------------
   // Rendering
-  // Speed trail (#37): short-lived sparks streaming from the tail of every boosting
-  // worm in view. Purely visual: the engine never sees them and they are not saved.
-  const TRAIL_MAX = 600, TRAIL_RATE = 70; // pool size; sparks per second per boosting worm
-  const trail = [];
-  const trailAcc = new WeakMap(); // worm -> fractional sparks owed
-  function updateTrails(dt) {
-    let j = 0;
-    for (let i = 0; i < trail.length; i++) {
-      const s = trail[i];
-      s.age += dt;
-      if (s.age >= s.life) continue;
-      s.x += s.vx * dt;
-      s.y += s.vy * dt;
-      trail[j++] = s;
-    }
-    trail.length = j;
-    const hw = W / 2 / cam.z + 200, hh = H / 2 / cam.z + 200;
-    for (const w of game.worms) {
-      if (!w.boosting || w.dead) { trailAcc.delete(w); continue; }
-      if (w.maxX < cam.x - hw || w.minX > cam.x + hw || w.maxY < cam.y - hh || w.minY > cam.y + hh) continue;
-      let acc = (trailAcc.get(w) || 0) + TRAIL_RATE * dt;
-      const sx = w.sx, sy = w.sy, n = sx.length, r = w.r;
-      for (; acc >= 1; acc--) {
-        const i = n - 1 - Math.floor(Math.random() * Math.min(4, n - 1));
-        let dx = sx[i] - sx[i - 1], dy = sy[i] - sy[i - 1];
-        const d = Math.hypot(dx, dy);
-        if (d > 0) { dx /= d; dy /= d; } else { dx = -Math.cos(w.angle); dy = -Math.sin(w.angle); }
-        const back = 80 + Math.random() * 100, side = (Math.random() - 0.5) * 160;
-        if (trail.length >= TRAIL_MAX) trail.shift();
-        trail.push({
-          x: sx[i] + (Math.random() - 0.5) * r * 0.8, y: sy[i] + (Math.random() - 0.5) * r * 0.8,
-          vx: dx * back - dy * side, vy: dy * back + dx * side,
-          c: w.stripeColor(i), size: r * (0.3 + Math.random() * 0.2),
-          alpha: w.shield > 0 ? 0.4 : 0.9, age: 0, life: 0.4 + Math.random() * 0.25,
-        });
-      }
-      trailAcc.set(w, acc);
-    }
-  }
-  // Drawn as short streaks along their motion, so they read as speed lines rather than food.
-  function drawTrails(view) {
-    if (!trail.length) return;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.lineCap = 'round';
-    for (const s of trail) {
-      if (s.x < view.x0 || s.x > view.x1 || s.y < view.y0 || s.y > view.y1) continue;
-      const k = 1 - s.age / s.life;
-      ctx.globalAlpha = s.alpha * k;
-      ctx.strokeStyle = s.c;
-      ctx.lineWidth = s.size * (0.4 + 0.6 * k);
+  // Boost arrows (#37, #41): two chevrons just in front of a boosting worm's head,
+  // pointing where it is going, pulsing from back to front.
+  let boostArrowsDrawn = 0; // worms whose arrows were drawn in the last frame
+  function drawBoostArrows(w, t, alpha) {
+    const r = w.r, a = w.angle, arm = r * 1.05, spread = Math.PI / 4;
+    const hx = w.sx[0], hy = w.sy[0];
+    for (let k = 0; k < 2; k++) {
+      const d = r * (2 + 1.1 * k);
+      const tx = hx + Math.cos(a) * d, ty = hy + Math.sin(a) * d;
       ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(s.x - s.vx * 0.12, s.y - s.vy * 0.12);
+      ctx.moveTo(tx - Math.cos(a - spread) * arm, ty - Math.sin(a - spread) * arm);
+      ctx.lineTo(tx, ty);
+      ctx.lineTo(tx - Math.cos(a + spread) * arm, ty - Math.sin(a + spread) * arm);
+      ctx.globalAlpha = alpha * (0.55 + 0.45 * Math.sin(t * 10 - k * 1.3));
+      ctx.strokeStyle = w.skin.colors[0];
+      ctx.lineWidth = Math.max(4, r * 0.55);
+      ctx.stroke();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = Math.max(2, r * 0.22);
       ctx.stroke();
     }
-    ctx.restore();
+    boostArrowsDrawn++;
   }
   // Read-only hook for the browser tests; nothing in the game uses it.
-  window.wigglefeastDebug = { trailSparks: () => trail.length };
+  window.wigglefeastDebug = { boostArrows: () => boostArrowsDrawn };
 
   function tracePath(sx, sy, from, to) {
     ctx.beginPath();
@@ -695,7 +659,8 @@
   }
 
   function drawWorm(w, t, view) {
-    if (w.maxX < view.x0 || w.minX > view.x1 || w.maxY < view.y0 || w.minY > view.y1) return;
+    const m = w.boosting ? w.r * 3.5 : 0; // boost arrows reach ahead of the head
+    if (w.maxX + m < view.x0 || w.minX - m > view.x1 || w.maxY + m < view.y0 || w.minY - m > view.y1) return;
     const sx = w.sx, sy = w.sy, n = sx.length, r = w.r, cols = w.skin.colors;
     const alpha = w.shield > 0 ? 0.45 + 0.25 * Math.sin(t * 14) : 1;
     ctx.globalAlpha = alpha;
@@ -751,11 +716,13 @@
       ctx.fillStyle = '#141414';
       ctx.fill();
     }
+    if (w.boosting) drawBoostArrows(w, t, alpha);
     ctx.globalAlpha = 1;
   }
 
   function render(t) {
     const z = cam.z;
+    boostArrowsDrawn = 0;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#0b0f1c';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -796,8 +763,6 @@
       const D = 110 * (1 + 0.08 * Math.sin(t * 4 + p.ph));
       ctx.drawImage(pwSprites[p.type], p.x - D / 2, p.y - D / 2 + Math.sin(t * 2 + p.ph) * 4, D, D);
     }
-
-    drawTrails(view);
 
     // Worms (player on top)
     ctx.lineCap = 'round';
@@ -863,7 +828,7 @@
   // ---------------------------------------------------------------------------
   // HUD
   let hudT = 0;
-  // BOOST badge next to the score (#37): synced every frame so it keeps pace with the trail.
+  // BOOST badge next to the score (#37): synced every frame so it keeps pace with the head arrows.
   let boostBadgeShown = false;
   function syncBoostBadge() {
     const p = game.player;
@@ -929,7 +894,6 @@
       const h = dt / steps;
       for (let i = 0; i < steps; i++) game.update(h);
       updateCamera(dt);
-      updateTrails(dt);
     }
     render(now / 1000);
     if (mode !== 'menu') renderMinimap();
