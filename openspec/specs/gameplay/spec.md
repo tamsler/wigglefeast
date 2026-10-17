@@ -32,11 +32,27 @@ Worms SHALL move forward continuously, turn toward a target angle at a limited r
 - **THEN** it loses 0.4% of the excess per second
 
 ### Requirement: Boosting
-A worm SHALL be able to boost to 2.1× speed while its mass is above 12, losing (3 + 1% of mass) mass per second and dropping 60% of the lost mass as food behind it.
+A worm SHALL be able to boost to 2.1× speed while its mass is above 12, losing (3 + 1% of mass) mass per second and dropping 60% of the lost mass as food behind it. While a worm is boosting, it SHALL be drawn with two chevron arrows just in front of its head, pointing in the direction it moves, and while the player's worm is boosting, the HUD SHALL show a BOOST badge next to the score.
 
 #### Scenario: Boost at low mass
 - **WHEN** a worm with mass 12 or less tries to boost without the speed power-up
 - **THEN** it does not boost
+
+#### Scenario: Seeing a worm boost
+- **WHEN** any worm, player or bot, boosts within view
+- **THEN** two arrows show just in front of its head, pointing where it is heading, for as long as it boosts, and disappear when it stops
+
+#### Scenario: Boost badge
+- **WHEN** the player's worm is boosting
+- **THEN** a BOOST badge shows next to the score, and it disappears when the worm stops boosting
+
+#### Scenario: Boost held but not possible
+- **WHEN** the player holds boost while their worm's mass is 12 or less and the speed power-up is not running
+- **THEN** neither the badge nor the arrows show
+
+#### Scenario: Speed power-up alone
+- **WHEN** the speed power-up is running but the player is not holding boost
+- **THEN** neither the badge nor the arrows show
 
 ### Requirement: Collisions and death
 A worm SHALL die when its head touches another worm's body. In a head-on collision (the other worm's first three segments) the worm with more mass survives. Worms never collide with themselves. A dying worm SHALL leave 80% of its mass as food along its body, which fades after 45–60 seconds.
@@ -57,7 +73,7 @@ Newly spawned players SHALL be shielded for 2.5 seconds; shielded worms can neit
 - **THEN** the player does not die
 
 ### Requirement: Power-ups
-The arena SHALL contain power-ups that any worm (player or bot) can collect by touching them. A power-up within reach of a worm's head (just beyond its glow) SHALL slide toward the nearest such head, the way food does. Each lasts 16 seconds: magnet (pulls food and power-ups from much farther away), x2 and x5 (multiply food value; the higher one applies), speed (1.25× speed and boosting costs no mass), and zoom (player camera zooms out).
+The arena SHALL contain power-ups that any worm (player or bot) can collect by touching them. A power-up within reach of a worm's head (just beyond its glow) SHALL slide toward the nearest such head, the way food does. Each lasts 16 seconds: magnet (pulls food and power-ups from much farther away), x2 and x5 (multiply food value; the higher one applies), speed (1.25× speed and boosting costs no mass), zoom (player camera zooms out), and tight turns (the worm turns twice as fast as normal for its size).
 
 #### Scenario: Collecting a power-up
 - **WHEN** a worm's head touches a power-up
@@ -70,3 +86,11 @@ The arena SHALL contain power-ups that any worm (player or bot) can collect by t
 #### Scenario: Magnet pulls power-ups
 - **WHEN** a worm with the magnet passes about 200 units from a power-up
 - **THEN** the power-up is pulled in and collected, while a worm without the magnet leaves it where it is
+
+#### Scenario: Tight turns
+- **WHEN** a worm with the tight-turn power-up steers toward a heading behind it
+- **THEN** it turns at twice the rate of an identical worm without the power-up, boosting or not, until the 16 seconds run out
+
+#### Scenario: Saves from before tight turns
+- **WHEN** a save written before the tight-turn power-up existed is loaded
+- **THEN** it loads normally and its worms start without the tight-turn effect

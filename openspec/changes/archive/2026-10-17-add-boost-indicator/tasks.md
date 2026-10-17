@@ -25,7 +25,8 @@ Shipped in v1.3.0, then replaced by the head arrows in section 4 (#41).
 - [x] 4.2 Replace the test hook with `window.wigglefeastDebug.boostArrows()` (worms whose arrows were drawn last frame) and update `tests/browser/boost.test.js`: arrows while the player boosts, none after release, none when boost is held at mass 12 or less, none for ⚡ alone, arrows for ⚡ plus boost; verify the tests pass
 - [x] 4.3 Update the README controls line to describe the arrows instead of the trail; verify the text matches the behaviour
 - [x] 4.4 Bump `VERSION` in `sw.js` to 1.5.0 and run `node --test "tests/**/*.test.js"`; verify every test passes and `.github/scripts/check-version.sh main` passes after committing
-- [ ] 4.5 Manual check in a real browser on desktop and on a touch device: the arrows are clearly visible in front of the head on the player and on bots, point where the worm is going, the badge tracks boosting, and the frame rate stays smooth with several bots boosting; verify by noting the result in the PR
+- [x] 4.5 Manual check in a real browser on desktop and on a touch device: the arrows are clearly visible in front of the head on the player and on bots, point where the worm is going, the badge tracks boosting, and the frame rate stays smooth with several bots boosting; verify by noting the result in the PR
+  - Checked by the user in their browser on 2026-10-17: works well. A touch device was not separately confirmed.
 
 ## Workflow follow-up
 

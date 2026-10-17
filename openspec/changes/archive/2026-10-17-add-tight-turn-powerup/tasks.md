@@ -18,7 +18,8 @@
 
 - [x] 4.1 Bump `VERSION` in `sw.js` to the next minor version (no new files, so `FILES` unchanged); verify `.github/scripts/check-version.sh main` passes after committing
 - [x] 4.2 Run `node --test "tests/**/*.test.js"`; verify every test passes, including the bot simulation health checks
-- [ ] 4.3 Manual check in a real browser: the 🌀 power-up appears in the arena, collecting it visibly tightens turning with mouse and keyboard, and the HUD timer and feed message show; verify by noting the result in the PR
+- [x] 4.3 Manual check in a real browser: the 🌀 power-up appears in the arena, collecting it visibly tightens turning with mouse and keyboard, and the HUD timer and feed message show; verify by noting the result in the PR
+  - Checked by the user in their browser on 2026-10-17: works well.
 
 ## Workflow follow-up
 
