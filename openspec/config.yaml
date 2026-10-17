@@ -1,0 +1,47 @@
+schema: spec-driven
+
+context: |
+  Wigglefeast is a single-player, offline snake-style .io game played against AI bots. Plain HTML/CSS/JS with no build step and no dependencies.
+  It must keep working when index.html is opened directly from disk (file://); service-worker/install features only apply over http(s).
+  Production is GitHub Pages serving the main branch of github.com/tamsler/wigglefeast; merging to main deploys to every installed copy.
+  Work is tracked in GitHub Issues on that repo; each change links its issue and lands via a PR that closes it.
+  Saved data must stay backward compatible: localStorage keys keep the 'wormarena.' prefix and save files with app id 'worm-arena' must still load.
+  Do not use names, branding or assets from other games (wormate.io, slither.io, Worms).
+
+rules:
+  proposal:
+    - Reference the GitHub issue (tamsler/wigglefeast#N) in the Why section
+    - State what is out of scope
+  tasks:
+    - Include a task for manual verification in a real browser, and one for the headless engine checks when engine.js changes
+
+# Project context (optional)
+# Add only constraints that should guide OpenSpec artifacts and workflows.
+# Include constraints an agent cannot infer by reading the code.
+# Keep general project documentation and discoverable codebase facts out.
+# Example:
+#   context: |
+#     Designs and tasks must cover Windows, macOS, and Linux
+#     Write all artifacts in Spanish
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
