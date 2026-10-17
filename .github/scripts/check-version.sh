@@ -2,6 +2,7 @@
 # Fails when shipped game files changed without a VERSION bump in sw.js.
 # Usage: .github/scripts/check-version.sh [base-ref]   (default: origin/main)
 set -euo pipefail
+. "$(dirname "$0")/semver.sh"
 
 base="${1:-origin/main}"
 # Paths below never ship to players. tests/ must never hold files the game loads.
@@ -28,6 +29,11 @@ if [ "$old" = "$new" ]; then
 fi
 if ! echo "$new" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
   echo "::error file=sw.js::VERSION '$new' must look like 1.2.3 (optionally with a suffix such as 1.2.3-beta.1)."
+  exit 1
+fi
+semver='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+if echo "$old" | grep -qE "$semver" && ! semver_gt "$new" "$old"; then
+  echo "::error file=sw.js::VERSION $new must be higher than the current release $old. Versions only go up; roll back by publishing the old code under a higher version."
   exit 1
 fi
 if git rev-parse -q --verify "refs/tags/v$new" >/dev/null; then
