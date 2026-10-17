@@ -37,6 +37,20 @@ test('player input', async (t) => {
     await page.waitFor('window.__player.wantBoost === false', 'boost to stop after release outside');
   });
 
+  await t.test('right and middle mouse buttons do not boost (#30)', async () => {
+    for (const button of ['right', 'middle']) {
+      const buttons = button === 'right' ? 2 : 4;
+      await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: 900, y: 400, button, buttons, clickCount: 1 });
+      await page.frames(10);
+      assert.equal(await boosting(), false, `${button} button boosted`);
+      await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 900, y: 400, button, buttons: 0, clickCount: 1 });
+    }
+    await page.mouse('mousePressed', 900, 400, 1);
+    await page.waitFor('window.__player.wantBoost === true', 'left button still boosts');
+    await page.mouse('mouseReleased', 900, 400, 0);
+    await page.waitFor('window.__player.wantBoost === false', 'boost to stop');
+  });
+
   // Chrome's touch emulation can't lift one of several fingers, so fingers after
   // the first two are driven with pointer events using the ids the page received.
   await page.eval(`window.__downs = []; document.getElementById('game').addEventListener('pointerdown', (e) => e.pointerType === 'touch' && window.__downs.push(e.pointerId))`);

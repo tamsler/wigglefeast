@@ -85,6 +85,20 @@ test('save import and stored data', async (t) => {
     assert.equal(await storedProfile(), before);
   });
 
+  await t.test('a save without a world is rejected and changes nothing (#29)', async () => {
+    const worldBefore = await page.eval(`localStorage.getItem('wormarena.world')`);
+    for (const world of [undefined, null]) {
+      const d = clone(fixture);
+      d.profile.totals.best = 987654321;
+      d.world = world;
+      const dialogs = await importFile('no-world.json', d);
+      assert.ok(dialogs.some((m) => /Nothing was changed/.test(m)), JSON.stringify(dialogs));
+      assert.ok(!dialogs.some((m) => /Replace your current/.test(m)), 'did not ask to confirm');
+      assert.equal(await storedProfile(), before);
+      assert.equal(await page.eval(`localStorage.getItem('wormarena.world')`), worldBefore);
+    }
+  });
+
   await t.test('a valid save imports and shows on the stats screen', async () => {
     const dialogs = await importFile('valid.json', fixture);
     assert.ok(dialogs.some((m) => /Replace your current/.test(m)));

@@ -88,45 +88,69 @@
     hard: { skill: [0.7, 1.0], aggro: [0.35, 1.0] },
   };
 
+  // Limits shared by save validation and the simulation, so a world loaded from a
+  // valid save can never grow into one that fails validation (#31).
+  const MAX_MASS = 1e6; // ~7,200 body segments; normal play stays far below (mass sheds above 1500)
+  const MAX_SEGMENTS = 20000;
+  const MAX_FOOD = 50000;
+  const MAX_ID = 1e9;
+
   // ---------------------------------------------------------------------------
   // Save files are untrusted input (they can be imported from anywhere), so check
-  // every field load() relies on before building a world from one.
+  // every field load() relies on before building a world from one. Numbers are
+  // range-checked too: finite but extreme values overflow to NaN or stall bots (#31).
   function validateSnapshot(snap) {
     const fail = (why) => { throw new Error('Invalid Wigglefeast save: ' + why); };
     const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
     const fin = (v) => typeof v === 'number' && Number.isFinite(v);
     const finArr = (a, max) => Array.isArray(a) && a.length <= max && a.every(fin);
     const has = (obj, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(obj, k);
+    const inRange = (v, a, b) => fin(v) && v >= a && v <= b;
+    const isId = (v) => Number.isInteger(v) && v >= 1 && v <= MAX_ID;
 
     if (!isObj(snap) || !SAVE_APP_IDS.includes(snap.app) || snap.v !== 1) fail('not a world snapshot');
     const s = snap.settings;
     if (!isObj(s) || !Number.isInteger(s.botCount) || s.botCount < 5 || s.botCount > 60 || !has(DIFFICULTY, s.difficulty)) fail('settings');
     if (!fin(snap.time) || snap.time < 0) fail('time');
-    if (snap.nextId !== undefined && !fin(snap.nextId)) fail('nextId');
+    if (snap.nextId !== undefined && !isId(snap.nextId)) fail('nextId');
+    // Everything lives inside the arena; twice its radius leaves plenty of slack.
+    const B = 2 * (1800 + 60 * s.botCount);
+    const coord = (v) => inRange(v, -B, B);
+    const angle = (v) => inRange(v, -1e9, 1e9); // the player's keyboard heading isn't wrapped
 
     if (!Array.isArray(snap.worms) || snap.worms.length > 200) fail('worms');
     let players = 0;
+    const ids = new Set();
     for (const w of snap.worms) {
       if (!isObj(w) || typeof w.name !== 'string' || w.name.length > 40) fail('worm name');
       if (!Number.isInteger(w.skin) || w.skin < 0 || w.skin >= SKINS.length) fail('worm skin');
       for (const k of ['id', 'mass', 'angle', 'targetAngle', 'kills', 'eaten', 'dropAcc', 'shield', 'born', 'peak']) if (!fin(w[k])) fail('worm ' + k);
-      if (w.mass < 1 || w.mass > 1e7) fail('worm mass');
-      if (!finArr(w.sx, 20000) || !finArr(w.sy, 20000) || w.sx.length !== w.sy.length || w.sx.length < 2) fail('worm body');
+      if (!isId(w.id) || ids.has(w.id)) fail('worm id');
+      ids.add(w.id);
+      if (w.mass < 1 || w.mass > MAX_MASS) fail('worm mass');
+      if (!angle(w.angle) || !angle(w.targetAngle)) fail('worm heading');
+      if (w.dropAcc < 0 || w.dropAcc > 1000) fail('worm dropAcc');
+      if (!finArr(w.sx, MAX_SEGMENTS) || !finArr(w.sy, MAX_SEGMENTS) || w.sx.length !== w.sy.length || w.sx.length < 2 ||
+        !w.sx.every(coord) || !w.sy.every(coord)) fail('worm body');
       if (!isObj(w.pw) || Object.keys(w.pw).some((k) => !has(POWERUP_WEIGHTS, k) || !fin(w.pw[k]))) fail('worm power-ups');
       if (w.isPlayer === true) players++;
+      if ((w.isPlayer === true) === (w.ai != null)) fail('worm kind'); // players have no brain, bots do
       if (w.ai != null) {
         const a = w.ai;
-        if (!isObj(a) || !['skill', 'aggro', 'interval', 'wx', 'wy', 'huntUntil'].every((k) => fin(a[k])) || !(a.prey == null || fin(a.prey))) fail('bot state');
+        if (!isObj(a) || !inRange(a.skill, 0, 1) || !inRange(a.aggro, 0, 1) || !inRange(a.interval, 0.05, 1) ||
+          !coord(a.wx) || !coord(a.wy) || !fin(a.huntUntil) || !(a.prey == null || fin(a.prey))) fail('bot state');
       }
     }
     if (players > 1) fail('more than one player');
 
     if (!Array.isArray(snap.palette) || snap.palette.length > 1000 || !snap.palette.every((c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c))) fail('colours');
     const F = snap.food;
-    if (!finArr(F, 7 * 50000) || F.length % 7 !== 0) fail('food');
-    for (let i = 0; i < F.length; i += 7) if (F[i + 2] <= 0 || F[i + 2] > 1e6 || (F[i + 4] < 0 && F[i + 4] !== -1)) fail('food values');
+    if (!finArr(F, 7 * MAX_FOOD) || F.length % 7 !== 0) fail('food');
+    for (let i = 0; i < F.length; i += 7) {
+      if (!coord(F[i]) || !coord(F[i + 1]) || F[i + 2] <= 0 || F[i + 2] > 1e6 || (F[i + 4] < 0 && F[i + 4] !== -1)) fail('food values');
+    }
     if (!Array.isArray(snap.powerups) || snap.powerups.length > 500 ||
-      !snap.powerups.every((p) => isObj(p) && has(POWERUP_WEIGHTS, p.type) && fin(p.x) && fin(p.y) && fin(p.ph))) fail('power-ups');
+      !snap.powerups.every((p) => isObj(p) && has(POWERUP_WEIGHTS, p.type) && coord(p.x) && coord(p.y) && fin(p.ph))) fail('power-ups');
     if (snap.respawnQueue !== undefined && !finArr(snap.respawnQueue, 500)) fail('respawn queue');
   }
 
@@ -515,7 +539,8 @@
 
     load(snap) {
       this.time = snap.time || 0;
-      nextId = Math.max(nextId, snap.nextId || 1);
+      // Never hand out an id a loaded worm already has, even if nextId is missing or stale (#31).
+      nextId = Math.max(nextId, snap.nextId || 1, ...snap.worms.map((d) => d.id + 1));
       const byId = new Map();
       for (const d of snap.worms) {
         const w = new Worm({
@@ -542,6 +567,7 @@
 
     // --- spawning -----------------------------------------------------------
     spawnNaturalFood() {
+      if (this.food.length >= MAX_FOOD) return;
       const p = randomInCircle(this.R - 30);
       const v = weighted({ 1: 55, 2: 30, 4: 12, 8: 3 }) | 0;
       this.food.push({ x: p.x, y: p.y, v, r: foodRadius(v), c: pick(FOOD_COLORS), life: Infinity, ph: rand(0, TAU), dead: false, natural: true });
@@ -549,6 +575,7 @@
     }
 
     addFood(x, y, v, color, life) {
+      if (this.food.length >= MAX_FOOD) return; // keeps saves within the food limit
       const lim = this.R - 20, d2 = x * x + y * y;
       if (d2 > lim * lim) { const k = lim / Math.sqrt(d2); x *= k; y *= k; }
       this.food.push({ x, y, v, r: foodRadius(v), c: color, life, ph: rand(0, TAU), dead: false, natural: false });
@@ -697,7 +724,7 @@
           const d = Math.sqrt(d2);
           if (d < r * 0.9 + f.r * 0.4) {
             f.dead = true;
-            w.mass += f.v * mult;
+            w.mass = Math.min(MAX_MASS, w.mass + f.v * mult);
             w.eaten++;
           } else {
             const step = Math.min(d, (700 + 900 * (1 - d / A)) * dt);
