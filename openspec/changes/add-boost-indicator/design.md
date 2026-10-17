@@ -24,10 +24,10 @@
 ### 1. The trail is a pooled particle list, updated with the frame's `dt`
 `main.js` keeps one array of sparks, each with position, velocity, colour, age and lifetime.
 
-- **Emitting:** each frame that is not paused, every worm that is boosting and inside the view (plus a margin) emits sparks from its last few body segments, about 40 per second, in its stripe colours. Each spark gets a small random drift backwards and outwards, and lives 0.35–0.5 s.
+- **Emitting:** each frame that is not paused, every worm that is boosting and inside the view (plus a margin) emits sparks from its last few body segments, about 70 per second, in its stripe colours. Each spark gets a random drift backwards and outwards, and lives 0.4–0.65 s. (These numbers were raised from 40/s and 0.35–0.5 s after screenshots showed the first version was too faint.)
 - **Updating:** a new `updateTrails(dt)` runs next to `updateCamera` while not paused. The sparks therefore freeze with the world when paused and keep fading after a worm stops.
-- **Drawing:** `render()` draws the sparks after food and power-ups but before worms, so bodies stay on top. They are small circles with alpha and size falling over their lifetime, using the `lighter` composite for a glow.
-- **Cost:** the pool is capped at 600 sparks; the oldest are dropped first. Work is bounded no matter how many worms boost.
+- **Drawing:** `render()` draws the sparks after food and power-ups but before worms, so bodies stay on top. They are short streaks along their motion, using the `lighter` composite for a glow, with alpha and width falling over their lifetime. Round dots read as food pellets, so streaks make the trail look like speed lines instead.
+- **Cost:** the pool is capped at 600 sparks; the oldest are dropped first. Work is bounded no matter how many worms boost. Starting a new world or restoring a saved one clears the pool.
 
 *Alternatives:*
 - Drawing a stretched gradient behind the tail: rejected because it reads poorly on curled bodies.

@@ -248,6 +248,7 @@
     game = snapshot ? new Game(null, snapshot) : new Game({ botCount: settings.botCount, difficulty: settings.difficulty });
     game.on('death', onDeath);
     game.on('powerup', onPowerup);
+    trail.length = 0; // sparks belong to the previous world
     spectate = game.leaderboard[0] || null;
     if (spectate) { cam.x = spectate.x; cam.y = spectate.y; }
   }
