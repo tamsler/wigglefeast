@@ -14,7 +14,7 @@ rules:
     - Reference the GitHub issue (tamsler/wigglefeast#N) in the Why section
     - State what is out of scope
   tasks:
-    - Include a task for manual verification in a real browser, and one for the headless engine checks when engine.js changes
+    - Include tasks that add or update automated tests in tests/ (engine or browser) and run `node --test "tests/**/*.test.js"`, plus a manual check on a real device when touch or install behaviour changes
 
 # Project context (optional)
 # Add only constraints that should guide OpenSpec artifacts and workflows.
