@@ -342,6 +342,170 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Skin finishes (#58): how a skin's body is painted. Each routine draws on the context it
+  // is given, so the picker swatches use exactly the arena's code. Smooth colours are stroked
+  // in runs of 3 segments, like stripes, so every finish costs about the same per worm, and
+  // patterns are spaced in body lengths (segments sit 0.42 r apart) so they look the same at
+  // any size. t is game time, so animated finishes freeze while paused.
+  const SEGMENT = 0.42;
+  const every = (lengths) => Math.max(1, Math.round(lengths / SEGMENT)); // body lengths (in r) -> segments
+  const rgbCache = new Map();
+  function rgbOf(hex) {
+    let v = rgbCache.get(hex);
+    if (!v) { const n = parseInt(hex.slice(1), 16); v = [(n >> 16) & 255, (n >> 8) & 255, n & 255]; rgbCache.set(hex, v); }
+    return v;
+  }
+  function mix(a, b, k) {
+    const x = rgbOf(a), y = rgbOf(b);
+    return `rgb(${Math.round(x[0] + (y[0] - x[0]) * k)},${Math.round(x[1] + (y[1] - x[1]) * k)},${Math.round(x[2] + (y[2] - x[2]) * k)})`;
+  }
+  function along(stops, u) {
+    const s = Math.min(0.9999, Math.max(0, u)) * (stops.length - 1), i = Math.floor(s);
+    return mix(stops[i], stops[i + 1], s - i);
+  }
+  function traceOn(g, sx, sy, from, to) {
+    g.beginPath();
+    g.moveTo(sx[from], sy[from]);
+    for (let i = from - 1; i >= to; i--) g.lineTo(sx[i], sy[i]);
+  }
+  // Strokes the body tail to head in runs of 3 segments, coloured by colorAt(first segment, count).
+  function inRuns(g, sx, sy, r, colorAt) {
+    const n = sx.length;
+    g.lineWidth = 2 * r;
+    for (let c = Math.ceil((n - 1) / 3) - 1; c >= 0; c--) {
+      const a = c * 3, b = Math.min(n - 1, a + 3);
+      g.strokeStyle = colorAt(a, n);
+      traceOn(g, sx, sy, b, a);
+      g.stroke();
+    }
+  }
+  function solid(g, sx, sy, r, color) {
+    g.strokeStyle = color;
+    g.lineWidth = 2 * r;
+    traceOn(g, sx, sy, sx.length - 1, 0);
+    g.stroke();
+  }
+  // Unit normal of the body at segment i (pointing to the worm's left).
+  function normalAt(sx, sy, i) {
+    const a = Math.max(0, i - 1), b = Math.min(sx.length - 1, i + 1);
+    const dx = sx[a] - sx[b], dy = sy[a] - sy[b], d = Math.hypot(dx, dy) || 1;
+    return [dx / d, dy / d, -dy / d, dx / d]; // tangent toward the head, then normal
+  }
+  const hash01 = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+  const FINISH = {
+    stripes(g, sx, sy, r, skin) {
+      const cols = skin.colors;
+      inRuns(g, sx, sy, r, (a) => cols[(a / 3) % cols.length]);
+    },
+    gradient(g, sx, sy, r, skin) {
+      inRuns(g, sx, sy, r, (a, n) => along(skin.colors, a / Math.max(1, n - 1)));
+    },
+    neon(g, sx, sy, r, skin, t) {
+      const [body, glow, lights] = skin.colors, n = sx.length, a0 = g.globalAlpha;
+      g.strokeStyle = glow;
+      for (const [w, k] of [[2 * r + r * 1.4, 0.12], [2 * r + r * 0.75, 0.25]]) {
+        g.globalAlpha = a0 * k;
+        g.lineWidth = w;
+        traceOn(g, sx, sy, n - 1, 0);
+        g.stroke();
+      }
+      g.globalAlpha = a0;
+      solid(g, sx, sy, r, body);
+      g.strokeStyle = glow;
+      g.lineWidth = r * 0.32;
+      traceOn(g, sx, sy, n - 1, 0);
+      g.stroke();
+      g.fillStyle = lights;
+      for (let i = every(2.8); i < n - 1; i += every(2.8)) {
+        g.globalAlpha = a0 * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 6 - i * 0.3)));
+        g.beginPath();
+        g.arc(sx[i], sy[i], r * 0.26, 0, TAU);
+        g.fill();
+      }
+      g.globalAlpha = a0;
+    },
+    metallic(g, sx, sy, r, skin, t) {
+      const [base, sheen, edge] = skin.colors, n = sx.length, a0 = g.globalAlpha;
+      const p = (((t * 0.45) % 1.6) - 0.3) * n; // the shine sweeps head to tail
+      inRuns(g, sx, sy, r, (a) => {
+        const i = a + 1.5, k = Math.exp(-((i - p) ** 2) / 50) + 0.35 * Math.exp(-((i - p - 15) ** 2) / 27);
+        return mix(base, sheen, Math.min(1, k));
+      });
+      g.save();
+      g.translate(r * 0.3, r * 0.55);
+      g.globalAlpha = a0 * 0.55;
+      g.strokeStyle = edge;
+      g.lineWidth = r * 0.22;
+      traceOn(g, sx, sy, n - 1, 0);
+      g.stroke();
+      g.restore();
+    },
+    spots(g, sx, sy, r, skin) {
+      const [base, spot, ring] = skin.colors, n = sx.length, step = every(2.8);
+      solid(g, sx, sy, r, base);
+      for (let i = step, k = 0; i < n - 1; i += step, k++) {
+        const [, , nx, ny] = normalAt(sx, sy, i), side = k % 2 ? 1 : -1;
+        const x = sx[i] + nx * side * r * 0.42, y = sy[i] + ny * side * r * 0.42;
+        g.beginPath();
+        g.arc(x, y, r * 0.3, 0, TAU);
+        if (ring) {
+          g.fillStyle = ring;
+          g.fill();
+          g.strokeStyle = spot;
+          g.lineWidth = r * 0.16;
+          g.stroke();
+        } else {
+          g.fillStyle = spot;
+          g.fill();
+        }
+      }
+    },
+    scales(g, sx, sy, r, skin) {
+      const [base, mark, dark] = skin.colors, n = sx.length, L = r * 0.62, Wd = r * 0.5;
+      solid(g, sx, sy, r, base);
+      g.fillStyle = mark;
+      g.strokeStyle = dark;
+      g.lineWidth = r * 0.1;
+      for (let i = every(2.1); i < n - 1; i += every(2.1)) {
+        const [tx, ty, nx, ny] = normalAt(sx, sy, i), x = sx[i], y = sy[i];
+        g.beginPath();
+        g.moveTo(x + tx * L, y + ty * L);
+        g.lineTo(x + nx * Wd, y + ny * Wd);
+        g.lineTo(x - tx * L, y - ty * L);
+        g.lineTo(x - nx * Wd, y - ny * Wd);
+        g.closePath();
+        g.fill();
+        g.stroke();
+      }
+    },
+    galaxy(g, sx, sy, r, skin, t) {
+      const [base, nebula, star] = skin.colors, n = sx.length, a0 = g.globalAlpha;
+      inRuns(g, sx, sy, r, (a) => mix(base, nebula, 0.35 + 0.35 * Math.sin(a * 0.168 + 1)));
+      // Stars batched into three brightness levels: three fills per worm, however long.
+      const paths = [new Path2D(), new Path2D(), new Path2D()];
+      for (let i = 0; i < n; i += 3) {
+        const [, , nx, ny] = normalAt(sx, sy, i);
+        for (let k = 0; k < 2; k++) {
+          const seed = i * 2 + k, off = (hash01(seed) - 0.5) * 1.5 * r, size = r * (0.06 + 0.08 * hash01(seed + 99));
+          const level = Math.min(2, Math.floor((0.5 + 0.5 * Math.sin(t * 3 + seed * 1.7)) * 3));
+          const x = sx[i] + nx * off, y = sy[i] + ny * off;
+          paths[level].moveTo(x + size, y);
+          paths[level].arc(x, y, size, 0, TAU);
+        }
+      }
+      g.fillStyle = star;
+      paths.forEach((path, level) => { g.globalAlpha = a0 * (0.3 + 0.35 * level); g.fill(path); });
+      g.globalAlpha = a0;
+    },
+    pulse(g, sx, sy, r, skin, t) {
+      const [base, hot] = skin.colors;
+      inRuns(g, sx, sy, r, (a) => mix(base, hot, Math.max(0, Math.sin(a * 0.19 - t * 5)) ** 2));
+    },
+  };
+  const GLOSSY = (skin) => skin.finish !== 'neon' && skin.finish !== 'galaxy';
+
+  // ---------------------------------------------------------------------------
   // Game state
   let game = null;
   let mode = 'menu'; // menu | playing | dead | paused | standby (another window is active, #45)
@@ -527,12 +691,38 @@
   // ---------------------------------------------------------------------------
   // Menu wiring
   $('name').value = settings.name;
+  // Skin picker (#58): visible skins only, each swatch a piece of body painted by the skin's
+  // own finish. Buttons keep the skin's position in SKINS, which saves and settings rely on.
+  function skinSwatch(skin) {
+    const size = 44, dpr = Math.min(2, window.devicePixelRatio || 1), c = document.createElement('canvas');
+    c.width = c.height = Math.round(size * dpr);
+    const g = c.getContext('2d');
+    g.scale(dpr, dpr);
+    g.fillStyle = '#0d1322';
+    g.fillRect(0, 0, size, size);
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    const r = size * 0.3, n = 14, sp = r * SEGMENT * Math.SQRT1_2, sx = [], sy = [];
+    for (let i = 0; i < n; i++) { sx.push(size / 2 + (n / 2 - i) * sp); sy.push(size / 2 - (n / 2 - i) * sp); } // head at top right
+    // A moment that shows the finish: the metallic shine or the pulse glow mid-swatch.
+    FINISH[skin.finish](g, sx, sy, r, skin, skin.finish === 'pulse' ? 1.21 : 1.8);
+    if (GLOSSY(skin)) {
+      g.translate(-r * 0.22, -r * 0.3);
+      g.strokeStyle = 'rgba(255,255,255,0.16)';
+      g.lineWidth = r * 0.55;
+      traceOn(g, sx, sy, n - 1, 0);
+      g.stroke();
+    }
+    return c;
+  }
   const skinsEl = $('skins');
   SKINS.forEach((skin, i) => {
+    if (skin.hidden) return;
     const b = document.createElement('button');
-    const stops = skin.colors.map((c, k) => `${c} ${k * 6}px ${(k + 1) * 6}px`).join(',');
-    b.style.background = `repeating-linear-gradient(135deg, ${stops})`;
+    b.dataset.skin = i;
     b.title = skin.name;
+    b.setAttribute('aria-label', skin.name);
+    b.appendChild(skinSwatch(skin));
     b.addEventListener('click', () => { settings.skin = i; refreshMenu(); });
     skinsEl.appendChild(b);
   });
@@ -541,7 +731,7 @@
   document.querySelectorAll('#difficulty button').forEach((b) =>
     b.addEventListener('click', () => { settings.difficulty = b.dataset.v; refreshMenu(); }));
   function refreshMenu() {
-    [...skinsEl.children].forEach((b, i) => b.classList.toggle('on', i === settings.skin));
+    [...skinsEl.children].forEach((b) => b.classList.toggle('on', +b.dataset.skin === settings.skin)); // none for a hidden skin
     $('skinName').textContent = SKINS[settings.skin].name;
     $('botCountVal').textContent = settings.botCount;
     document.querySelectorAll('#difficulty button').forEach((b) => b.classList.toggle('on', b.dataset.v === settings.difficulty));
@@ -749,7 +939,7 @@
       ctx.lineTo(tx, ty);
       ctx.lineTo(tx - Math.cos(a + spread) * arm, ty - Math.sin(a + spread) * arm);
       ctx.globalAlpha = alpha * (0.55 + 0.45 * Math.sin(t * 10 - k * 1.3));
-      ctx.strokeStyle = w.skin.colors[0];
+      ctx.strokeStyle = w.skin.accent;
       ctx.lineWidth = Math.max(4, r * 0.55);
       ctx.stroke();
       ctx.strokeStyle = '#fff';
@@ -771,13 +961,13 @@
   function drawWorm(w, t, view) {
     const m = w.boosting ? w.r * 3.5 : 0; // boost arrows reach ahead of the head
     if (w.maxX + m < view.x0 || w.minX - m > view.x1 || w.maxY + m < view.y0 || w.minY - m > view.y1) return;
-    const sx = w.sx, sy = w.sy, n = sx.length, r = w.r, cols = w.skin.colors;
+    const sx = w.sx, sy = w.sy, n = sx.length, r = w.r, skin = w.skin;
     const alpha = w.shield > 0 ? 0.45 + 0.25 * Math.sin(t * 14) : 1;
     ctx.globalAlpha = alpha;
 
     if (w.boosting) {
       ctx.globalAlpha = alpha * (0.3 + 0.15 * Math.sin(t * 18));
-      ctx.strokeStyle = cols[0];
+      ctx.strokeStyle = skin.accent;
       ctx.lineWidth = 2 * r + 16;
       tracePath(sx, sy, n - 1, 0);
       ctx.stroke();
@@ -790,24 +980,17 @@
     tracePath(sx, sy, n - 1, 0);
     ctx.stroke();
 
-    // Striped body, tail to head
-    ctx.lineWidth = 2 * r;
-    const S = 3, chunks = Math.ceil((n - 1) / S);
-    for (let c = chunks - 1; c >= 0; c--) {
-      const a = c * S, b = Math.min(n - 1, a + S);
-      ctx.strokeStyle = cols[c % cols.length];
-      tracePath(sx, sy, b, a);
+    // Body, painted by the skin's finish (#58), then the glossy highlight
+    FINISH[skin.finish](ctx, sx, sy, r, skin, game.time);
+    if (GLOSSY(skin)) {
+      ctx.save();
+      ctx.translate(-r * 0.22, -r * 0.3);
+      ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+      ctx.lineWidth = r * 0.55;
+      tracePath(sx, sy, n - 1, 0);
       ctx.stroke();
+      ctx.restore();
     }
-
-    // Glossy highlight
-    ctx.save();
-    ctx.translate(-r * 0.22, -r * 0.3);
-    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
-    ctx.lineWidth = r * 0.55;
-    tracePath(sx, sy, n - 1, 0);
-    ctx.stroke();
-    ctx.restore();
 
     // Eyes
     const hx = sx[0], hy = sy[0], ex = Math.cos(w.angle), ey = Math.sin(w.angle);
@@ -913,7 +1096,7 @@
       const w = lb[i];
       if (w.dead || w.isPlayer) continue;
       const big = i < 10;
-      mctx.fillStyle = big ? w.skin.colors[0] : 'rgba(255,255,255,0.3)';
+      mctx.fillStyle = big ? w.skin.accent : 'rgba(255,255,255,0.3)';
       mctx.beginPath();
       mctx.arc(c + w.x * k, c + w.y * k, (big ? 2.5 : 1.5) * DPR + (big ? Math.min(3, w.r / 15) * DPR : 0), 0, TAU);
       mctx.fill();

@@ -1,0 +1,83 @@
+// Skin finishes and the skin picker (#58). Run with `node --test "tests/**/*.test.js"`.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { launch, gameUrl } = require('../helpers/browser');
+
+const NEW = ['Aurora', 'Sunset Drive', 'Synthwave', 'Toxic', 'Gold Rush', 'Chrome', 'Ladybug', 'Leopard', 'Viper', 'Galaxy', 'Magma', 'Abyss'];
+// A cheap fingerprint of the arena canvas.
+const HASH = `(() => { const c = document.getElementById('game'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  let h = 0; for (let i = 0; i < d.length; i += 97) h = (h * 31 + d[i]) | 0; return h; })()`;
+
+test('skins', async (t) => {
+  let page;
+  t.after(() => page && page.close());
+  page = await launch();
+  await page.goto(gameUrl());
+
+  await t.test('the picker offers the 24 visible skins, drawn with their finish', async () => {
+    const names = await page.eval(`[...document.querySelectorAll('#skins button')].map((b) => b.title)`);
+    assert.equal(names.length, 24);
+    assert.ok(!names.includes('Rainbow') && !names.includes('Lavender'), 'hidden skins are not offered');
+    assert.ok(NEW.every((n) => names.includes(n)), 'all new skins are offered');
+    assert.equal(await page.eval(`document.querySelectorAll('#skins button canvas').length`), 24, 'each swatch is a drawn canvas');
+  });
+
+  await t.test('picking Galaxy plays as Galaxy and is remembered', async () => {
+    await page.click('#skins button[title="Galaxy"]');
+    await page.startRun('Star');
+    assert.equal(await page.eval('window.__player.skin.name'), 'Galaxy');
+    await page.press('KeyP');
+    await page.click('#endRun');
+    await page.reload();
+    assert.equal(await page.eval(`document.querySelector('#skins button.on').title`), 'Galaxy');
+  });
+
+  await t.test('a remembered hidden skin still loads and plays', async () => {
+    await page.eval(`localStorage.removeItem('wormarena.world');
+      localStorage.setItem('wormarena.settings', JSON.stringify({ name: 'Old', skin: 8, botCount: 30, difficulty: 'normal' }))`);
+    await page.reload();
+    assert.equal(await page.eval(`document.getElementById('skinName').textContent`), 'Lavender');
+    assert.equal(await page.eval(`document.querySelectorAll('#skins button.on').length`), 0, 'no swatch selected');
+    await page.startRun('Old');
+    assert.equal(await page.eval('window.__player.skin.name'), 'Lavender');
+  });
+
+  await t.test('every skin renders in the arena without errors', async () => {
+    page.exceptions.length = 0;
+    await page.eval(`{
+      const g = window.__game, p = window.__player, E = window.WormEngine;
+      Object.assign(p, { shield: 1e5 });
+      g.worms = [p]; g.respawnQueue = []; g.settings.botCount = 0;
+      E.SKINS.forEach((skin, k) => {
+        const b = g.spawnBot(false);
+        Object.assign(b, { skin, thinkT: 1e9, shield: 1e5, wantBoost: k % 2 === 0, mass: 200 });
+        const x0 = p.x - 500 + (k % 6) * 180, y0 = p.y - 300 + Math.floor(k / 6) * 140;
+        b.sx = b.sx.map((v, i) => x0 - i * 6); b.sy = b.sy.map(() => y0); b.angle = b.targetAngle = 0; b.updateBounds();
+      });
+    }`);
+    await page.frames(30);
+    assert.deepEqual(page.exceptions, []);
+    assert.equal(await page.eval('window.__game.worms.length'), 1 + 26, 'all skins in the world');
+  });
+
+  await t.test('animated finishes freeze while paused (#58)', async () => {
+    // Only a Magma worm and the player; no food or power-ups, which pulse on real time.
+    await page.eval(`{
+      const g = window.__game, p = window.__player;
+      g.worms = [p, ...g.worms.filter((w) => w.skin.name === 'Magma')];
+      Object.assign(g, { food: [], powerups: [], foodTarget: 0, powerupTarget: 0 }); g.rebuildFoodGrid();
+      // These blink or pulse on real time and are not finishes: the shield, boost glow and arrows,
+      // and the arena border (moved out of view).
+      g.worms.forEach((w) => { w.shield = 0; w.wantBoost = false; w.boosting = false; });
+      g.R = 1e6;
+    }`);
+    await page.press('KeyP');
+    await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'pause');
+    await page.eval(`document.getElementById('paused').classList.add('hidden')`); // keep the panel out of the pixels
+    await page.frames(3);
+    const a = await page.eval(HASH);
+    await new Promise((r) => setTimeout(r, 400));
+    await page.frames(3);
+    assert.equal(await page.eval(HASH), a, 'nothing moves while paused');
+  });
+});

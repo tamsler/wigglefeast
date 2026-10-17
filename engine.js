@@ -55,18 +55,40 @@
     { name: 'Cherry Pop', colors: ['#ff595e', '#ffca3a'] },
     { name: 'Lagoon', colors: ['#4cc9f0', '#4361ee', '#3a0ca3'] },
     { name: 'Lime Ocean', colors: ['#8ac926', '#1982c4'] },
-    { name: 'Rainbow', colors: ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93'] },
+    { name: 'Rainbow', colors: ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93'], hidden: true },
     { name: 'Candy Cane', colors: ['#ffffff', '#ef233c'] },
     { name: 'Bumblebee', colors: ['#2b2b2b', '#ffd60a'] },
     { name: 'Neon Night', colors: ['#f72585', '#7209b7', '#3a0ca3', '#4361ee', '#4cc9f0'] },
     { name: 'Mint', colors: ['#2ec4b6', '#cbf3f0'] },
-    { name: 'Lavender', colors: ['#ffd6ff', '#e7c6ff', '#c8b6ff', '#b8c0ff'] },
+    { name: 'Lavender', colors: ['#ffd6ff', '#e7c6ff', '#c8b6ff', '#b8c0ff'], hidden: true },
     { name: 'Sailor', colors: ['#e63946', '#f1faee', '#a8dadc', '#457b9d'] },
     { name: 'Tangerine', colors: ['#ff9f1c', '#ffbf69', '#fff3e0'] },
     { name: 'Emerald', colors: ['#06d6a0', '#118ab2'] },
     { name: 'Grape', colors: ['#6a4c93', '#f15bb5'] },
     { name: 'Lava', colors: ['#d00000', '#ffba08', '#dc2f02'] },
+    // Saves store a skin by its position: only ever append, never remove or reorder (#58).
+    // finish: how the body is drawn (main.js). colors: that finish's colours. accent: minimap
+    // dot and boost arrows. food: what the worm drops. hidden: not offered or given to new bots.
+    { name: 'Aurora', finish: 'gradient', colors: ['#00f5d4', '#00bbf9', '#9b5de5', '#f15bb5'] },
+    { name: 'Sunset Drive', finish: 'gradient', colors: ['#ffbe0b', '#fb5607', '#ff006e', '#8338ec'] },
+    { name: 'Synthwave', finish: 'neon', colors: ['#160b2e', '#ff2e88', '#2de2e6'], accent: '#ff2e88', food: ['#ff2e88', '#2de2e6'] },
+    { name: 'Toxic', finish: 'neon', colors: ['#0c1a0f', '#b8ff3c', '#f2ff8a'], accent: '#b8ff3c', food: ['#b8ff3c', '#f2ff8a'] },
+    { name: 'Gold Rush', finish: 'metallic', colors: ['#b8862b', '#fff1b8', '#5c3d0c'], accent: '#e0b44c', food: ['#e0b44c', '#fff1b8'] },
+    { name: 'Chrome', finish: 'metallic', colors: ['#7d8896', '#ffffff', '#2c333c'], accent: '#c9d1da', food: ['#c9d1da', '#ffffff'] },
+    { name: 'Ladybug', finish: 'spots', colors: ['#e5383b', '#161a1d'], food: ['#e5383b', '#ff7a7c'] },
+    { name: 'Leopard', finish: 'spots', colors: ['#e9a15a', '#3d2412', '#c47a35'], food: ['#e9a15a', '#f6c58f'] },
+    { name: 'Viper', finish: 'scales', colors: ['#2f5d3a', '#c5e063', '#173020'], accent: '#c5e063', food: ['#c5e063', '#7fb069'] },
+    { name: 'Galaxy', finish: 'galaxy', colors: ['#0b1030', '#5a189a', '#ffffff'], accent: '#b98cff', food: ['#b98cff', '#ffffff', '#7b6cff'] },
+    { name: 'Magma', finish: 'pulse', colors: ['#2b0b05', '#ff7a00'], accent: '#ff7a00', food: ['#ff7a00', '#ffb347'] },
+    { name: 'Abyss', finish: 'pulse', colors: ['#041c32', '#00e5ff'], accent: '#00e5ff', food: ['#00e5ff', '#7df9ff'] },
   ];
+  for (const skin of SKINS) {
+    skin.finish = skin.finish || 'stripes';
+    skin.accent = skin.accent || skin.colors[0];
+    skin.food = skin.food || skin.colors;
+    skin.hidden = !!skin.hidden;
+  }
+  const PICKABLE_SKINS = SKINS.filter((skin) => !skin.hidden);
 
   const BOT_NAMES = [
     'Slinky', 'Noodle', 'Wiggles', 'Sir Hiss', 'Spaghetti', 'Gummy', 'Zigzag', 'Squiggle',
@@ -266,7 +288,8 @@
     get x() { return this.sx[0]; }
     get y() { return this.sy[0]; }
     get multiplier() { return this.pw.x5 > 0 ? 5 : this.pw.x2 > 0 ? 2 : 1; }
-    stripeColor(i) { const c = this.skin.colors; return c[Math.floor(i / 3) % c.length]; }
+    // Colour of the food dropped at segment i: the skin's food colours, banded like stripes.
+    stripeColor(i) { const c = this.skin.food; return c[Math.floor(i / 3) % c.length]; }
 
     update(dt, g) {
       if (this.shield > 0) this.shield -= dt;
@@ -634,7 +657,7 @@
       const wp = randomInCircle(this.R * 0.75);
       const w = new Worm({
         name: this.uniqueName(),
-        skin: pick(SKINS),
+        skin: pick(PICKABLE_SKINS),
         mass,
         x: p.x,
         y: p.y,
@@ -853,5 +876,5 @@
     rankOf(w) { return this.leaderboard.indexOf(w) + 1; }
   }
 
-  root.WormEngine = { CFG, SKINS, SAVE_APP_IDS, validateSnapshot, Game, Worm, radiusFor, lengthFor, angleDiff, TAU };
+  root.WormEngine = { CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, validateSnapshot, Game, Worm, radiusFor, lengthFor, angleDiff, TAU };
 })(typeof window !== 'undefined' ? window : globalThis);
