@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const { Game, SKINS, SAVE_APP_IDS, TAU } = window.WormEngine;
+  const { Game, SKINS, SAVE_APP_IDS, validateSnapshot, TAU } = window.WormEngine;
   const $ = (id) => document.getElementById(id);
 
   const canvas = $('game');
@@ -25,7 +25,17 @@
     get(k, d) { try { const v = localStorage.getItem('wormarena.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
     set(k, v) { try { localStorage.setItem('wormarena.' + k, JSON.stringify(v)); } catch { /* ignore */ } },
   };
-  const settings = Object.assign({ name: '', skin: 0, botCount: 30, difficulty: 'normal' }, store.get('settings', {}));
+  // Rebuilt from checked fields: a corrupted stored value must not stop startup (#26).
+  const settings = { name: '', skin: 0, botCount: 30, difficulty: 'normal' };
+  {
+    const s = store.get('settings', null);
+    if (s && typeof s === 'object') {
+      if (typeof s.name === 'string') settings.name = s.name.slice(0, 16);
+      if (Number.isInteger(s.skin) && s.skin >= 0 && s.skin < SKINS.length) settings.skin = s.skin;
+      if (Number.isInteger(s.botCount) && s.botCount >= 5 && s.botCount <= 60) settings.botCount = s.botCount;
+      if (['easy', 'normal', 'hard'].includes(s.difficulty)) settings.difficulty = s.difficulty;
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Profile: lifetime totals, top runs and recent runs. Kept separate from the
@@ -37,13 +47,46 @@
     top: [],
     recent: [],
   });
-  function validProfile(p) {
-    return p && p.v === PROFILE_VERSION && p.totals && Array.isArray(p.top) && Array.isArray(p.recent);
+  // Profiles can come from imported files, so rebuild them from checked fields only.
+  // Returns a clean copy, or null if anything is missing or the wrong type.
+  function cleanProfile(p) {
+    const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+    const num = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+    const str = (v) => typeof v === 'string' && v.length <= 40;
+    if (!isObj(p) || p.v !== PROFILE_VERSION || !isObj(p.totals) || !Array.isArray(p.top) || !Array.isArray(p.recent)) return null;
+    if (p.top.length > 1000 || p.recent.length > 1000) return null;
+    const t = p.totals, bd = isObj(t.bestByDiff) ? t.bestByDiff : null;
+    if (!['games', 'kills', 'time', 'eaten', 'best'].every((k) => num(t[k])) || !bd) return null;
+    if (!['easy', 'normal', 'hard'].every((d) => bd[d] === undefined || num(bd[d]))) return null;
+    const cleanRun = (r) => {
+      if (!isObj(r) || !['date', 'score', 'peak', 'kills', 'eaten', 'time'].every((k) => num(r[k]))) return null;
+      if (!str(r.name) || !str(r.by) || !['easy', 'normal', 'hard'].includes(r.diff) || !Number.isInteger(r.bots) || r.bots < 0 || r.bots > 1000) return null;
+      return { date: r.date, name: r.name, score: r.score, peak: r.peak, kills: r.kills, eaten: r.eaten, time: r.time, by: r.by, diff: r.diff, bots: r.bots };
+    };
+    const top = p.top.map(cleanRun), recent = p.recent.map(cleanRun);
+    if (top.includes(null) || recent.includes(null)) return null;
+    return {
+      v: PROFILE_VERSION,
+      totals: {
+        games: t.games, kills: t.kills, time: t.time, eaten: t.eaten, best: t.best,
+        bestByDiff: { easy: bd.easy || 0, normal: bd.normal || 0, hard: bd.hard || 0 },
+      },
+      top: top.slice(0, 10),
+      recent: recent.slice(0, 50),
+    };
   }
-  let profile = store.get('profile', null);
-  if (!validProfile(profile)) {
+  let rawProfile = null;
+  try { rawProfile = localStorage.getItem('wormarena.profile'); } catch { /* storage unavailable */ }
+  let profile = cleanProfile(store.get('profile', null));
+  if (!profile) {
+    // Keep unreadable data aside (as the raw text, even if it isn't JSON) instead of crashing on it or losing it.
+    if (rawProfile !== null) {
+      try { localStorage.setItem('wormarena.profile-corrupt', rawProfile); } catch { /* storage full or unavailable */ }
+      console.warn('Stored profile was invalid; saved it as wormarena.profile-corrupt and started fresh.');
+    }
     profile = emptyProfile();
-    profile.totals.best = store.get('best', 0); // carry over the best score from before stats existed
+    profile.totals.best = Number(store.get('best', 0)) || 0; // carry over the best score from before stats existed
+    if (rawProfile !== null) store.set('profile', profile);
   }
   const saveProfile = () => store.set('profile', profile);
 
@@ -309,23 +352,26 @@
     const d = new Date(ms);
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   }
+  // Every value is escaped: profiles can come from imported files (see #18).
+  const fmtNum = (v) => Math.round(Number(v) || 0).toLocaleString();
   function runsTable(runs, ranked) {
     if (!runs.length) return '<tr><td class="empty">No games yet. Go eat something!</td></tr>';
+    const e = escapeHtml;
     let h = `<tr>${ranked ? '<th>#</th>' : ''}<th class="num">Peak</th><th class="num">Kills</th><th class="num">Time</th><th>Killed by</th><th class="hide-sm">Mode</th><th class="hide-sm">Date</th></tr>`;
     runs.forEach((r, i) => {
-      h += `<tr>${ranked ? `<td class="dim">${i + 1}</td>` : ''}<td class="num"><b>${r.peak.toLocaleString()}</b></td><td class="num">${r.kills}</td><td class="num">${fmtDuration(r.time)}</td>` +
-        `<td>${escapeHtml(r.by)}</td><td class="hide-sm dim">${r.diff} · ${r.bots}</td><td class="hide-sm dim">${fmtDate(r.date)}</td></tr>`;
+      h += `<tr>${ranked ? `<td class="dim">${i + 1}</td>` : ''}<td class="num"><b>${e(fmtNum(r.peak))}</b></td><td class="num">${e(fmtNum(r.kills))}</td><td class="num">${e(fmtDuration(r.time))}</td>` +
+        `<td>${e(r.by)}</td><td class="hide-sm dim">${e(r.diff)} · ${e(r.bots)}</td><td class="hide-sm dim">${e(fmtDate(r.date))}</td></tr>`;
     });
     return h;
   }
   function showStats() {
     const t = profile.totals;
     const avg = t.games ? Math.round(profile.recent.reduce((s, r) => s + r.peak, 0) / Math.max(1, profile.recent.length)) : 0;
-    const tile = (v, label) => `<div><b>${v}</b><small>${label}</small></div>`;
-    $('totals').innerHTML = tile(t.best.toLocaleString(), 'best') + tile(t.games, 'games') + tile(t.kills, 'kills') + tile(fmtDuration(t.time), 'played') +
-      tile(avg.toLocaleString(), 'avg (recent)') + tile(t.eaten.toLocaleString(), 'food eaten') + tile(t.games ? (t.kills / t.games).toFixed(1) : '0', 'kills / game') +
+    const tile = (v, label) => `<div><b>${escapeHtml(v)}</b><small>${escapeHtml(label)}</small></div>`;
+    $('totals').innerHTML = tile(fmtNum(t.best), 'best') + tile(fmtNum(t.games), 'games') + tile(fmtNum(t.kills), 'kills') + tile(fmtDuration(t.time), 'played') +
+      tile(fmtNum(avg), 'avg (recent)') + tile(fmtNum(t.eaten), 'food eaten') + tile(t.games ? (t.kills / t.games).toFixed(1) : '0', 'kills / game') +
       tile(t.games ? fmtDuration(Math.round(t.time / t.games)) : '0s', 'avg survival');
-    $('bestByDiff').innerHTML = ['easy', 'normal', 'hard'].map((d) => tile((t.bestByDiff[d] || 0).toLocaleString(), d)).join('');
+    $('bestByDiff').innerHTML = ['easy', 'normal', 'hard'].map((d) => tile(fmtNum(t.bestByDiff[d]), d)).join('');
     $('topRuns').innerHTML = runsTable(profile.top, true);
     $('recentRuns').innerHTML = runsTable(profile.recent.slice(0, 15), false);
     $('menu').classList.add('hidden');
@@ -350,11 +396,16 @@
     reader.onload = () => {
       let data;
       try { data = JSON.parse(reader.result); } catch { alert('That file is not valid JSON.'); return; }
-      if (!data || !SAVE_APP_IDS.includes(data.app) || data.kind !== 'save' || !validProfile(data.profile)) { alert('That file is not a Wigglefeast save.'); return; }
+      // Check everything before changing anything: an invalid file leaves stats and world untouched.
+      const newProfile = data && SAVE_APP_IDS.includes(data.app) && data.kind === 'save' ? cleanProfile(data.profile) : null;
+      let worldOk = !data || !data.world;
+      if (newProfile && data.world) { try { validateSnapshot(data.world); worldOk = true; } catch (err) { console.warn(err.message); } }
+      if (!newProfile || !worldOk) { alert('That file is not a valid Wigglefeast save. Nothing was changed.'); return; }
       if (!confirm('Replace your current stats and world with this save?')) return;
-      profile = data.profile;
+      if (data.world && !restoreWorld(data.world)) { alert('That save could not be loaded. Nothing was changed.'); return; }
+      profile = newProfile;
       saveProfile();
-      if (data.world && restoreWorld(data.world)) saveWorld();
+      if (data.world) saveWorld();
       if (mode === 'menu') showStats();
     };
     reader.readAsText(file);
@@ -409,52 +460,88 @@
   // ---------------------------------------------------------------------------
   // Input
   const input = { mx: W / 2 + 100, my: H / 2, mouseBoost: false, keyBoost: false, touchBoost: false, left: false, right: false, useMouse: true, keyAngle: 0, steerId: null };
-  const pointers = new Set();
+  // Active pointers by id. Touch: the first finger steers and any second finger boosts;
+  // if the steering finger lifts, a remaining finger takes over steering (#20).
+  const pointers = new Map();
+  const touchIds = () => [...pointers].filter(([, p]) => p.type !== 'mouse').map(([id]) => id);
+  function steerWith(id) {
+    const p = pointers.get(id);
+    input.steerId = id;
+    input.mx = p.x; input.my = p.y; input.useMouse = true;
+  }
 
   canvas.addEventListener('pointerdown', (e) => {
-    pointers.add(e.pointerId);
+    pointers.set(e.pointerId, { type: e.pointerType, x: e.clientX, y: e.clientY });
+    // Capture so the release reaches us even outside the canvas or window (#22).
+    // Touch is captured implicitly; mouse and pen are not.
+    if (e.pointerType !== 'touch') { try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ } }
     if (e.pointerType === 'mouse') {
       input.mouseBoost = true;
       input.mx = e.clientX; input.my = e.clientY; input.useMouse = true;
-    } else if (input.steerId === null) {
-      input.steerId = e.pointerId;
-      input.mx = e.clientX; input.my = e.clientY; input.useMouse = true;
-    } else input.touchBoost = true;
+    } else {
+      if (input.steerId === null || !pointers.has(input.steerId)) steerWith(e.pointerId);
+      input.touchBoost = touchIds().length >= 2;
+    }
   });
   canvas.addEventListener('pointermove', (e) => {
+    const p = pointers.get(e.pointerId);
+    if (p) { p.x = e.clientX; p.y = e.clientY; }
     if (e.pointerType === 'mouse' || e.pointerId === input.steerId) {
       input.mx = e.clientX; input.my = e.clientY; input.useMouse = true;
     }
   });
   const pointerEnd = (e) => {
-    pointers.delete(e.pointerId);
+    if (!pointers.delete(e.pointerId) && e.pointerType !== 'mouse') return;
     if (e.pointerType === 'mouse') input.mouseBoost = false;
     else {
-      if (e.pointerId === input.steerId) input.steerId = null;
-      if (pointers.size < 2) input.touchBoost = false;
+      const rest = touchIds();
+      if (e.pointerId === input.steerId) {
+        input.steerId = null;
+        if (rest.length) steerWith(rest[0]);
+      }
+      input.touchBoost = rest.length >= 2;
     }
   };
   canvas.addEventListener('pointerup', pointerEnd);
   canvas.addEventListener('pointercancel', pointerEnd);
+  canvas.addEventListener('lostpointercapture', pointerEnd);
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  window.addEventListener('blur', () => { input.mouseBoost = input.keyBoost = input.left = input.right = false; setPaused(true); });
+
+  // Keys are tracked individually so releasing one alias (e.g. W) doesn't cancel
+  // another that is still held (e.g. Space) (#23).
+  const KEYS = { boost: ['Space', 'ArrowUp', 'KeyW'], left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'] };
+  const ALL_KEYS = [...KEYS.boost, ...KEYS.left, ...KEYS.right];
+  const heldKeys = new Set();
+  function syncKeys() {
+    input.keyBoost = KEYS.boost.some((k) => heldKeys.has(k));
+    input.left = KEYS.left.some((k) => heldKeys.has(k));
+    input.right = KEYS.right.some((k) => heldKeys.has(k));
+  }
+
+  window.addEventListener('blur', () => {
+    heldKeys.clear();
+    syncKeys();
+    pointers.clear();
+    input.steerId = null;
+    input.mouseBoost = input.touchBoost = false;
+    setPaused(true);
+  });
 
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT') return;
+    if (ALL_KEYS.includes(e.code)) {
+      heldKeys.add(e.code);
+      syncKeys();
+      if (KEYS.boost.includes(e.code)) e.preventDefault();
+      return;
+    }
     switch (e.code) {
-      case 'Space': case 'ArrowUp': case 'KeyW': input.keyBoost = true; e.preventDefault(); break;
-      case 'ArrowLeft': case 'KeyA': input.left = true; break;
-      case 'ArrowRight': case 'KeyD': input.right = true; break;
       case 'KeyP': case 'Escape': setPaused(mode === 'playing'); break;
       case 'Enter': if (mode === 'dead' && !$('death').classList.contains('hidden')) startPlaying(); break;
     }
   });
   window.addEventListener('keyup', (e) => {
-    switch (e.code) {
-      case 'Space': case 'ArrowUp': case 'KeyW': input.keyBoost = false; break;
-      case 'ArrowLeft': case 'KeyA': input.left = false; break;
-      case 'ArrowRight': case 'KeyD': input.right = false; break;
-    }
+    if (heldKeys.delete(e.code)) syncKeys();
   });
 
   function applyInput(dt) {
@@ -702,7 +789,7 @@
     return `<li class="${me ? 'me' : ''}"><span class="r">${rank}</span><span class="n">${escapeHtml(w.name)}</span><span class="m">${Math.round(w.mass).toLocaleString()}</span></li>`;
   }
   function escapeHtml(s) {
-    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
   function feed(text, cls) {
