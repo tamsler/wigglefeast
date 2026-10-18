@@ -21,6 +21,7 @@
     // SHED_ABOVE per second.
     SHED_ABOVE: 1500,
     SHED_RATE: 0.004,
+    REMAINS_TIME: 6, // seconds scavenging bots remember where a worm died (#78)
     // Food / power-up density per unit of world area (tuned for a 3600 radius world).
     FOOD_DENSITY: 2600 / (Math.PI * 3600 * 3600),
     POWERUP_DENSITY: 26 / (Math.PI * 3600 * 3600),
@@ -115,15 +116,44 @@
 
   const POWERUP_WEIGHTS = { magnet: 30, x2: 22, x5: 5, speed: 20, zoom: 14, turn: 14 };
 
+  // Bot tactics (#78). Their order is part of each bot's identity (see knowsTactic):
+  // only ever append.
+  const TACTICS = ['predict', 'anticipate', 'evade', 'headOn', 'scavenge', 'trap', 'pin', 'coil', 'flank'];
+  const tactics = (shares) => Object.fromEntries(TACTICS.map((k) => [k, shares[k] || 0]));
+
   // Per difficulty (#16). skill: look-ahead, reaction time and steering precision.
   // aggro: how often and how far a bot hunts. preyRatio: it hunts worms lighter than this
   // times its own mass. bigShare: share of the bots in a new world that start large, at
-  // up to bigMax mass; the rest start small.
+  // up to bigMax mass; the rest start small. tactics: share of bots that know each tactic.
   const DIFFICULTY = {
-    easy: { skill: [0.12, 0.45], aggro: [0.0, 0.35], preyRatio: 1, bigShare: 0.1, bigMax: 1200 },
-    normal: { skill: [0.35, 0.8], aggro: [0.1, 0.65], preyRatio: 1.3, bigShare: 0.15, bigMax: 2000 },
-    hard: { skill: [0.7, 1.0], aggro: [0.35, 1.0], preyRatio: 1.6, bigShare: 0.2, bigMax: 2500 },
+    easy: { skill: [0.12, 0.45], aggro: [0.0, 0.35], preyRatio: 1, bigShare: 0.1, bigMax: 1200, tactics: tactics({}) },
+    normal: {
+      skill: [0.35, 0.8], aggro: [0.1, 0.65], preyRatio: 1.3, bigShare: 0.15, bigMax: 2000,
+      tactics: tactics({ predict: 0.5, anticipate: 0.3, evade: 0.3, headOn: 0.2, scavenge: 0.3 }),
+    },
+    hard: {
+      skill: [0.7, 1.0], aggro: [0.35, 1.0], preyRatio: 1.6, bigShare: 0.2, bigMax: 2500,
+      tactics: tactics({ predict: 1, anticipate: 0.7, evade: 0.6, headOn: 0.5, scavenge: 0.5, trap: 0.4, pin: 0.4, coil: 0.3 }),
+    },
+    expert: {
+      skill: [0.85, 1.0], aggro: [0.6, 1.0], preyRatio: 2, bigShare: 0.25, bigMax: 3000,
+      tactics: tactics(Object.fromEntries(TACTICS.map((k) => [k, 1]))),
+    },
   };
+  const DIFFICULTIES = Object.keys(DIFFICULTY);
+
+  // A bot knows a tactic when a hash of its id and the tactic falls below the level's share,
+  // so it keeps the same tactics for life, across saves, without storing them.
+  function hash01(a, b) {
+    let h = Math.imul(a | 0, 0x9e3779b1) ^ Math.imul(b + 1, 0x85ebca77);
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+    h = Math.imul(h ^ (h >>> 12), 0x297a2d39);
+    return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+  }
+  function knowsTactic(w, difficulty, tactic) {
+    const share = (DIFFICULTY[difficulty] || DIFFICULTY.normal).tactics[tactic];
+    return share > 0 && hash01(w.id, TACTICS.indexOf(tactic)) < share;
+  }
 
   // Limits shared by save validation and the simulation, so a world loaded from a
   // valid save can never grow into one that fails validation (#31).
@@ -255,6 +285,7 @@
       this.wantBoost = false;
       this.boosting = false;
       this.speed = CFG.BASE_SPEED;
+      this.turnRate = 0; // observed heading change per second, smoothed; what bots predict with (#78)
       this.dead = false;
       this.kills = o.kills || 0;
       this.eaten = o.eaten || 0;
@@ -308,7 +339,9 @@
       const sp = spacingFor(r);
 
       const maxTurn = turnRateFor(r) * dt * (this.boosting ? 0.85 : 1) * (pw.turn > 0 ? CFG.TURN_POWER_MULT : 1);
-      this.angle += clamp(angleDiff(this.angle, this.targetAngle), -maxTurn, maxTurn);
+      const turn = clamp(angleDiff(this.angle, this.targetAngle), -maxTurn, maxTurn);
+      this.angle += turn;
+      if (dt > 0) this.turnRate += (turn / dt - this.turnRate) * Math.min(1, dt / 0.3);
       if (this.angle > Math.PI) this.angle -= TAU;
       else if (this.angle < -Math.PI) this.angle += TAU;
 
@@ -376,29 +409,96 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Bot brain. Picks a goal (food, power-up, prey, or wander point), then samples
-  // candidate headings and rejects those that run into bodies or the wall.
+  // Bot brain. Picks a mode (evade, hunt, head-on, scavenge, or the plain goals: power-up,
+  // food, wander point), then samples candidate headings and rejects those that run into
+  // bodies, the wall or, for bots that anticipate, the path a nearby head is about to cover.
+  // Tactics (#78) only use what a player could see: positions, headings, sizes and observed
+  // turning (turnRate), never a worm's targetAngle.
   const SAMPLE_T = [0.15, 0.35, 0.62, 1];
   const SAMPLE_W = [12, 6, 3, 1.5];
+  const GHOST_T = [0.25, 0.5, 0.75];
+  const EVADE_T = [0.25, 0.5, 0.75, 1];
+  const HEAD_ON = 0.85; // a head-on collision is a safe win against worms under this share of own mass
 
-  function hitAt(g, self, px, py, rad) {
+  // headMass: the first 3 segments of worms lighter than this don't count (a head-on win).
+  // other: a second worm to ignore besides self.
+  function hitAt(g, self, px, py, rad, headMass = 0, other = null) {
     const lim = g.R - rad;
     if (px * px + py * py > lim * lim) return true;
     const gw = g.gridWorms;
     return g.segGrid.query(px, py, rad + g.maxR, (oi, si) => {
       const o = gw[oi];
-      if (o === self || o.dead) return false;
+      if (o === self || o === other || o.dead) return false;
+      if (si < 3 && o.mass < headMass) return false;
       const dx = o.sx[si] - px, dy = o.sy[si] - py, rr = rad + o.r;
       return dx * dx + dy * dy < rr * rr;
     });
   }
 
+  // Where a worm's head will be after t seconds if it keeps its speed and observed turning.
+  function predictHead(o, t) {
+    const v = o.speed, a = o.angle, x = o.sx[0], y = o.sy[0];
+    const turn = clamp(o.turnRate * t, -Math.PI, Math.PI);
+    if (Math.abs(turn) < 1e-3) return { x: x + Math.cos(a) * v * t, y: y + Math.sin(a) * v * t, a };
+    const k = (v * t) / turn; // radius of the arc
+    return { x: x + k * (Math.sin(a + turn) - Math.sin(a)), y: y - k * (Math.cos(a + turn) - Math.cos(a)), a: a + turn };
+  }
+
+  // Share of directions around a worm's head that are clear for 250 px, ignoring the worm
+  // itself and the hunter asking. side 0: all 8 directions; side +1 / -1: the 3 directions
+  // on that side of its heading (+1 is angle + 90 degrees).
+  function freedom(g, o, hunter, side) {
+    const dirs = side ? [0.25, 0.5, 0.75].map((f) => side * f * Math.PI) : [0, 1, 2, 3, 4, 5, 6, 7].map((k) => (k * TAU) / 8);
+    let clear = 0;
+    for (const da of dirs) {
+      const c = Math.cos(o.angle + da), s = Math.sin(o.angle + da);
+      let ok = true;
+      for (const t of [80, 160, 250]) if (hitAt(g, o, o.sx[0] + c * t, o.sy[0] + s * t, o.r + 4, 0, hunter)) { ok = false; break; }
+      if (ok) clear++;
+    }
+    return clear / dirs.length;
+  }
+
+  // The point to cross in front of a prey. Without prediction: ahead along its heading, by
+  // more the farther it is. With prediction: where its curving path meets ours.
+  function cutPoint(w, o, predict) {
+    const hx = w.sx[0], hy = w.sy[0], lead = w.r * 2 + o.r * 2;
+    if (!predict) {
+      const l = lead + Math.hypot(o.sx[0] - hx, o.sy[0] - hy) * 0.6;
+      return { x: o.sx[0] + Math.cos(o.angle) * l, y: o.sy[0] + Math.sin(o.angle) * l, a: o.angle };
+    }
+    const sp = Math.max(w.speed, CFG.BASE_SPEED);
+    let t = Math.hypot(o.sx[0] - hx, o.sy[0] - hy) / sp, p = null;
+    for (let i = 0; i < 3; i++) {
+      p = predictHead(o, Math.min(t, 2));
+      t = Math.hypot(p.x - hx, p.y - hy) / sp;
+    }
+    return { x: p.x + Math.cos(p.a) * lead, y: p.y + Math.sin(p.a) * lead, a: p.a };
+  }
+
+  // ghost: flat [x, y, t, r] points nearby heads reach t seconds from now. One we would reach
+  // later than its head (tau >= t) is body by then.
+  function ghostHit(ghost, px, py, rad, tau) {
+    for (let i = 0; i < ghost.length; i += 4) {
+      if (ghost[i + 2] > tau + 0.1) continue;
+      const dx = ghost[i] - px, dy = ghost[i + 1] - py, rr = rad + ghost[i + 3];
+      if (dx * dx + dy * dy < rr * rr) return true;
+    }
+    return false;
+  }
+
   function botThink(w, g) {
     const ai = w.ai, skill = ai.skill, r = w.r;
-    const diff = DIFFICULTY[g.settings.difficulty] || DIFFICULTY.normal;
+    const level = g.settings.difficulty;
+    const diff = DIFFICULTY[level] || DIFFICULTY.normal;
+    const knows = (k) => knowsTactic(w, level, k);
     const hx = w.sx[0], hy = w.sy[0];
     const edge = g.R - r * 3 - 40, edge2 = edge * edge;
-    let goal = null, goalW = 0, boost = false;
+    const L = (80 + 240 * skill) * (w.boosting ? 1.6 : 1) + r * 3;
+    const mySpeed = Math.max(w.speed, CFG.BASE_SPEED);
+    let goal = null, goalW = 0, boost = false, mode = 'wander';
+    let headMass = 0, ignore = null; // set while going head-on
+    ai.aim = null; // the point a hunt aims at, for tests and tools; not saved
 
     // Wander point, refreshed when reached or occasionally.
     const wdx = ai.wx - hx, wdy = ai.wy - hy;
@@ -425,6 +525,7 @@
     if (best > 0) {
       goal = Math.atan2(by - hy, bx - hx);
       goalW = 1;
+      mode = 'food';
       if (bv >= 6 && bd < 260 && skill > 0.45 && w.mass > 50 && Math.random() < skill * 0.5) boost = true;
     }
 
@@ -435,31 +536,165 @@
       if (dx * dx + dy * dy < PR * PR && p.x * p.x + p.y * p.y < edge2) {
         goal = Math.atan2(dy, dx);
         goalW = 1.5;
+        mode = 'powerup';
         break;
       }
     }
 
-    // Hunting: aim ahead of a nearby worm's head to cut it off.
-    if (ai.prey && (ai.prey.dead || g.time > ai.huntUntil)) ai.prey = null;
-    if (!ai.prey && w.mass > 30 && Math.random() < ai.aggro * 0.2) {
-      let td = Math.pow(300 + 350 * ai.aggro, 2), tgt = null;
+    // Scavenging: the remains of a worm that just died nearby, if they beat the best food.
+    if (knows('scavenge') && g.recentDeaths.length) {
+      const SR = FR + 400;
+      let bs = best, sx = 0, sy = 0, sm = 0, sd = 0;
+      for (const rem of g.recentDeaths) {
+        const dx = rem.x - hx, dy = rem.y - hy, d = Math.sqrt(dx * dx + dy * dy);
+        if (d > SR || rem.x * rem.x + rem.y * rem.y > edge2) continue;
+        const sc = rem.mass / (d + 200);
+        if (sc > bs) { bs = sc; sx = rem.x; sy = rem.y; sm = rem.mass * 5; sd = d; }
+      }
+      if (bs > best) {
+        goal = Math.atan2(sy - hy, sx - hx);
+        goalW = 1.3;
+        mode = 'scavenge';
+        if (sm > 300 && sd < 500 && w.mass > 60) boost = true;
+      }
+    }
+
+    // Nearby heads, nearest first, for the defensive tactics.
+    const anticipate = knows('anticipate'), evade = knows('evade'), headOn = knows('headOn');
+    const heads = [];
+    if (anticipate || evade || headOn) {
+      const HR = L + 300;
       for (const o of g.worms) {
         if (o === w || o.dead || o.shield > 0) continue;
         const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d2 = dx * dx + dy * dy;
-        if (d2 < td && o.mass < w.mass * diff.preyRatio) { td = d2; tgt = o; }
+        if (d2 < HR * HR) heads.push({ o, d: Math.sqrt(d2) });
       }
-      if (tgt) { ai.prey = tgt; ai.huntUntil = g.time + rand(1.5, 4.5); }
+      heads.sort((a, b) => a.d - b.d);
+      if (heads.length > 8) heads.length = 8;
+    }
+
+    // Head-on: the bigger worm wins, so meet a clearly smaller oncoming head.
+    if (headOn) {
+      for (const { o, d } of heads) {
+        if (d > 220) break;
+        if (o.mass >= w.mass * HEAD_ON || Math.abs(angleDiff(w.angle, o.angle)) < (2 * Math.PI) / 3) continue;
+        if (Math.abs(angleDiff(w.angle, Math.atan2(o.sy[0] - hy, o.sx[0] - hx))) > Math.PI / 3) continue;
+        const p = predictHead(o, d / (mySpeed + o.speed));
+        goal = Math.atan2(p.y - hy, p.x - hx);
+        goalW = 2.5;
+        mode = 'headOn';
+        headMass = w.mass * HEAD_ON;
+        ignore = o;
+        break;
+      }
+    }
+
+    // Hunting: pick a nearby worm lighter than the level allows; with trap, prefer one with
+    // few ways out.
+    if (ai.prey && (ai.prey.dead || g.time > ai.huntUntil)) { ai.prey = null; ai.coilDir = 0; }
+    if (!ai.prey && w.mass > 30 && Math.random() < ai.aggro * 0.2) {
+      const td = Math.pow(300 + 350 * ai.aggro, 2), cands = [];
+      for (const o of g.worms) {
+        if (o === w || o.dead || o.shield > 0) continue;
+        const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d2 = dx * dx + dy * dy;
+        if (d2 < td && o.mass < w.mass * diff.preyRatio) cands.push({ o, d2 });
+      }
+      if (cands.length) {
+        cands.sort((a, b) => a.d2 - b.d2);
+        let tgt = cands[0].o;
+        if (knows('trap')) {
+          let bs = Infinity;
+          for (const c of cands.slice(0, 3)) {
+            const sc = Math.sqrt(c.d2) * (0.5 + freedom(g, c.o, w, 0));
+            if (sc < bs) { bs = sc; tgt = c.o; }
+          }
+        }
+        ai.prey = tgt;
+        ai.huntUntil = g.time + rand(1.5, 4.5);
+        ai.coilDir = 0;
+      }
     }
     if (ai.prey) {
       const o = ai.prey;
       const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d = Math.sqrt(dx * dx + dy * dy);
-      if (d > 900) ai.prey = null;
-      else {
-        const lead = r * 2 + o.r * 2 + d * 0.6;
-        const px = o.sx[0] + Math.cos(o.angle) * lead, py = o.sy[0] + Math.sin(o.angle) * lead;
-        goal = Math.atan2(py - hy, px - hx);
+      const R0 = Math.max(120, 4 * o.r + 2 * r);
+      if (d > 900) { ai.prey = null; ai.coilDir = 0; }
+      else if (knows('coil') && o.mass <= w.mass * 0.5 && lengthFor(w.mass) >= TAU * R0 * 1.3 && d < (ai.coilDir ? 2.5 * R0 : 350)) {
+        // Coil: circle the prey's head at a shrinking radius; our own body is the trap.
+        if (!ai.coilDir) {
+          ai.coilDir = Math.cos(w.angle) * dy - Math.sin(w.angle) * dx >= 0 ? 1 : -1; // turn toward the prey's side
+          ai.coilR = R0;
+          ai.coilT = g.time;
+          ai.huntUntil = g.time + 6;
+        }
+        ai.coilR = Math.max(2 * o.r + 2 * r, ai.coilR * Math.pow(0.85, g.time - ai.coilT));
+        ai.coilT = g.time;
+        const c = predictHead(o, 0.3);
+        const rho = Math.hypot(hx - c.x, hy - c.y), phi = Math.atan2(hy - c.y, hx - c.x);
+        goal = phi + ai.coilDir * (Math.PI / 2 + clamp((rho - ai.coilR) / ai.coilR, -0.5, 0.8));
         goalW = 2;
+        mode = 'coil';
+        if (w.mass > 150) boost = true;
+      } else {
+        ai.coilDir = 0;
+        let p = cutPoint(w, o, knows('predict'));
+        const nx = -Math.sin(p.a), ny = Math.cos(p.a); // the prey's +1 side
+        const shift = (k, m) => { p = { x: p.x + nx * k, y: p.y + ny * k, a: p.a }; mode = m; };
+        mode = 'cut';
+        const orad = Math.hypot(o.sx[0], o.sy[0]);
+        const radial = orad > 0 ? (Math.cos(o.angle) * o.sx[0] + Math.sin(o.angle) * o.sy[0]) / orad : 1;
+        let flankSide = 0;
+        if (knows('flank')) {
+          for (const h of g.worms) {
+            if (h === w || h.dead || !h.ai || h.ai.prey !== o) continue;
+            const side = Math.cos(o.angle) * (h.sy[0] - o.sy[0]) - Math.sin(o.angle) * (h.sx[0] - o.sx[0]);
+            flankSide = side >= 0 ? -1 : 1; // the side opposite the other hunter
+            break;
+          }
+        }
+        if (knows('pin') && g.R - orad < 450 && Math.abs(radial) < 0.5 && Math.hypot(hx, hy) < orad) {
+          // Pin: cut in on the arena side, ahead of a prey running along the wall.
+          const pr = Math.hypot(p.x, p.y) || 1;
+          p = { x: p.x - (p.x / pr) * 3 * o.r, y: p.y - (p.y / pr) * 3 * o.r, a: p.a };
+          mode = 'pin';
+        } else if (flankSide) shift(flankSide * 4 * o.r, 'flank');
+        else if (knows('trap')) {
+          // Close the side with more room, so the prey's only way out is the blocked one.
+          const up = freedom(g, o, w, 1), down = freedom(g, o, w, -1);
+          if (Math.abs(up - down) >= 0.25) shift((up > down ? 1 : -1) * 4 * o.r, 'trap');
+        }
+        goal = Math.atan2(p.y - hy, p.x - hx);
+        goalW = 2;
+        ai.aim = p;
         if (d < 450 && w.mass > 60 && Math.random() < ai.aggro * skill) boost = true;
+      }
+      if (ai.prey) { headMass = 0; ignore = null; }
+    }
+
+    // Evasion: a head that will cross our path in the next second before we get there.
+    if (evade) {
+      const ER = 250 + 150 * skill;
+      const mine = EVADE_T.map((t) => predictHead(w, t));
+      for (const { o, d } of heads) {
+        if (d > ER) break;
+        if (headOn && o.mass < w.mass * HEAD_ON) continue; // a head-on there is a win
+        let threat = false;
+        for (let j = 0; j < EVADE_T.length && !threat; j++) {
+          const b = predictHead(o, EVADE_T[j]);
+          for (let i = j; i < EVADE_T.length; i++) {
+            if (Math.hypot(mine[i].x - b.x, mine[i].y - b.y) < 3 * r + o.r) { threat = true; break; }
+          }
+        }
+        if (!threat) continue;
+        // Head away from its line, on the side we are on.
+        const side = Math.cos(o.angle) * (hy - o.sy[0]) - Math.sin(o.angle) * (hx - o.sx[0]) >= 0 ? 1 : -1;
+        goal = o.angle + side * Math.PI / 2;
+        goalW = 3;
+        mode = 'evade';
+        headMass = 0;
+        ignore = null;
+        if (w.mass > 60 && d < 200) boost = true;
+        break;
       }
     }
 
@@ -467,11 +702,21 @@
       goal = Math.atan2(ai.wy - hy, ai.wx - hx);
       goalW = 0.5;
     }
+    ai.mode = mode;
+
+    // Anticipation: the paths nearby heads are about to cover count as obstacles.
+    let ghost = null;
+    if (anticipate && heads.length) {
+      ghost = [];
+      for (const { o } of heads) {
+        if (o === ignore) continue;
+        for (const t of GHOST_T) { const p = predictHead(o, t); ghost.push(p.x, p.y, t, o.r); }
+      }
+    }
 
     // Evaluate candidate headings.
     const N = 2 * Math.round(4 + 6 * skill) + 1;
     const spread = Math.PI * (0.6 + 0.35 * skill);
-    const L = (80 + 240 * skill) * (w.boosting ? 1.6 : 1) + r * 3;
     const rad = r + 4 + 6 * skill;
     let bestA = w.angle, bestS = -Infinity, bestD = 0;
     for (let k = 0; k <= N; k++) {
@@ -479,8 +724,8 @@
       const c = Math.cos(a), s = Math.sin(a);
       let danger = 0;
       for (let j = 0; j < 4; j++) {
-        const t = L * SAMPLE_T[j];
-        if (hitAt(g, w, hx + c * t, hy + s * t, rad)) { danger = SAMPLE_W[j]; break; }
+        const t = L * SAMPLE_T[j], px = hx + c * t, py = hy + s * t;
+        if (hitAt(g, w, px, py, rad, headMass) || (ghost && ghostHit(ghost, px, py, rad, t / mySpeed))) { danger = SAMPLE_W[j]; break; }
       }
       const score = -danger + goalW * Math.cos(angleDiff(a, goal)) - 0.25 * Math.abs(angleDiff(w.angle, a));
       if (score > bestS) { bestS = score; bestA = a; bestD = danger; }
@@ -519,6 +764,7 @@
       this.foodBudget = 0; // natural food owed by the refill rate
       this.listeners = {};
       this.leaderboard = [];
+      this.recentDeaths = []; // { x, y, mass, time } along each body that died in the last few seconds (#78); not saved
 
       if (snapshot) this.load(snapshot);
       else {
@@ -573,7 +819,8 @@
           pw: Object.fromEntries(Object.entries(w.pw).map(([k, v]) => [k, r1(v)])),
           born: r2(w.born),
           peak: r2(w.peak),
-          ai: w.ai ? Object.assign({}, w.ai, { prey: w.ai.prey ? w.ai.prey.id : 0 }) : null,
+          // Only the saved bot state; tactic state (mode, coil) is re-picked after loading (#78).
+          ai: w.ai ? { skill: w.ai.skill, aggro: w.ai.aggro, interval: w.ai.interval, wx: w.ai.wx, wy: w.ai.wy, prey: w.ai.prey ? w.ai.prey.id : 0, huntUntil: w.ai.huntUntil } : null,
           sx: w.sx.map(r1),
           sy: w.sy.map(r1),
         })),
@@ -725,6 +972,9 @@
       if (this.worms.some((w) => w.dead)) this.worms = this.worms.filter((w) => !w.dead);
 
       this.cleanFood(dt);
+      if (this.recentDeaths.length && this.time - this.recentDeaths[0].time > CFG.REMAINS_TIME) {
+        this.recentDeaths = this.recentDeaths.filter((d) => this.time - d.time <= CFG.REMAINS_TIME);
+      }
       if (this.naturalFood < this.foodTarget) {
         this.foodBudget += CFG.FOOD_REFILL_RATE * dt; // reset below once the food is back at its target
         for (; this.foodBudget >= 1 && this.naturalFood < this.foodTarget; this.foodBudget--) this.spawnNaturalFood();
@@ -864,6 +1114,11 @@
         const i = Math.floor(k * step);
         this.addFood(w.sx[i] + rand(-spread, spread), w.sy[i] + rand(-spread, spread), per * rand(0.7, 1.3), w.stripeColor(i), rand(45, 60));
       }
+      // Remember where the remains lie (5 points along the body) for scavenging bots.
+      for (let k = 0; k < 5; k++) {
+        const i = Math.floor(((k + 0.5) * n) / 5);
+        this.recentDeaths.push({ x: w.sx[i], y: w.sy[i], mass: total / 5, time: this.time });
+      }
       if (killer) killer.kills++;
       if (w.isPlayer) { this.player = null; this.lastPlayer = w; }
       return { victim: w, killer, cause: cause || (killer ? 'eaten' : 'wall') };
@@ -900,5 +1155,8 @@
     return 'classic';
   }
 
-  root.WormEngine = { CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, DIFFICULTY, validateSnapshot, seasonalTheme, Game, Worm, botThink, radiusFor, lengthFor, angleDiff, TAU };
+  root.WormEngine = {
+    CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, DIFFICULTY, DIFFICULTIES, TACTICS, validateSnapshot, seasonalTheme,
+    Game, Worm, botThink, knowsTactic, predictHead, radiusFor, lengthFor, angleDiff, TAU,
+  };
 })(typeof window !== 'undefined' ? window : globalThis);
