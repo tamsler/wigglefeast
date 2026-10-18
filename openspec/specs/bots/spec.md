@@ -43,7 +43,7 @@ Each bot SHALL get a skill and aggression value drawn from the selected difficul
 - **THEN** bots are at least as skilled and aggressive as on hard, and every bot uses every tactic
 
 ### Requirement: Tactics by difficulty
-Each bot SHALL know a set of tactics fixed for its lifetime and drawn from its difficulty. Easy bots SHALL use no tactics. On normal, some bots SHALL use turn prediction, head anticipation, evasion, scavenging and head-on awareness. On hard, most bots SHALL use those, and some SHALL also coil, pin against the edge and trap. On expert, every bot SHALL use every tactic, including flanking.
+Each bot SHALL know a set of tactics fixed for its lifetime and drawn from its difficulty. Easy bots SHALL use no tactics. On normal, some bots SHALL use turn prediction, head anticipation, evasion, scavenging and head-on awareness. On hard, at least half the bots SHALL use each of those, and some SHALL also coil, pin against the edge and trap. On expert, every bot SHALL use every tactic, including flanking.
 
 #### Scenario: Easy has no tactics
 - **WHEN** a world is created on easy
