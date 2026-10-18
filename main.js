@@ -1361,17 +1361,18 @@
     return k.map((v) => v / sum);
   })();
   let densityAt = -Infinity, densityFor = null;
-  // Separable blur of src into dst along x (dx = 1) or y (dx = n); cells beyond the edge count as empty.
+  // Separable blur of src into dst, along x or y. Near the grid's edge only the in-range
+  // weights count, so a worm by the arena's rim isn't drawn dimmer than one mid-arena.
   function blurDensity(src, dst, n, horizontal) {
     const kr = (densityKernel.length - 1) / 2;
     for (let y = 0; y < n; y++) {
       for (let x = 0; x < n; x++) {
-        let sum = 0;
+        let sum = 0, wsum = 0;
         for (let j = -kr; j <= kr; j++) {
           const xx = horizontal ? x + j : x, yy = horizontal ? y : y + j;
-          if (xx >= 0 && xx < n && yy >= 0 && yy < n) sum += src[yy * n + xx] * densityKernel[j + kr];
+          if (xx >= 0 && xx < n && yy >= 0 && yy < n) { sum += src[yy * n + xx] * densityKernel[j + kr]; wsum += densityKernel[j + kr]; }
         }
-        dst[y * n + x] = sum;
+        dst[y * n + x] = sum / wsum;
       }
     }
   }
