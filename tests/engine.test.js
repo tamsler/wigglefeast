@@ -776,6 +776,8 @@ test('a 150-bot Expert world stays healthy within the tick budget (#81)', () => 
   assert.ok(avgBots >= MAX_BOTS * 0.8, `average ${avgBots.toFixed(0)} bots alive`);
   // Same loose limit as the other simulation tests; locally about 2 ms.
   assert.ok(msPerTick < 25, `${msPerTick.toFixed(2)} ms per tick is far too slow`);
+});
+
 // --- Massive growth (#82) -------------------------------------------------------
 
 test('worms shed only above 10,000 mass, at 0.2% of the excess per second (#82)', () => {

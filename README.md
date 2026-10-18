@@ -22,6 +22,8 @@ A single-player snake-style .io game you can play offline. Eat, grow, and outsma
 
 The **minimap** (top left) shades where other worms are crowded, without showing any single worm; your own position and view are marked on it.
 
+**Growing massive:** any worm that keeps winning can grow huge. Worms only start shedding mass above 10,000 (0.2% of the excess per second), and past that size they grow mostly thicker rather than longer; the camera zooms out as you thicken.
+
 Run into another worm's body and you die. Make others run into yours and eat what they leave behind.
 Head-on collisions are won by the bigger worm. The red ring is the arena edge.
 
