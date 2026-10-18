@@ -26,9 +26,9 @@
 
 ## 4. Expert in the game UI and stats
 
-- [ ] 4.1 Add the Expert button to the difficulty control in `index.html` and use `DIFFICULTIES` in `main.js` for settings validation; verify with a browser test that picking Expert and pressing Play starts an Expert world, and that settings with Expert survive a reload
-- [ ] 4.2 Stats: `bestByDiff.expert` (default 0), run validation accepting `expert`, and four "best by difficulty" tiles using `.grid.four`; verify with a browser test that an Expert run shows as the Expert best, and that a profile from before Expert (e.g. the profile in `tests/fixtures/save-v1.json`) imports with all its runs and Expert best 0
-- [ ] 4.3 Verify the menu still fits at every size in `tests/browser/layout.test.js` with four buttons, and look at the menu and stats screen on a phone-width window (no touch or install behaviour changes, so no real-device check is needed)
+- [x] 4.1 Add the Expert button to the difficulty control in `index.html` and use `DIFFICULTIES` in `main.js` for settings validation; verify with a browser test that picking Expert and pressing Play starts an Expert world, and that settings with Expert survive a reload
+- [x] 4.2 Stats: `bestByDiff.expert` (default 0), run validation accepting `expert`, and four "best by difficulty" tiles using `.grid.four`; verify with a browser test that an Expert run shows as the Expert best, and that a profile from before Expert (e.g. the profile in `tests/fixtures/save-v1.json`) imports with all its runs and Expert best 0
+- [x] 4.3 Verify the menu still fits at every size in `tests/browser/layout.test.js` with four buttons, and look at the menu and stats screen on a phone-width window (no touch or install behaviour changes, so no real-device check is needed)
 
 ## 5. Tuning, docs and integration
 

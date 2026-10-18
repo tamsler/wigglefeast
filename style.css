@@ -154,8 +154,7 @@ html, body {
 .panel.wide { max-width: 640px; }
 .panel h3 { margin: 18px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; opacity: .6; text-align: left; }
 .grid.four { grid-template-columns: repeat(4, 1fr); }
-.grid.three { grid-template-columns: repeat(3, 1fr); }
-.grid.four b, .grid.three b { font-size: 20px; }
+.grid.four b { font-size: 20px; }
 table.runs { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
 table.runs th { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .5; font-weight: 600; padding: 4px 6px; }
 table.runs td { padding: 5px 6px; border-top: 1px solid rgba(255,255,255,.06); white-space: nowrap; }
