@@ -351,3 +351,17 @@ test('skins: originals keep their place, new skins are complete, hidden ones are
   game.kill(synth, null);
   assert.ok(game.food.length > 0 && game.food.every((f) => ['#ff2e88', '#2de2e6'].includes(f.c)), 'death food is bright, not the dark body colour');
 });
+
+test('Auto food theme follows the season, by local date (#64)', () => {
+  const { seasonalTheme } = globalThis.WormEngine;
+  const on = (m, d) => seasonalTheme(new Date(2026, m - 1, d, 12));
+  assert.equal(on(10, 14), 'classic');
+  assert.equal(on(10, 15), 'halloween');
+  assert.equal(on(10, 31), 'halloween');
+  assert.equal(on(11, 1), 'classic');
+  assert.equal(on(11, 30), 'classic');
+  assert.equal(on(12, 1), 'christmas');
+  assert.equal(on(12, 26), 'christmas');
+  assert.equal(on(12, 27), 'classic');
+  assert.equal(on(3, 1), 'classic');
+});

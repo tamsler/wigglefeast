@@ -23,6 +23,8 @@ A single-player snake-style .io game you can play offline. Eat, grow, and outsma
 Run into another worm's body and you die. Make others run into yours and eat what they leave behind.
 Head-on collisions are won by the bigger worm. The red ring is the arena edge.
 
+**Food themes:** pick how food looks in the menu: Classic dots, Halloween, Christmas, Snacks or Tech. **Auto** (the default) uses Halloween from 15–31 October, Christmas from 1–26 December and Classic otherwise. Themes only change how food looks.
+
 Power-ups: 🧲 magnet · x2 / x5 food multiplier · ⚡ free boost + speed · 🔭 zoom out · 🌀 tight turns (16s each). Active power-ups show as badges next to the minimap (top left); a badge's ring drains as time runs out, and it blinks in the last 3 seconds.
 
 ## Saving

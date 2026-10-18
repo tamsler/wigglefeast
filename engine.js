@@ -876,5 +876,14 @@
     rankOf(w) { return this.leaderboard.indexOf(w) + 1; }
   }
 
-  root.WormEngine = { CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, validateSnapshot, Game, Worm, radiusFor, lengthFor, angleDiff, TAU };
+  // Food theme for the Auto setting (#64), by the player's local date: Halloween from
+  // 15 to 31 October, Christmas from 1 to 26 December, Classic otherwise.
+  function seasonalTheme(date) {
+    const m = date.getMonth() + 1, d = date.getDate();
+    if (m === 10 && d >= 15) return 'halloween';
+    if (m === 12 && d <= 26) return 'christmas';
+    return 'classic';
+  }
+
+  root.WormEngine = { CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, validateSnapshot, seasonalTheme, Game, Worm, radiusFor, lengthFor, angleDiff, TAU };
 })(typeof window !== 'undefined' ? window : globalThis);
