@@ -89,7 +89,7 @@ The tactics need `hitAt`, the grids, `DIFFICULTY` and the size curves, which are
 The engine exports `DIFFICULTIES = ['easy', 'normal', 'hard', 'expert']`. `main.js` uses it wherever it lists difficulties today: settings validation, profile run validation, `bestByDiff` defaults, and the stats tiles. `index.html` gains an "Expert" button. The stats grid uses the existing `.grid.four` class (2 columns on small screens). Profile `v` stays the same: `bestByDiff.expert` is optional and defaults to 0.
 
 ### 8. Measuring
-`tools/balance.js` adds `expert` to its defaults and reports kills by the killer's `ai.mode` (including `body`, for kills by a worm that wasn't hunting). Acceptance: on Expert the careful stand-in survives less than on Hard and a larger share of its deaths come from tactics, while Easy numbers stay within noise of #16's.
+`tools/balance.js` adds `expert` to its defaults and reports kills by the killer's `ai.mode` (including `body`, for kills by a worm that wasn't hunting). Acceptance (revised during apply, with the owner's approval): over both stand-ins together, the share of stand-in deaths caused by tactics and the number of bots hunting it rise from Easy to Expert, and Easy stays within noise of #16. Stand-in survival is not used: the stand-in mostly dies by running into bodies, so it survives *least* on Easy, where bots grow biggest. Measured at the end of apply (careful + novice, 6 × 8 min each): tactic share of deaths 15% / 28% / 43% / 56%, bots hunting it 0.03 / 0.07 / 0.15 / 0.18 (Easy / Normal / Hard / Expert). Whether Expert *feels* harder is for the playtest.
 
 ## Risks / Trade-offs
 

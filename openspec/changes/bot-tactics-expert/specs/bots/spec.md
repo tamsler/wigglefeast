@@ -109,11 +109,15 @@ A bot that flanks SHALL, when another bot already hunts the same prey, cut in fr
 - **THEN** the flanking bot aims at the prey's right side
 
 ### Requirement: Scavenging
-A bot that scavenges SHALL head for the remains of a worm that died nearby within the last few seconds, weighted by how much was dropped and how far away it is, boosting when the remains are large.
+A bot that scavenges SHALL head for the remains of a worm that died nearby within the last few seconds, weighted by how much was dropped and how far away it is, boosting when the remains are large. It SHALL skip remains that another worm's head is closer to.
 
 #### Scenario: Big worm dies nearby
-- **WHEN** a large worm dies near a scavenging bot that is not hunting or evading
+- **WHEN** a large worm dies near a scavenging bot that is not hunting or evading, and no other head is closer to the remains
 - **THEN** the bot heads for the remains
+
+#### Scenario: Remains already contested
+- **WHEN** another worm's head is closer to the remains than the scavenging bot
+- **THEN** the bot leaves those remains alone
 
 ### Requirement: Head-on awareness
 Because the bigger worm wins a head-on collision, a bot with head-on awareness SHALL go for the head of a clearly smaller worm that is coming towards it, and SHALL keep treating a bigger worm's head as an obstacle.

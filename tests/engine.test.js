@@ -716,4 +716,21 @@ test('scavenging bots head for the remains of a big worm that just died (#78)', 
   assert.ok(toward, 'heads for the remains');
   assert.equal(bot.wantBoost, true, 'boosts for large remains');
   assert.equal(think('easy').bot.ai.mode, 'food', 'bots without the tactic just eat what is near');
+
+  // Remains another head is already closer to are left alone (a race there gets bots killed).
+  const contested = (withRival) => {
+    const worms = [
+      { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
+      { name: 'Small', mass: 400, x: 300, y: 300, angle: 0 },
+    ];
+    if (withRival) worms.push({ name: 'Rival', mass: 100, x: -50, y: 330, angle: Math.PI });
+    const { game, worms: [b, small, rival] } = scene('expert', worms, 30);
+    game.kill(small, null);
+    if (rival) for (const d of game.recentDeaths) assert.ok(Math.hypot(rival.x - d.x, rival.y - d.y) < Math.hypot(d.x, d.y), 'rival is closer to every point');
+    game.rebuildFoodGrid();
+    botThink(b, game);
+    return b.ai.mode;
+  };
+  assert.equal(contested(false), 'scavenge', 'uncontested, these remains are worth it');
+  assert.notEqual(contested(true), 'scavenge');
 });
