@@ -76,8 +76,9 @@ html, body {
   .badge.ending { animation: none; outline: 2px solid var(--c); outline-offset: 2px; }
 }
 
+/* Above the touch buttons so a message stays readable; it takes no taps, so they still work. */
 #feed {
-  position: absolute; left: 50%; top: calc(18px + env(safe-area-inset-top)); transform: translateX(-50%);
+  position: absolute; z-index: 2; left: 50%; top: calc(18px + env(safe-area-inset-top)); transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; gap: 6px;
 }
 #feed div {

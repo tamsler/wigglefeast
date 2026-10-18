@@ -1081,6 +1081,9 @@
   }
 
   function renderMinimap() {
+    // Match the canvas to its on-screen size (110 or 160 px): resize() runs while the HUD is hidden.
+    const cw = mini.clientWidth;
+    if (cw && mini.width !== Math.round(cw * DPR)) mini.width = mini.height = Math.round(cw * DPR);
     const s = mini.width, c = s / 2, R = game.R, k = (c - 4) / R;
     mctx.setTransform(1, 0, 0, 1, 0, 0);
     mctx.clearRect(0, 0, s, s);
@@ -1158,6 +1161,8 @@
     el.className = 'badge hidden';
     el.dataset.type = type;
     el.title = info.label;
+    el.setAttribute('role', 'img');
+    el.setAttribute('aria-label', info.label);
     el.style.setProperty('--c', info.color);
     icon.textContent = info.icon;
     if (/^x\d/.test(info.icon)) icon.className = 'txt';

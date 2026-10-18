@@ -59,3 +59,16 @@ test('power-ups in the HUD', async (t) => {
     assert.equal(await shown('x2'), true);
   });
 });
+
+test('badges are labelled for screen readers and the minimap is drawn at its displayed size (#63)', async (t) => {
+  let page;
+  t.after(() => page && page.close());
+  page = await launch({ width: 390, height: 844 });
+  await page.goto(gameUrl());
+  await page.startRun();
+  assert.deepEqual(await page.eval(`[...document.querySelectorAll('#powerups .badge')].map((b) => b.getAttribute('role') + ':' + b.getAttribute('aria-label'))`),
+    ['img:Magnet', 'img:Double food', 'img:Food x5', 'img:Free boost', 'img:Zoom out', 'img:Tight turns']);
+  await page.frames(3);
+  const m = await page.eval(`(() => { const c = document.getElementById('minimap'); return [c.width, Math.round(c.clientWidth * Math.min(2, devicePixelRatio))]; })()`);
+  assert.equal(m[0], m[1], 'minimap canvas matches its displayed size');
+});
