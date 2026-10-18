@@ -17,6 +17,10 @@
     POWERUP_REACH: 60, // power-ups slide toward heads this far beyond the head's edge (just past their glow)
     MAGNET_REACH: 230, // extra pull range for food and power-ups while the magnet runs
     SPAWN_SHIELD: 2.5,
+    // Very large worms shed mass so nobody grows forever: SHED_RATE of the mass above
+    // SHED_ABOVE per second.
+    SHED_ABOVE: 1500,
+    SHED_RATE: 0.004,
     // Food / power-up density per unit of world area (tuned for a 3600 radius world).
     FOOD_DENSITY: 2600 / (Math.PI * 3600 * 3600),
     POWERUP_DENSITY: 26 / (Math.PI * 3600 * 3600),
@@ -111,10 +115,14 @@
 
   const POWERUP_WEIGHTS = { magnet: 30, x2: 22, x5: 5, speed: 20, zoom: 14, turn: 14 };
 
+  // Per difficulty (#16). skill: look-ahead, reaction time and steering precision.
+  // aggro: how often and how far a bot hunts. preyRatio: it hunts worms lighter than this
+  // times its own mass. bigShare: share of the bots in a new world that start large, at
+  // up to bigMax mass; the rest start small.
   const DIFFICULTY = {
-    easy: { skill: [0.12, 0.45], aggro: [0.0, 0.35] },
-    normal: { skill: [0.35, 0.8], aggro: [0.1, 0.65] },
-    hard: { skill: [0.7, 1.0], aggro: [0.35, 1.0] },
+    easy: { skill: [0.12, 0.45], aggro: [0.0, 0.35], preyRatio: 1, bigShare: 0.1, bigMax: 1200 },
+    normal: { skill: [0.35, 0.8], aggro: [0.1, 0.65], preyRatio: 1.3, bigShare: 0.15, bigMax: 2000 },
+    hard: { skill: [0.7, 1.0], aggro: [0.35, 1.0], preyRatio: 1.6, bigShare: 0.2, bigMax: 2500 },
   };
 
   // Limits shared by save validation and the simulation, so a world loaded from a
@@ -346,7 +354,7 @@
       }
 
       // Very large worms slowly shed mass so nobody grows forever.
-      if (this.mass > 1500) this.mass -= (this.mass - 1500) * 0.004 * dt;
+      if (this.mass > CFG.SHED_ABOVE) this.mass -= (this.mass - CFG.SHED_ABOVE) * CFG.SHED_RATE * dt;
 
       if (this.mass > this.peak) this.peak = this.mass;
       this.updateBounds();
@@ -387,6 +395,7 @@
 
   function botThink(w, g) {
     const ai = w.ai, skill = ai.skill, r = w.r;
+    const diff = DIFFICULTY[g.settings.difficulty] || DIFFICULTY.normal;
     const hx = w.sx[0], hy = w.sy[0];
     const edge = g.R - r * 3 - 40, edge2 = edge * edge;
     let goal = null, goalW = 0, boost = false;
@@ -437,7 +446,7 @@
       for (const o of g.worms) {
         if (o === w || o.dead || o.shield > 0) continue;
         const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d2 = dx * dx + dy * dy;
-        if (d2 < td && o.mass < w.mass * 1.6) { td = d2; tgt = o; }
+        if (d2 < td && o.mass < w.mass * diff.preyRatio) { td = d2; tgt = o; }
       }
       if (tgt) { ai.prey = tgt; ai.huntUntil = g.time + rand(1.5, 4.5); }
     }
@@ -652,7 +661,11 @@
     spawnBot(initial) {
       const d = DIFFICULTY[this.settings.difficulty] || DIFFICULTY.normal;
       const skill = rand(d.skill[0], d.skill[1]);
-      const mass = initial ? CFG.START_MASS + Math.pow(Math.random(), 2.5) * 2500 : CFG.START_MASS + rand(0, 25);
+      // A new world starts mostly small, with a few large bots (bigShare) to look up to (#16).
+      const big = initial && Math.random() < d.bigShare;
+      const mass = big ? 400 + Math.pow(Math.random(), 2) * (d.bigMax - 400)
+        : initial ? CFG.START_MASS + Math.pow(Math.random(), 2) * 185
+        : CFG.START_MASS + rand(0, 25);
       const p = this.findSpawnPoint(300);
       const wp = randomInCircle(this.R * 0.75);
       const w = new Worm({
@@ -765,7 +778,9 @@
           const d = Math.sqrt(d2);
           if (d < r * 0.9 + f.r * 0.4) {
             f.dead = true;
-            w.mass = Math.min(MAX_MASS, w.mass + f.v * mult);
+            // x2/x5 multiply natural food only: on food dropped by worms they made mass from
+            // nothing, and the worm that ate a big corpse with x5 grew without limit (#16).
+            w.mass = Math.min(MAX_MASS, w.mass + f.v * (f.natural ? mult : 1));
             w.eaten++;
           } else {
             const step = Math.min(d, (700 + 900 * (1 - d / A)) * dt);
@@ -885,5 +900,5 @@
     return 'classic';
   }
 
-  root.WormEngine = { CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, validateSnapshot, seasonalTheme, Game, Worm, radiusFor, lengthFor, angleDiff, TAU };
+  root.WormEngine = { CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, DIFFICULTY, validateSnapshot, seasonalTheme, Game, Worm, botThink, radiusFor, lengthFor, angleDiff, TAU };
 })(typeof window !== 'undefined' ? window : globalThis);

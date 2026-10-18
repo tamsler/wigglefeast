@@ -21,7 +21,7 @@ Worms SHALL move forward continuously, turn toward a target angle at a limited r
 
 #### Scenario: Eating food
 - **WHEN** a worm's head reaches a food item
-- **THEN** the food is removed and the worm gains the food's value times its active multiplier
+- **THEN** the food is removed and the worm gains the food's value, times its active multiplier if the food is natural (spawned by the arena, not dropped by a worm)
 
 #### Scenario: Food is pulled in
 - **WHEN** food is within a short radius of a worm's head
@@ -73,7 +73,7 @@ Newly spawned players SHALL be shielded for 2.5 seconds; shielded worms can neit
 - **THEN** the player does not die
 
 ### Requirement: Power-ups
-The arena SHALL contain power-ups that any worm (player or bot) can collect by touching them. A power-up within reach of a worm's head (just beyond its glow) SHALL slide toward the nearest such head, the way food does. Each lasts 16 seconds: magnet (pulls food and power-ups from much farther away), x2 and x5 (multiply food value; the higher one applies), speed (1.25× speed and boosting costs no mass), zoom (player camera zooms out), and tight turns (the worm turns twice as fast as normal for its size).
+The arena SHALL contain power-ups that any worm (player or bot) can collect by touching them. A power-up within reach of a worm's head (just beyond its glow) SHALL slide toward the nearest such head, the way food does. Each lasts 16 seconds: magnet (pulls food and power-ups from much farther away), x2 and x5 (multiply the value of natural food, not of food dropped by worms; the higher one applies), speed (1.25× speed and boosting costs no mass), zoom (player camera zooms out), and tight turns (the worm turns twice as fast as normal for its size).
 
 #### Scenario: Collecting a power-up
 - **WHEN** a worm's head touches a power-up
