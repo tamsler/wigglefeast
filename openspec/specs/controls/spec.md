@@ -40,7 +40,7 @@ On devices whose main pointer is coarse (a touch screen), the HUD SHALL show the
 
 #### Scenario: Phone during a run
 - **WHEN** a run is being played on a touch screen
-- **THEN** the boost button shows in the bottom-right corner and the pause button in the top-left corner
+- **THEN** the boost button shows in the bottom-right corner and the pause button in the top-right corner, beside the leaderboard
 
 #### Scenario: Not playing
 - **WHEN** the player is in the menu, on the death screen or on the pause panel
@@ -51,7 +51,7 @@ On devices whose main pointer is coarse (a touch screen), the HUD SHALL show the
 - **THEN** neither button shows and the HUD looks as it did before
 
 ### Requirement: Touch button layout
-On touch screens, the boost and pause buttons SHALL be at least 44 CSS pixels in each dimension. They SHALL stay inside the screen's safe area. They SHALL NOT overlap each other, the score, the leaderboard, the minimap or the power-up timers, in portrait or landscape at phone sizes down to 360×640 and 640×360.
+On touch screens, the boost and pause buttons SHALL be at least 44 CSS pixels in each dimension. They SHALL stay inside the screen's safe area. They SHALL NOT overlap each other, the score, the leaderboard, the minimap or the power-up badges, in portrait or landscape at phone sizes down to 360×640 and 640×360.
 
 #### Scenario: Phone in portrait
 - **WHEN** a run is played on a 390×844 touch screen with power-ups active
