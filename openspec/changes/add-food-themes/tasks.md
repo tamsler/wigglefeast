@@ -16,7 +16,7 @@
 
 ## 4. Release and integration
 
-- [ ] 4.1 Mention food themes in the README; bump `VERSION` in `sw.js` to the next minor version (no new files); run `node --test "tests/**/*.test.js"` and verify every test passes and `.github/scripts/check-version.sh main` passes after committing
+- [x] 4.1 Mention food themes in the README; bump `VERSION` in `sw.js` to the next minor version (no new files); run `node --test "tests/**/*.test.js"` and verify every test passes and `.github/scripts/check-version.sh main` passes after committing
 - [ ] 4.2 Manual check on desktop and a phone: every theme's items are recognisable at small and large sizes, the picker is easy to use, and frame rate is unchanged; verify by noting the result in the PR
 
 ## Workflow follow-up
