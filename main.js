@@ -494,8 +494,10 @@
     return c;
   }
   // Which item a piece of food shows: by value (small, medium, large), and for small food by its
-  // phase, which is fixed for the food's life and saved with it, so the item never changes.
-  const itemIndex = (f) => (f.v < 3 ? (f.ph < Math.PI ? 0 : 1) : f.v < 7 ? 2 : 3);
+  // phase, which is fixed for the food's life and saved with it, so the item never changes. Both
+  // are rounded as the save rounds them, so a reload can't tip a piece over a boundary.
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const itemIndex = (f) => { const v = r2(f.v); return v < 3 ? (r2(f.ph) < Math.PI ? 0 : 1) : v < 7 ? 2 : 3; };
   const resolveTheme = () => (settings.theme === 'auto' ? window.WormEngine.seasonalTheme(new Date()) : settings.theme);
   let activeTheme = 'classic';
 
@@ -921,7 +923,11 @@
     $('botCountVal').textContent = settings.botCount;
     document.querySelectorAll('#difficulty button').forEach((b) => b.classList.toggle('on', b.dataset.v === settings.difficulty));
     activeTheme = resolveTheme();
-    [...$('themes').children].forEach((b) => b.classList.toggle('on', b.dataset.theme === settings.theme));
+    [...$('themes').children].forEach((b) => {
+      const on = b.dataset.theme === settings.theme;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on)); // the chosen theme, for screen readers too
+    });
     $('themeName').textContent = settings.theme === 'auto' ? `Auto · ${THEME_NAMES[activeTheme]}` : THEME_NAMES[settings.theme];
   }
   // Food theme picker (#64): each button shows its theme's large item; Auto shows this season's.

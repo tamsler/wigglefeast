@@ -24,8 +24,19 @@ test('food themes', async (t) => {
     }
   });
 
-  await t.test('the picker offers six themes', async () => {
+  await t.test('the picker offers six themes and marks the chosen one for screen readers', async () => {
     assert.deepEqual(await page.eval(`[...document.querySelectorAll('#themes button')].map((b) => b.dataset.theme)`), THEMES);
+    assert.deepEqual(await page.eval(`[...document.querySelectorAll('#themes button')].map((b) => b.getAttribute('aria-pressed'))`),
+      ['true', 'false', 'false', 'false', 'false', 'false']);
+  });
+
+  await t.test('items are chosen from the values a save keeps, so a reload cannot change them', async () => {
+    // Just under a boundary before rounding, at it after: the item must follow the rounded value.
+    const item = (v, ph) => page.eval(`window.wigglefeastDebug.foodItem({ v: ${v}, ph: ${ph} })`);
+    await page.click('#themes button[data-theme="snacks"]');
+    assert.equal(await item(2.996, 1), await item(3, 1), 'v 2.996 saves as 3.00');
+    assert.equal(await item(1, 3.1416), await item(1, 3.14), 'ph 3.1416 saves as 3.14');
+    await page.click('#themes button[data-theme="auto"]');
   });
 
   await t.test('every theme renders without errors and caches at most 16 item sprites', async () => {
@@ -55,8 +66,8 @@ test('food themes', async (t) => {
     await page.press('KeyP'); // freeze the world
     // Natural food doesn't move unless pulled; key it by its saved position and value.
     const items = () => page.eval(`Object.fromEntries(window.__game.food
-      .filter((f) => f.natural && Math.abs(f.ph - Math.PI) > 0.01)
-      .map((f) => [Math.round(f.x) + ',' + Math.round(f.y) + ',' + f.v, window.wigglefeastDebug.foodItem(f)]))`);
+      .filter((f) => f.natural)
+      .map((f) => [Math.round(f.x) + ',' + Math.round(f.y) + ',' + Math.round(f.v * 100) / 100, window.wigglefeastDebug.foodItem(f)]))`);
     const before = await items();
     await page.frames(10);
     assert.deepEqual(await items(), before, 'same items across frames');
