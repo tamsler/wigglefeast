@@ -20,6 +20,8 @@ A single-player snake-style .io game you can play offline. Eat, grow, and outsma
 - **P / Esc**: pause
 - **Touch**: drag to steer; hold the boost button (bottom right) or add a second finger to boost; the pause button is top right, beside the leaderboard
 
+The **minimap** (top left) shades where other worms are crowded, without showing any single worm; your own position and view are marked on it.
+
 Run into another worm's body and you die. Make others run into yours and eat what they leave behind.
 Head-on collisions are won by the bigger worm. The red ring is the arena edge.
 
