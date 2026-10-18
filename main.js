@@ -923,10 +923,13 @@
     $('botCountVal').textContent = settings.botCount;
     document.querySelectorAll('#difficulty button').forEach((b) => b.classList.toggle('on', b.dataset.v === settings.difficulty));
     activeTheme = resolveTheme();
+    // Auto comes first; the theme it currently follows isn't listed again unless it's the explicit choice (#67).
+    const seasonal = window.WormEngine.seasonalTheme(new Date());
     [...$('themes').children].forEach((b) => {
-      const on = b.dataset.theme === settings.theme;
+      const theme = b.dataset.theme, on = theme === settings.theme;
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', String(on)); // the chosen theme, for screen readers too
+      b.classList.toggle('hidden', theme !== 'auto' && theme === seasonal && !on);
     });
     $('themeName').textContent = settings.theme === 'auto' ? `Auto · ${THEME_NAMES[activeTheme]}` : THEME_NAMES[settings.theme];
   }

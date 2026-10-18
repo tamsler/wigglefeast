@@ -29,7 +29,7 @@ In a themed arena, small food SHALL show one of the theme's two small items, med
 - **THEN** it keeps showing the same item
 
 ### Requirement: Choosing a theme
-The menu SHALL let the player choose Auto, Classic, Halloween, Christmas, Snacks or Tech, and SHALL remember the choice. Auto SHALL be the default. Auto SHALL use Halloween from 15 to 31 October, Christmas from 1 to 26 December, and Classic on every other day, following the player's local date.
+The menu SHALL let the player choose Auto, Classic, Halloween, Christmas, Snacks or Tech, and SHALL remember the choice. Auto SHALL be the default. Auto SHALL use Halloween from 15 to 31 October, Christmas from 1 to 26 December, and Classic on every other day, following the player's local date. Auto SHALL be listed first, and the theme Auto currently uses SHALL NOT be listed again, unless the player has chosen it explicitly.
 
 #### Scenario: Picking a theme
 - **WHEN** the player picks Tech and reloads the game
@@ -42,6 +42,14 @@ The menu SHALL let the player choose Auto, Classic, Halloween, Christmas, Snacks
 #### Scenario: Auto on an ordinary day
 - **WHEN** the theme is Auto and the local date is 1 March
 - **THEN** the arena shows the Classic theme
+
+#### Scenario: No duplicate of Auto's theme
+- **WHEN** the menu shows on 20 October and the player's choice is Auto
+- **THEN** the picker lists Auto, Classic, Christmas, Snacks and Tech, without a separate Halloween button
+
+#### Scenario: Explicit choice of the seasonal theme
+- **WHEN** the player has chosen Halloween explicitly and the menu shows on 20 October
+- **THEN** the Halloween button is listed and selected
 
 #### Scenario: Remembered settings from before themes
 - **WHEN** the player's remembered settings have no theme, or an unknown one

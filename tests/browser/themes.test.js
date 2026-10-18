@@ -24,10 +24,26 @@ test('food themes', async (t) => {
     }
   });
 
-  await t.test('the picker offers six themes and marks the chosen one for screen readers', async () => {
+  // The theme Auto follows today, whatever today is (#67).
+  const seasonal = () => page.eval('window.WormEngine.seasonalTheme(new Date())');
+  const visible = () => page.eval(`[...document.querySelectorAll('#themes button:not(.hidden)')].map((b) => b.dataset.theme)`);
+
+  await t.test('the picker lists Auto first and not the theme Auto already shows (#67)', async () => {
     assert.deepEqual(await page.eval(`[...document.querySelectorAll('#themes button')].map((b) => b.dataset.theme)`), THEMES);
-    assert.deepEqual(await page.eval(`[...document.querySelectorAll('#themes button')].map((b) => b.getAttribute('aria-pressed'))`),
-      ['true', 'false', 'false', 'false', 'false', 'false']);
+    const season = await seasonal();
+    assert.deepEqual(await visible(), THEMES.filter((th) => th !== season), `${season} is not repeated`);
+    assert.equal((await visible())[0], 'auto');
+    assert.deepEqual(await page.eval(`[...document.querySelectorAll('#themes button:not(.hidden)')].map((b) => b.getAttribute('aria-pressed'))`),
+      ['true', 'false', 'false', 'false', 'false'], 'Auto is marked as chosen for screen readers');
+  });
+
+  await t.test('an explicit choice of the seasonal theme stays listed and selected (#67)', async () => {
+    const season = await seasonal();
+    await withSettings({ name: 'A', skin: 0, botCount: 30, difficulty: 'normal', theme: season });
+    assert.deepEqual(await visible(), THEMES, 'all six listed');
+    assert.equal(await page.eval(selected), season);
+    await page.click('#themes button[data-theme="auto"]');
+    assert.deepEqual(await visible(), THEMES.filter((th) => th !== season), 'hidden again once Auto is chosen');
   });
 
   await t.test('items are chosen from the values a save keeps, so a reload cannot change them', async () => {

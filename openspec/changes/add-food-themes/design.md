@@ -51,6 +51,7 @@
 - **Markup:** a "Food" label, showing the resolved name, for example "Auto · Halloween", above one row of six small round buttons.
 - **Buttons:** each button shows its theme's large item sprite. Classic shows a glowing dot, and Auto shows the current season's item with a small "A" badge. Each has a `title` and `aria-label`.
 - **Selection:** the current choice is highlighted, like the skin swatches.
+- **No duplicate of Auto's theme** (#67): the button for the theme Auto currently resolves to is hidden, since Auto already shows it, unless it's the player's explicit choice. The row is a flex row, so the remaining buttons share its width evenly.
 - **Height:** the row is about 40 px. If the 1280×713 layout test starts to scroll, the existing `max-height: 760px` tightening rule gets one more step: smaller gaps and labels. The test decides.
 
 ## Risks / Trade-offs
