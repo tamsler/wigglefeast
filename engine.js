@@ -555,8 +555,8 @@
       if (heads.length > 8) heads.length = 8;
     }
 
-    // Scavenging: the remains of a worm that just died nearby, if they beat the best food,
-    // skipping remains that two or more other heads are already closer to (a crowd).
+    // Scavenging: the remains of a worm that just died nearby, if they beat the best food and
+    // no other head is closer to them: racing others into the remains got scavengers killed.
     if (knows('scavenge') && g.recentDeaths.length) {
       const SR = FR + 400;
       let bs = best, sx = 0, sy = 0, sm = 0, sd = 0;
@@ -565,9 +565,11 @@
         if (d > SR || rem.x * rem.x + rem.y * rem.y > edge2) continue;
         const sc = rem.mass / (d + 200);
         if (sc <= bs) continue;
-        let closer = 0;
-        for (const h of heads) if (Math.hypot(h.o.sx[0] - rem.x, h.o.sy[0] - rem.y) < d && ++closer >= 2) break;
-        if (closer >= 2) continue;
+        let contested = false;
+        for (const o of g.worms) {
+          if (o !== w && !o.dead && Math.hypot(o.sx[0] - rem.x, o.sy[0] - rem.y) < d) { contested = true; break; }
+        }
+        if (contested) continue;
         if (sc > bs) { bs = sc; sx = rem.x; sy = rem.y; sm = rem.mass * 5; sd = d; }
       }
       if (bs > best) {

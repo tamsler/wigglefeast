@@ -77,7 +77,8 @@ The shares are starting values to tune with `tools/balance.js`. The spec only fi
 Caution rules added during apply, after profiling bot deaths (most hunters that die are killed by their own prey, usually while boosting):
 - Hunters that know `predict` boost only when the prey is more than `150 + 2(r + r_prey)` away and not heading toward them.
 - Bots that know `anticipate` only start a boost if the boosted look-ahead (`1.6 L`) on the chosen heading is clear.
-- Scavengers skip remains that two or more other heads are already closer to.
+- Scavengers only go for remains no other worm's head is closer to. With every Expert bot racing to the same remains, scavenging alone added about 30 bot deaths a minute and kept bots small; switching it off one tactic at a time showed this.
+- Tried and dropped: hunters giving up when the prey turns toward them. It didn't reduce deaths, and it cut cut-off kills on Hard by about 85%.
 
 New prey is chosen as today. With `trap`, the bot instead scores up to 3 nearest candidates by `distance × (0.5 + freedom)`, where **freedom** is the share of 8 rays (3 points each, out to 250 px) from the prey's head that `hitAt` finds clear, ignoring the hunter itself.
 
