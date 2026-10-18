@@ -154,3 +154,49 @@ test('one active game across tabs (#45)', async (t) => {
     assert.equal(await standby(a), true, 'still on the standby panel');
   });
 });
+
+// Two windows press Play here at overlapping times while the owner doesn't answer (#74).
+// The first takes over after the wait; the second must then get the first one's current
+// world through a handover, not take over on its old timer and restore an older save.
+test('competing Play here requests hand over the newest world (#74)', async (t) => {
+  let a, b, c, server;
+  t.after(async () => { for (const p of [c, b, a]) if (p) await p.close(); if (server) await server.close(); });
+  server = await serve();
+  a = await launch();
+  const standby = (p) => p.eval(`!document.getElementById('standby').classList.contains('hidden')`);
+  await a.goto(server.url);
+  await a.startRun('Alpha');
+  await a.eval(`window.__player.shield = 1e5; window.dispatchEvent(new Event('beforeunload'))`); // saved
+  const saved = await a.eval(`JSON.parse(localStorage.getItem('wormarena.world')).time`);
+  b = await a.newTab();
+  c = await a.newTab();
+  await b.goto(server.url);
+  await c.goto(server.url);
+  assert.equal(await standby(b), true);
+  assert.equal(await standby(c), true);
+
+  // The owner looks alive but never answers (e.g. a frozen window).
+  await a.eval(`localStorage.setItem('wormarena.session', JSON.stringify({ id: 'frozen', at: Date.now() }))`);
+  await a.waitFor(`!document.getElementById('standby').classList.contains('hidden')`, 'A stands by');
+  // As soon as B takes over (before any timer can run), it marks its world, so we can
+  // tell B's current world from the older save.
+  await b.eval(`new MutationObserver((_, o) => {
+    if (!document.getElementById('standby').classList.contains('hidden')) return;
+    o.disconnect(); window.__player.mass = 4321; window.__game.time += 100; window.__tookOver = true;
+  }).observe(document.getElementById('standby'), { attributes: true })`);
+  await b.eval(`document.getElementById('playHere').click()`);
+  await new Promise((r) => setTimeout(r, 500));
+  await c.eval(`document.getElementById('playHere').click()`);
+
+  // B may hand on to C at its next tick, before a poll of the panel would see it active.
+  await b.waitFor('window.__tookOver === true', 'B takes over first');
+  await c.waitFor(`document.getElementById('standby').classList.contains('hidden')`, 'C takes over next');
+  await b.waitFor(`!document.getElementById('standby').classList.contains('hidden')`, 'B stands by');
+  const time = await c.eval('window.__game.time');
+  assert.ok(time >= saved + 100, `C continues B's world (time ${time}), not the older save (time ${saved})`);
+  assert.equal(Math.round(await c.eval('window.__player.mass')), 4321, 'C has B\'s worm');
+  assert.equal(await c.eval(`localStorage.getItem('wormarena.handover')`), null, 'no request left behind');
+  await new Promise((r) => setTimeout(r, 3000)); // nothing still waiting takes over again
+  assert.equal(await standby(c), false, 'C stays active');
+  assert.equal(await standby(b), true, 'B stays on standby');
+});

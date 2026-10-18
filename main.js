@@ -215,14 +215,21 @@
 
   async function playHere() {
     $('playHere').disabled = true;
-    writeKey(HANDOVER_KEY, { to: sessionId, at: Date.now() });
     // Wait for the active window to save and hand over; take over anyway if it's gone or stuck.
-    for (const t0 = Date.now(); Date.now() - t0 < HANDOVER_WAIT_MS;) {
+    // If the session moves to another live window meanwhile (one that also pressed Play here),
+    // ask that one instead and wait again, so its newer world isn't replaced by an older save (#74).
+    for (let owner = null, t0 = 0; ;) {
       const s = readKey(SESSION_KEY);
       if (!s || s.id === sessionId || Date.now() - s.at >= STALE_MS) break;
+      if (s.id !== owner) {
+        owner = s.id;
+        t0 = Date.now();
+        writeKey(HANDOVER_KEY, { to: sessionId, at: t0 });
+      } else if (Date.now() - t0 >= HANDOVER_WAIT_MS) break;
       await new Promise((r) => setTimeout(r, 100));
     }
-    removeKey(HANDOVER_KEY);
+    const h = readKey(HANDOVER_KEY);
+    if (h && h.to === sessionId) removeKey(HANDOVER_KEY); // another window's request stays
     $('playHere').disabled = false;
     becomeActive();
   }
