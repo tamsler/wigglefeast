@@ -6,7 +6,7 @@ AI-controlled worms that populate the arena, so the game is playable offline wit
 ## Requirements
 
 ### Requirement: Bot population
-The world SHALL keep the configured number of bots (5–60). When a bot dies, a replacement spawns 1–3 seconds later at a spot away from other worms, at mass 15–40, with a name not currently in use.
+The world SHALL keep the configured number of bots (5–150). When a bot dies, a replacement spawns 1–3 seconds later at a spot away from other worms, at mass 15–40, with a name not currently in use.
 
 #### Scenario: Bot dies
 - **WHEN** a bot dies in a world configured for 30 bots
@@ -15,6 +15,10 @@ The world SHALL keep the configured number of bots (5–60). When a bot dies, a 
 #### Scenario: Initial world
 - **WHEN** a new world is created
 - **THEN** most bots start small (mass 15–200) and a few start large: about 10% (up to mass 1200) on easy, 15% (up to 2000) on normal, 20% (up to 2500) on hard and 25% (up to 3000) on expert
+
+#### Scenario: Largest world
+- **WHEN** the player sets 150 bots and presses Play
+- **THEN** a world with 150 bots starts, and it is saved and restored like any other world
 
 ### Requirement: Bot behaviour
 Each bot SHALL re-plan its heading several times per second, choosing among candidate headings by its goal (nearby food weighted by value and distance, power-ups, a hunted worm, fresh remains, or a wander point) and rejecting headings that lead into other worms' bodies, the path a nearby head is about to cover (for bots that anticipate), or the arena edge.
