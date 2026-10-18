@@ -8,12 +8,12 @@
 
 ## 2. Menu and settings
 
-- [ ] 2.1 Raise the slider maximum to 150 and accept 5–150 in `loadSettings`; verify with a browser test that 150 can be chosen, starts a 150-bot world, and survives a reload, while a stored 151 falls back to 30
-- [ ] 2.2 Add a browser frame-time check at 30, 60 and 150 bots (design decision 4); verify it passes and record the engine and frame times in the PR
+- [x] 2.1 Raise the slider maximum to 150 and accept 5–150 in `loadSettings`; verify with a browser test that 150 can be chosen, starts a 150-bot world, and survives a reload, while a stored 151 falls back to 30
+- [x] 2.2 Add a browser frame-time check at 30, 60 and 150 bots (design decision 4); verify it passes and record the engine and frame times in the PR
 
 ## 3. Release
 
-- [ ] 3.1 Update the README (bot range, arena size note), bump `VERSION` in `sw.js` (minor), and run `node --test "tests/**/*.test.js"`; verify all tests pass
+- [x] 3.1 Update the README (bot range, arena size note), bump `VERSION` in `sw.js` (minor), and run `node --test "tests/**/*.test.js"`; verify all tests pass
 - [ ] 3.2 Open the PR (`Closes #81`), run the `pr-reviewer` agent, address its findings, and merge once checks pass
 
 ## Workflow follow-up

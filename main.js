@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const { Game, CFG, SKINS, SAVE_APP_IDS, DIFFICULTIES, validateSnapshot, TAU } = window.WormEngine;
+  const { Game, CFG, SKINS, SAVE_APP_IDS, DIFFICULTIES, MIN_BOTS, MAX_BOTS, validateSnapshot, TAU } = window.WormEngine;
   const $ = (id) => document.getElementById(id);
 
   const canvas = $('game');
@@ -56,7 +56,7 @@
     if (s && typeof s === 'object') {
       if (typeof s.name === 'string') settings.name = s.name.slice(0, 16);
       if (Number.isInteger(s.skin) && s.skin >= 0 && s.skin < SKINS.length) settings.skin = s.skin;
-      if (Number.isInteger(s.botCount) && s.botCount >= 5 && s.botCount <= 60) settings.botCount = s.botCount;
+      if (Number.isInteger(s.botCount) && s.botCount >= MIN_BOTS && s.botCount <= MAX_BOTS) settings.botCount = s.botCount;
       if (DIFFICULTIES.includes(s.difficulty)) settings.difficulty = s.difficulty;
       if (['auto', 'classic', 'halloween', 'christmas', 'snacks', 'tech'].includes(s.theme)) settings.theme = s.theme; // #64
     }

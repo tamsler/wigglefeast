@@ -47,7 +47,7 @@ Storage keys: `wormarena.world`, `wormarena.profile`, `wormarena.settings` (the 
 - `index.html`, `style.css`: page and UI.
 - `manifest.webmanifest`, `sw.js`, `icons/`: installable app + offline support and release versioning.
 
-Bot count (5–60) and difficulty (easy/normal/hard/expert) are set in the menu. The arena size scales with the bot count.
+Bot count (5–150) and difficulty (easy/normal/hard/expert) are set in the menu. The arena grows with the bot count: up to 60 bots its radius is 1800 + 60 per bot, and above that its area grows in step with the bots, so a big world is bigger, not more crowded.
 
 **Difficulty:** Easy bots steer clumsily and rarely hunt. On harder levels bots see further, react faster and use more tactics: they predict where a turning worm is going, avoid heads about to cross their path, get out of the way of a cut-off, go head-on at smaller worms, and rush to fresh remains nobody else is closer to. On Hard some also trap worms between other bodies, pin them against the wall, or circle them. On **Expert** every bot does all of that, and two bots hunting the same worm cut in from opposite sides. Bots only use what you could see on screen, never your steering input, and treat you like any other worm.
 
