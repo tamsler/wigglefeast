@@ -61,7 +61,9 @@ async function startTouchRun(t, width, height, coarse) {
   return page;
 }
 
-for (const [width, height] of [[390, 844], [360, 640], [844, 390], [667, 375], [640, 360]]) {
+// Includes widths just above the 600px breakpoint, where the badges once ran under Pause
+// and into the leaderboard (#73).
+for (const [width, height] of [[390, 844], [360, 640], [844, 390], [667, 375], [640, 360], [601, 844], [610, 844], [640, 844], [667, 844], [700, 844], [759, 1000], [760, 1000], [768, 1024]]) {
   test(`touch HUD fits without overlaps at ${width}x${height}`, async (t) => {
     const page = await startTouchRun(t, width, height, true);
     const m = await page.eval(MEASURE_HUD);
@@ -82,7 +84,8 @@ for (const [width, height] of [[390, 844], [360, 640], [844, 390], [667, 375], [
   });
 }
 
-for (const [width, height] of [[1280, 713], [1440, 900]]) {
+// Includes narrow mouse-driven windows above the 600px breakpoint (#73).
+for (const [width, height] of [[1280, 713], [1440, 900], [601, 600], [640, 360], [700, 500], [800, 600]]) {
   test(`desktop HUD fits without overlaps and has no touch buttons at ${width}x${height}`, async (t) => {
     const page = await startTouchRun(t, width, height, false);
     const m = await page.eval(MEASURE_HUD);

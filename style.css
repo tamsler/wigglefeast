@@ -126,6 +126,14 @@ html, body {
   .badge { width: 36px; height: 36px; }
   #powerups { max-width: 252px; }
 }
+/* Too narrow for one row of six badges between the minimap and the leaderboard (and Pause):
+   wrap them beside the minimap, three per row, or two where Pause leaves less room (#73). */
+@media (min-width: 601px) and (max-width: 759px) {
+  #powerups { max-width: 132px; }
+}
+@media (pointer: coarse) and (min-width: 601px) and (max-width: 639px) {
+  #powerups { max-width: 86px; }
+}
 
 /* ---------- Overlays ---------- */
 .overlay {
