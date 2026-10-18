@@ -13,9 +13,11 @@ test('power-ups in the HUD', async (t) => {
   // Only the power-ups a test adds: none in the arena and none spawning. Otherwise the magnet
   // (which pulls power-ups in from far away) can collect a random one and restart a timer.
   await page.eval(`window.__player.shield = 1e5; Object.assign(window.__game, { powerups: [], powerupTarget: 0 })`);
+  // Pauses or resumes; presses P only if needed (the game also pauses itself, e.g. on losing focus).
   const pause = async (on) => {
-    await page.press('KeyP');
-    await page.waitFor(`${on ? '!' : ''}document.getElementById('paused').classList.contains('hidden')`, on ? 'pause' : 'resume');
+    const paused = `!document.getElementById('paused').classList.contains('hidden')`;
+    if ((await page.eval(paused)) !== on) await page.press('KeyP');
+    await page.waitFor(on ? paused : `!(${paused})`, on ? 'pause' : 'resume');
   };
   const badge = (type) => `document.querySelector('#powerups .badge[data-type="${type}"]')`;
   const shown = (type) => page.eval(`!${badge(type)}.classList.contains('hidden')`);
