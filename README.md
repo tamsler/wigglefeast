@@ -18,12 +18,12 @@ A single-player snake-style .io game you can play offline. Eat, grow, and outsma
 - **Hold click / Space / W / ↑**: boost (burns mass, drops food behind you); boosting worms show double arrows in front of their head, and a **BOOST** badge shows next to your score
 - **A / D or ← / →**: keyboard steering
 - **P / Esc**: pause
-- **Touch**: drag to steer; hold the boost button (bottom right) or add a second finger to boost; the pause button is top left
+- **Touch**: drag to steer; hold the boost button (bottom right) or add a second finger to boost; the pause button is top right, beside the leaderboard
 
 Run into another worm's body and you die. Make others run into yours and eat what they leave behind.
 Head-on collisions are won by the bigger worm. The red ring is the arena edge.
 
-Power-ups: 🧲 magnet · x2 / x5 food multiplier · ⚡ free boost + speed · 🔭 zoom out · 🌀 tight turns (16s each).
+Power-ups: 🧲 magnet · x2 / x5 food multiplier · ⚡ free boost + speed · 🔭 zoom out · 🌀 tight turns (16s each). Active power-ups show as badges next to the minimap (top left); a badge's ring drains as time runs out, and it blinks in the last 3 seconds.
 
 ## Saving
 

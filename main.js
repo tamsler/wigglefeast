@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const { Game, SKINS, SAVE_APP_IDS, validateSnapshot, TAU } = window.WormEngine;
+  const { Game, CFG, SKINS, SAVE_APP_IDS, validateSnapshot, TAU } = window.WormEngine;
   const $ = (id) => document.getElementById(id);
 
   const canvas = $('game');
@@ -1148,15 +1148,38 @@
     top.forEach((w, i) => { html += row(i + 1, w, w === p); });
     if (!p.dead && !top.includes(p)) html += `<li class="gap">···</li>` + row(game.rankOf(p), p, true);
     $('lb').innerHTML = html;
+  }
 
-    let pw = '';
-    if (!p.dead) for (const type in POWERUP_INFO) {
-      const left = p.pw[type];
-      if (left <= 0) continue;
-      const info = POWERUP_INFO[type];
-      pw += `<div class="pw" style="color:${info.color}"><span class="ic">${info.icon}</span><span class="bar"><i style="width:${(left / 16) * 100}%"></i></span>${Math.ceil(left)}s</div>`;
+  // Power-up badges (#63): one per power-up type, built once in POWERUP_INFO order and synced
+  // every frame, so the ring drains smoothly and the "about to end" blink is never restarted.
+  const badges = {};
+  for (const type in POWERUP_INFO) {
+    const info = POWERUP_INFO[type], el = document.createElement('div'), icon = document.createElement('span');
+    el.className = 'badge hidden';
+    el.dataset.type = type;
+    el.title = info.label;
+    el.style.setProperty('--c', info.color);
+    icon.textContent = info.icon;
+    if (/^x\d/.test(info.icon)) icon.className = 'txt';
+    el.appendChild(icon);
+    $('powerups').appendChild(el);
+    badges[type] = { el, shown: false, left: -1, ending: 0 };
+  }
+  function syncBadges() {
+    const p = game.player;
+    for (const type in badges) {
+      const b = badges[type], left = p && !p.dead ? p.pw[type] : 0, show = left > 0;
+      if (show !== b.shown) { b.shown = show; b.el.classList.toggle('hidden', !show); }
+      if (!show) continue;
+      const frac = Math.round(Math.min(1, left / CFG.POWERUP_TIME) * 200) / 200;
+      if (frac !== b.left) { b.left = frac; b.el.style.setProperty('--left', frac); }
+      const ending = left <= 1 ? 2 : left <= 3 ? 1 : 0; // blink in the last 3 s, faster in the last 1 s
+      if (ending !== b.ending) {
+        b.ending = ending;
+        b.el.classList.toggle('ending', ending > 0);
+        b.el.classList.toggle('ending-fast', ending === 2);
+      }
     }
-    $('powerups').innerHTML = pw;
   }
   function row(rank, w, me) {
     return `<li class="${me ? 'me' : ''}"><span class="r">${rank}</span><span class="n">${escapeHtml(w.name)}</span><span class="m">${Math.round(w.mass).toLocaleString()}</span></li>`;
@@ -1194,6 +1217,7 @@
     syncUpdateBanner();
     syncTouchControls();
     syncBoostBadge();
+    syncBadges();
     requestAnimationFrame(frame);
   }
 
