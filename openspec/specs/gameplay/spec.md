@@ -37,7 +37,7 @@ Worms SHALL move forward continuously, turn toward a target angle at a limited r
 
 #### Scenario: Massive worm
 - **WHEN** a worm grows from mass 10,000 to 50,000
-- **THEN** its radius grows past 62, its body grows less than twice as long, and it stays shorter than the edge of a 30-bot arena
+- **THEN** its radius grows past 62, its body grows less than twice as long, and it stays shorter than the circumference of a 30-bot arena (about 22,600)
 
 #### Scenario: Camera follows a massive player
 - **WHEN** the player's worm grows past mass 10,000
