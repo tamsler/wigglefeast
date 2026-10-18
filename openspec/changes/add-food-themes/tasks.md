@@ -19,6 +19,10 @@
 - [x] 4.1 Mention food themes in the README; bump `VERSION` in `sw.js` to the next minor version (no new files); run `node --test "tests/**/*.test.js"` and verify every test passes and `.github/scripts/check-version.sh main` passes after committing
 - [ ] 4.2 Manual check on desktop and a phone: every theme's items are recognisable at small and large sizes, the picker is easy to use, and frame rate is unchanged; verify by noting the result in the PR
 
+## 5. Picker follow-up (#67)
+
+- [x] 5.1 Hide the theme button that Auto currently resolves to, unless it is the explicit choice, and lay the row out as a flex row; verify with date-independent browser tests (compute the season in the page) that with Auto chosen that theme's button is hidden and the others are shown, and that with that theme chosen explicitly its button is shown and selected
+
 ## Workflow follow-up
 
 - Open a PR that closes tamsler/wigglefeast#64, run the `pr-reviewer` agent, address its findings, and merge once checks pass.

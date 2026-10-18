@@ -187,9 +187,9 @@ h2 { margin: 0 0 14px; font-size: 26px; }
 #skins button.on { border-color: #fff; transform: scale(1.08); }
 
 /* Food theme picker (#64): one compact row of six item buttons. */
-#themes { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+#themes { display: flex; gap: 6px; } /* five or six buttons sharing the row (#67) */
 #themes button {
-  position: relative; height: 40px; padding: 0; display: grid; place-items: center; cursor: pointer;
+  position: relative; flex: 1 1 0; min-width: 0; height: 40px; padding: 0; display: grid; place-items: center; cursor: pointer;
   background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); border-radius: 10px;
 }
 #themes button canvas { width: 30px; height: 30px; }
