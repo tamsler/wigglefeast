@@ -376,7 +376,8 @@ test('a new world starts mostly small, with fewer big bots on easier levels (#16
     const { bigShare: want, bigMax } = DIFFICULTY[difficulty];
     // 360 bots per level: the share of big bots lands well within +-0.08 of the setting.
     assert.ok(Math.abs(big - want) < 0.08, `${difficulty}: ${(big * 100).toFixed(0)}% start big, expected about ${want * 100}%`);
-    assert.ok(masses[masses.length / 2] < 200, `${difficulty}: median start mass ${masses[masses.length / 2].toFixed(0)}`);
+    const median = masses[Math.floor(masses.length / 2)];
+    assert.ok(median < 200, `${difficulty}: median start mass ${median.toFixed(0)}`);
     assert.ok(masses[masses.length - 1] <= bigMax, `${difficulty}: a bot started above ${bigMax}`);
     bigShare[difficulty] = want;
   }
