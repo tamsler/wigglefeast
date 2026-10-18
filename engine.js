@@ -161,7 +161,7 @@
 
   // Limits shared by save validation and the simulation, so a world loaded from a
   // valid save can never grow into one that fails validation (#31).
-  const MAX_MASS = 1e6; // ~7,200 body segments; normal play stays far below (mass sheds above 1500)
+  const MAX_MASS = 1e6; // ~1,150 body segments (#82); normal play stays far below (mass sheds above 10,000)
   const MAX_SEGMENTS = 20000;
   const MAX_FOOD = 50000;
   const MAX_ID = 1e9;
