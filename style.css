@@ -186,6 +186,18 @@ h2 { margin: 0 0 14px; font-size: 26px; }
 @media (max-width: 420px) { #skins { grid-template-columns: repeat(6, 1fr); } }
 #skins button.on { border-color: #fff; transform: scale(1.08); }
 
+/* Food theme picker (#64): one compact row of six item buttons. */
+#themes { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+#themes button {
+  position: relative; height: 40px; padding: 0; display: grid; place-items: center; cursor: pointer;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); border-radius: 10px;
+}
+#themes button canvas { width: 30px; height: 30px; }
+#themes button span {
+  position: absolute; right: 2px; bottom: 2px; padding: 0 3px; border-radius: 4px;
+  font: 800 8px/1.4 system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase; color: #10142a; background: #ffd60a;
+}
+#themes button.on { background: #4361ee; border-color: #4cc9f0; }
 input[type=range] { width: 100%; accent-color: #4cc9f0; }
 
 .seg { display: flex; gap: 6px; }
@@ -248,7 +260,14 @@ kbd {
   .overlay { padding-top: calc(8px + env(safe-area-inset-top)); padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
   .panel { padding: 20px 22px 16px; }
   .tag { margin: 2px 0 12px; }
-  .help { margin-top: 10px; }
+  .help { margin-top: 10px; line-height: 1.6; }
+  /* Tighter rows so the menu, with the Food picker (#64), fits a laptop screen without scrolling. */
+  h1 { font-size: 38px; }
+  .label { margin: 9px 0 5px; }
+  #name { padding: 9px 12px; }
+  .seg button { padding: 7px 0; }
+  button.primary { margin-top: 12px; padding: 11px; }
+  button.ghost { margin-top: 7px; padding: 10px; }
 }
 
 /* Short screens (phones in landscape): tighten the menus so less scrolling is needed. */

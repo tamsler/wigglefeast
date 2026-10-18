@@ -51,13 +51,14 @@
   // Rebuilt from checked fields: a corrupted stored value must not stop startup (#26).
   const settings = {};
   function loadSettings() {
-    Object.assign(settings, { name: '', skin: 0, botCount: 30, difficulty: 'normal' });
+    Object.assign(settings, { name: '', skin: 0, botCount: 30, difficulty: 'normal', theme: 'auto' });
     const s = store.get('settings', null);
     if (s && typeof s === 'object') {
       if (typeof s.name === 'string') settings.name = s.name.slice(0, 16);
       if (Number.isInteger(s.skin) && s.skin >= 0 && s.skin < SKINS.length) settings.skin = s.skin;
       if (Number.isInteger(s.botCount) && s.botCount >= 5 && s.botCount <= 60) settings.botCount = s.botCount;
       if (['easy', 'normal', 'hard'].includes(s.difficulty)) settings.difficulty = s.difficulty;
+      if (['auto', 'classic', 'halloween', 'christmas', 'snacks', 'tech'].includes(s.theme)) settings.theme = s.theme; // #64
     }
   }
   loadSettings();
@@ -315,6 +316,189 @@
     return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
   }
 
+  // ---------------------------------------------------------------------------
+  // Food themes (#64): food drawn as themed items instead of plain dots. Drawing only:
+  // values, sizes, pickup and saves are unchanged. Each item is drawn once, in code, into a
+  // cached sprite; themed food is its colour glow plus the item. Classic is the plain glow.
+  const THEME_NAMES = { auto: 'Auto', classic: 'Classic', halloween: 'Halloween', christmas: 'Christmas', snacks: 'Snacks', tech: 'Tech' };
+  const INK = '#1a1024';
+  // Fill then outline the current path, so items read on the dark arena.
+  function paint(g, s, fill) {
+    g.fillStyle = fill;
+    g.fill();
+    g.lineWidth = s * 0.045;
+    g.strokeStyle = INK;
+    g.stroke();
+  }
+  function roundRect(g, x, y, w, h, r) {
+    g.beginPath();
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+  }
+  function shine(g, x, y, r) {
+    g.fillStyle = 'rgba(255,255,255,0.55)';
+    g.beginPath();
+    g.ellipse(x, y, r, r * 0.6, -0.6, 0, TAU);
+    g.fill();
+  }
+  // Items per theme, in tier order: two small, one medium, one large.
+  const FOOD_THEMES = {
+    halloween: [
+      { name: 'candy corn', draw(g, s) {
+        g.beginPath(); g.moveTo(s * 0.5, s * 0.1); g.quadraticCurveTo(s * 0.86, s * 0.84, s * 0.8, s * 0.86);
+        g.quadraticCurveTo(s * 0.5, s * 0.94, s * 0.2, s * 0.86); g.quadraticCurveTo(s * 0.14, s * 0.84, s * 0.5, s * 0.1); g.closePath();
+        g.save(); g.clip();
+        for (const [y0, y1, c] of [[0, 0.42, '#fff6e5'], [0.42, 0.66, '#ff8c1a'], [0.66, 1, '#ffd23f']]) { g.fillStyle = c; g.fillRect(0, s * y0, s, s * (y1 - y0)); }
+        g.restore(); g.lineWidth = s * 0.045; g.strokeStyle = INK; g.stroke();
+      } },
+      { name: 'wrapped candy', draw(g, s) {
+        for (const d of [-1, 1]) { g.beginPath(); g.moveTo(s * 0.5 + d * s * 0.22, s * 0.5); g.lineTo(s * 0.5 + d * s * 0.44, s * 0.3); g.lineTo(s * 0.5 + d * s * 0.44, s * 0.7); g.closePath(); paint(g, s, '#b388ff'); }
+        g.beginPath(); g.ellipse(s * 0.5, s * 0.5, s * 0.25, s * 0.19, 0, 0, TAU); paint(g, s, '#7b2cbf');
+        g.save(); g.clip(); g.strokeStyle = '#ff8c1a'; g.lineWidth = s * 0.07;
+        for (const x of [0.38, 0.5, 0.62]) { g.beginPath(); g.moveTo(s * (x - 0.08), s * 0.72); g.lineTo(s * (x + 0.08), s * 0.28); g.stroke(); }
+        g.restore(); shine(g, s * 0.42, s * 0.4, s * 0.05);
+      } },
+      { name: 'lollipop', draw(g, s) {
+        roundRect(g, s * 0.46, s * 0.5, s * 0.08, s * 0.42, s * 0.03); paint(g, s, '#fff6e5');
+        g.beginPath(); g.arc(s * 0.5, s * 0.38, s * 0.28, 0, TAU); paint(g, s, '#ff8c1a');
+        g.strokeStyle = '#7b2cbf'; g.lineWidth = s * 0.06; g.beginPath();
+        for (let a = 0; a < TAU * 2.2; a += 0.2) { const r = s * 0.03 + a * s * 0.017; g.lineTo(s * 0.5 + Math.cos(a) * r, s * 0.38 + Math.sin(a) * r); }
+        g.stroke(); shine(g, s * 0.4, s * 0.27, s * 0.05);
+      } },
+      { name: 'pumpkin', draw(g, s) {
+        for (const [x, w] of [[0.3, 0.2], [0.7, 0.2], [0.5, 0.24]]) { g.beginPath(); g.ellipse(s * x, s * 0.58, s * w, s * 0.3, 0, 0, TAU); paint(g, s, '#ff7b1a'); }
+        roundRect(g, s * 0.45, s * 0.14, s * 0.1, s * 0.16, s * 0.03); paint(g, s, '#4f772d');
+        g.fillStyle = '#2a1200';
+        for (const d of [-1, 1]) { g.beginPath(); g.moveTo(s * (0.5 + d * 0.08), s * 0.5); g.lineTo(s * (0.5 + d * 0.2), s * 0.5); g.lineTo(s * (0.5 + d * 0.14), s * 0.4); g.closePath(); g.fill(); }
+        g.beginPath(); g.moveTo(s * 0.3, s * 0.64);
+        for (let i = 1; i <= 6; i++) g.lineTo(s * (0.3 + i * 0.0667), s * (i % 2 ? 0.74 : 0.66));
+        g.lineTo(s * 0.5, s * 0.8); g.closePath(); g.fill();
+      } },
+    ],
+    christmas: [
+      { name: 'candy cane', draw(g, s) {
+        const cane = () => { g.beginPath(); g.moveTo(s * 0.42, s * 0.9); g.lineTo(s * 0.42, s * 0.36); g.arc(s * 0.56, s * 0.36, s * 0.14, Math.PI, 0); };
+        g.lineCap = 'round';
+        cane(); g.lineWidth = s * 0.2; g.strokeStyle = INK; g.stroke();
+        cane(); g.lineWidth = s * 0.14; g.strokeStyle = '#ffffff'; g.stroke();
+        cane(); g.setLineDash([s * 0.08, s * 0.08]); g.strokeStyle = '#e63946'; g.stroke(); g.setLineDash([]);
+      } },
+      { name: 'ornament', draw(g, s) {
+        roundRect(g, s * 0.42, s * 0.12, s * 0.16, s * 0.12, s * 0.02); paint(g, s, '#ffd166');
+        g.beginPath(); g.arc(s * 0.5, s * 0.56, s * 0.32, 0, TAU); paint(g, s, '#e63946');
+        g.strokeStyle = '#ffd166'; g.lineWidth = s * 0.05; g.beginPath();
+        for (let i = 0; i <= 8; i++) g.lineTo(s * (0.2 + i * 0.075), s * (i % 2 ? 0.5 : 0.6));
+        g.stroke(); shine(g, s * 0.38, s * 0.42, s * 0.07);
+      } },
+      { name: 'gingerbread', draw(g, s) {
+        g.lineCap = 'round';
+        for (const [x0, y0, x1, y1] of [[0.5, 0.45, 0.2, 0.42], [0.5, 0.45, 0.8, 0.42], [0.5, 0.6, 0.32, 0.88], [0.5, 0.6, 0.68, 0.88]]) {
+          g.beginPath(); g.moveTo(s * x0, s * y0); g.lineTo(s * x1, s * y1); g.lineWidth = s * 0.19; g.strokeStyle = INK; g.stroke(); g.lineWidth = s * 0.14; g.strokeStyle = '#b5651d'; g.stroke();
+        }
+        g.beginPath(); g.ellipse(s * 0.5, s * 0.56, s * 0.16, s * 0.22, 0, 0, TAU); paint(g, s, '#b5651d');
+        g.beginPath(); g.arc(s * 0.5, s * 0.26, s * 0.15, 0, TAU); paint(g, s, '#b5651d');
+        g.fillStyle = '#ffffff';
+        for (const [x, y] of [[0.45, 0.24], [0.55, 0.24]]) { g.beginPath(); g.arc(s * x, s * y, s * 0.025, 0, TAU); g.fill(); }
+        g.fillStyle = '#e63946';
+        for (const y of [0.5, 0.62]) { g.beginPath(); g.arc(s * 0.5, s * y, s * 0.035, 0, TAU); g.fill(); }
+        g.strokeStyle = '#ffffff'; g.lineWidth = s * 0.025; g.beginPath(); g.arc(s * 0.5, s * 0.28, s * 0.06, 0.2, Math.PI - 0.2); g.stroke();
+      } },
+      { name: 'gift', draw(g, s) {
+        roundRect(g, s * 0.16, s * 0.34, s * 0.68, s * 0.54, s * 0.05); paint(g, s, '#2a9d8f');
+        g.fillStyle = '#e63946'; g.fillRect(s * 0.44, s * 0.34, s * 0.12, s * 0.54); g.fillRect(s * 0.16, s * 0.54, s * 0.68, s * 0.1);
+        roundRect(g, s * 0.16, s * 0.34, s * 0.68, s * 0.54, s * 0.05); g.lineWidth = s * 0.045; g.strokeStyle = INK; g.stroke();
+        for (const d of [-1, 1]) { g.beginPath(); g.ellipse(s * (0.5 + d * 0.13), s * 0.26, s * 0.13, s * 0.08, d * 0.5, 0, TAU); paint(g, s, '#e63946'); }
+        g.beginPath(); g.arc(s * 0.5, s * 0.3, s * 0.05, 0, TAU); paint(g, s, '#e63946');
+      } },
+    ],
+    snacks: [
+      { name: 'cherry', draw(g, s) {
+        g.strokeStyle = '#4f772d'; g.lineWidth = s * 0.05; g.lineCap = 'round';
+        for (const x of [0.34, 0.64]) { g.beginPath(); g.moveTo(s * x, s * 0.56); g.quadraticCurveTo(s * 0.5, s * 0.3, s * 0.56, s * 0.12); g.stroke(); }
+        for (const x of [0.34, 0.64]) { g.beginPath(); g.arc(s * x, s * 0.66, s * 0.18, 0, TAU); paint(g, s, '#d00000'); shine(g, s * (x - 0.06), s * 0.6, s * 0.045); }
+      } },
+      { name: 'cookie', draw(g, s) {
+        g.beginPath(); g.arc(s * 0.5, s * 0.5, s * 0.36, 0, TAU); paint(g, s, '#d9a45b');
+        g.fillStyle = '#4a2511';
+        for (const [x, y] of [[0.38, 0.38], [0.6, 0.34], [0.5, 0.56], [0.34, 0.62], [0.66, 0.6], [0.56, 0.74]]) { g.beginPath(); g.arc(s * x, s * y, s * 0.045, 0, TAU); g.fill(); }
+      } },
+      { name: 'donut', draw(g, s) {
+        const ring = (r1, r2) => { g.beginPath(); g.arc(s * 0.5, s * 0.5, s * r1, 0, TAU); g.moveTo(s * (0.5 + r2), s * 0.5); g.arc(s * 0.5, s * 0.5, s * r2, 0, TAU, true); };
+        ring(0.38, 0.12); g.fillStyle = '#e0a96d'; g.fill('evenodd'); g.lineWidth = s * 0.045; g.strokeStyle = INK; g.stroke();
+        ring(0.31, 0.16); g.fillStyle = '#ff7eb6'; g.fill('evenodd');
+        const cols = ['#ffd166', '#4cc9f0', '#ffffff', '#8ac926'];
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * TAU + 0.3, r = s * (0.21 + (i % 2) * 0.05), x = s * 0.5 + Math.cos(a) * r, y = s * 0.5 + Math.sin(a) * r;
+          g.save(); g.translate(x, y); g.rotate(a * 2); g.fillStyle = cols[i % 4]; g.fillRect(-s * 0.03, -s * 0.01, s * 0.06, s * 0.02); g.restore();
+        }
+      } },
+      { name: 'cake slice', draw(g, s) {
+        g.beginPath(); g.moveTo(s * 0.14, s * 0.84); g.lineTo(s * 0.86, s * 0.84); g.lineTo(s * 0.86, s * 0.36); g.lineTo(s * 0.14, s * 0.62); g.closePath();
+        g.save(); g.clip();
+        for (const [y0, y1, c] of [[0.3, 0.46, '#fff6e5'], [0.46, 0.6, '#ffd166'], [0.6, 0.66, '#ff7eb6'], [0.66, 0.9, '#ffd166']]) { g.fillStyle = c; g.fillRect(0, s * y0, s, s * (y1 - y0)); }
+        g.restore(); g.lineWidth = s * 0.045; g.strokeStyle = INK; g.stroke();
+        g.beginPath(); g.arc(s * 0.72, s * 0.3, s * 0.09, 0, TAU); paint(g, s, '#d00000'); shine(g, s * 0.69, s * 0.27, s * 0.025);
+      } },
+    ],
+    tech: [
+      { name: 'microchip', draw(g, s) {
+        g.fillStyle = '#c0c6d0';
+        for (let i = 0; i < 4; i++) {
+          const p = s * (0.3 + i * 0.13);
+          g.fillRect(p - s * 0.025, s * 0.1, s * 0.05, s * 0.8); g.fillRect(s * 0.1, p - s * 0.025, s * 0.8, s * 0.05);
+        }
+        roundRect(g, s * 0.2, s * 0.2, s * 0.6, s * 0.6, s * 0.06); paint(g, s, '#2b2d42');
+        roundRect(g, s * 0.36, s * 0.36, s * 0.28, s * 0.28, s * 0.03); paint(g, s, '#ffd166');
+      } },
+      { name: 'battery', draw(g, s) {
+        roundRect(g, s * 0.4, s * 0.1, s * 0.2, s * 0.1, s * 0.02); paint(g, s, '#c0c6d0');
+        roundRect(g, s * 0.26, s * 0.18, s * 0.48, s * 0.72, s * 0.08); paint(g, s, '#2b2d42');
+        g.fillStyle = '#70e000';
+        for (let i = 0; i < 3; i++) { roundRect(g, s * 0.33, s * (0.62 - i * 0.18), s * 0.34, s * 0.14, s * 0.03); g.fill(); }
+      } },
+      { name: 'floppy disk', draw(g, s) {
+        g.beginPath(); g.moveTo(s * 0.14, s * 0.14); g.lineTo(s * 0.74, s * 0.14); g.lineTo(s * 0.86, s * 0.26); g.lineTo(s * 0.86, s * 0.86); g.lineTo(s * 0.14, s * 0.86); g.closePath(); paint(g, s, '#4361ee');
+        roundRect(g, s * 0.3, s * 0.14, s * 0.4, s * 0.24, s * 0.02); paint(g, s, '#c0c6d0');
+        g.fillStyle = '#2b2d42'; g.fillRect(s * 0.54, s * 0.18, s * 0.08, s * 0.16);
+        roundRect(g, s * 0.24, s * 0.52, s * 0.52, s * 0.3, s * 0.03); paint(g, s, '#ffffff');
+        g.fillStyle = '#9aa3c4'; g.fillRect(s * 0.3, s * 0.6, s * 0.4, s * 0.03); g.fillRect(s * 0.3, s * 0.68, s * 0.3, s * 0.03);
+      } },
+      { name: 'gear', draw(g, s) {
+        g.beginPath();
+        const teeth = 8;
+        for (let i = 0; i < teeth * 2; i++) {
+          const a0 = (i / (teeth * 2)) * TAU, a1 = ((i + 1) / (teeth * 2)) * TAU, r = s * (i % 2 ? 0.3 : 0.4);
+          g.arc(s * 0.5, s * 0.5, r, a0, a1);
+        }
+        g.closePath(); g.moveTo(s * 0.62, s * 0.5); g.arc(s * 0.5, s * 0.5, s * 0.12, 0, TAU, true);
+        g.fillStyle = '#ffb703'; g.fill('evenodd'); g.lineWidth = s * 0.045; g.strokeStyle = INK; g.stroke();
+        shine(g, s * 0.36, s * 0.32, s * 0.05);
+      } },
+    ],
+  };
+  const itemSprites = new Map(); // 'theme:index' -> canvas, made once
+  function itemSprite(theme, i) {
+    const key = theme + ':' + i;
+    let c = itemSprites.get(key);
+    if (c) return c;
+    c = document.createElement('canvas');
+    c.width = c.height = 96;
+    const g = c.getContext('2d');
+    g.lineJoin = 'round';
+    FOOD_THEMES[theme][i].draw(g, 96);
+    itemSprites.set(key, c);
+    return c;
+  }
+  // Which item a piece of food shows: by value (small, medium, large), and for small food by its
+  // phase, which is fixed for the food's life and saved with it, so the item never changes.
+  const itemIndex = (f) => (f.v < 3 ? (f.ph < Math.PI ? 0 : 1) : f.v < 7 ? 2 : 3);
+  const resolveTheme = () => (settings.theme === 'auto' ? window.WormEngine.seasonalTheme(new Date()) : settings.theme);
+  let activeTheme = 'classic';
+
   const pwSprites = {};
   for (const type in POWERUP_INFO) {
     const info = POWERUP_INFO[type];
@@ -543,6 +727,7 @@
   function startPlaying() {
     settings.name = $('name').value.trim().slice(0, 16);
     if (isActive()) store.set('settings', settings);
+    activeTheme = resolveTheme();
     if (!game || game.settings.botCount !== settings.botCount || game.settings.difficulty !== settings.difficulty) newGame();
     const p = game.spawnPlayer(settings.name || 'You', settings.skin);
     cam.x = p.x; cam.y = p.y;
@@ -735,6 +920,29 @@
     $('skinName').textContent = SKINS[settings.skin].name;
     $('botCountVal').textContent = settings.botCount;
     document.querySelectorAll('#difficulty button').forEach((b) => b.classList.toggle('on', b.dataset.v === settings.difficulty));
+    activeTheme = resolveTheme();
+    [...$('themes').children].forEach((b) => b.classList.toggle('on', b.dataset.theme === settings.theme));
+    $('themeName').textContent = settings.theme === 'auto' ? `Auto · ${THEME_NAMES[activeTheme]}` : THEME_NAMES[settings.theme];
+  }
+  // Food theme picker (#64): each button shows its theme's large item; Auto shows this season's.
+  function themeIcon(theme) {
+    const c = document.createElement('canvas'), size = 32, dpr = Math.min(2, window.devicePixelRatio || 1);
+    c.width = c.height = Math.round(size * dpr);
+    const g = c.getContext('2d');
+    const shown = theme === 'auto' ? window.WormEngine.seasonalTheme(new Date()) : theme;
+    if (shown === 'classic') g.drawImage(foodSprite('#ff2e88'), 0, 0, c.width, c.height);
+    else g.drawImage(itemSprite(shown, 3), c.width * 0.08, c.width * 0.08, c.width * 0.84, c.width * 0.84);
+    return c;
+  }
+  for (const theme of Object.keys(THEME_NAMES)) {
+    const b = document.createElement('button');
+    b.dataset.theme = theme;
+    b.title = theme === 'auto' ? 'Auto: follows the season' : THEME_NAMES[theme];
+    b.setAttribute('aria-label', b.title);
+    b.appendChild(themeIcon(theme));
+    if (theme === 'auto') { const tag = document.createElement('span'); tag.textContent = 'Auto'; b.appendChild(tag); }
+    b.addEventListener('click', () => { settings.theme = theme; if (isActive()) store.set('settings', settings); refreshMenu(); });
+    $('themes').appendChild(b);
   }
   refreshMenu();
   $('play').addEventListener('click', startPlaying);
@@ -949,7 +1157,12 @@
     boostArrowsDrawn++;
   }
   // Read-only hook for the browser tests; nothing in the game uses it.
-  window.wigglefeastDebug = { boostArrows: () => boostArrowsDrawn };
+  window.wigglefeastDebug = {
+    boostArrows: () => boostArrowsDrawn,
+    theme: () => activeTheme, // #64
+    itemSprites: () => itemSprites.size,
+    foodItem: (f) => (activeTheme === 'classic' ? 'dot' : FOOD_THEMES[activeTheme][itemIndex(f)].name),
+  };
 
   function tracePath(sx, sy, from, to) {
     ctx.beginPath();
@@ -1041,14 +1254,24 @@
     ctx.strokeStyle = `rgba(255, 60, 100, ${0.55 + 0.2 * Math.sin(t * 3)})`;
     ctx.stroke();
 
-    // Food
+    // Food: a glow in the food's colour, plus the theme's item unless the theme is Classic (#64)
+    const themed = activeTheme !== 'classic';
     for (const f of game.food) {
       if (f.x < view.x0 || f.x > view.x1 || f.y < view.y0 || f.y > view.y1) continue;
-      const D = f.r * 5 * (1 + 0.12 * Math.sin(t * 3 + f.ph));
-      if (f.life < 3) ctx.globalAlpha = Math.max(0, f.life / 3);
-      ctx.drawImage(foodSprite(f.c), f.x - D / 2, f.y - D / 2, D, D);
-      if (f.life < 3) ctx.globalAlpha = 1;
+      const pulse = 1 + 0.12 * Math.sin(t * 3 + f.ph), a = f.life < 3 ? Math.max(0, f.life / 3) : 1;
+      if (!themed) {
+        const D = f.r * 5 * pulse;
+        ctx.globalAlpha = a;
+        ctx.drawImage(foodSprite(f.c), f.x - D / 2, f.y - D / 2, D, D);
+      } else {
+        const G = f.r * 4.8 * pulse, D = f.r * 4 * pulse; // items drawn a bit larger than dots so small ones read
+        ctx.globalAlpha = a * 0.55;
+        ctx.drawImage(foodSprite(f.c), f.x - G / 2, f.y - G / 2, G, G);
+        ctx.globalAlpha = a;
+        ctx.drawImage(itemSprite(activeTheme, itemIndex(f)), f.x - D / 2, f.y - D / 2, D, D);
+      }
     }
+    ctx.globalAlpha = 1;
 
     // Power-ups
     for (const p of game.powerups) {
