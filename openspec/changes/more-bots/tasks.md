@@ -2,9 +2,9 @@
 
 ## 1. Engine
 
-- [ ] 1.1 Change the arena radius to `bc ≤ 60 ? 1800 + 60·bc : 5400·√(bc/60)` and accept 5–150 bots in `validateSnapshot`; verify with engine tests that the radius is unchanged for 5–60 bots, about 8538 at 150, and that food and power-up density matches a 30-bot world
-- [ ] 1.2 Add engine tests: a 150-bot world saves, validates and restores (151 is rejected); a 150-bot Expert simulation stays healthy (bot count, finite state) within the tick budget; verify with `node --test tests/engine.test.js`
-- [ ] 1.3 Run `node tools/balance.js --bots 150` on every level; verify that churn per bot, top-bot share and stand-in hunting pressure stay close to the 60-bot numbers (bot density is unchanged), and note the ms per tick
+- [x] 1.1 Change the arena radius to `bc ≤ 60 ? 1800 + 60·bc : 5400·√(bc/60)` and accept 5–150 bots in `validateSnapshot`; verify with engine tests that the radius is unchanged for 5–60 bots, about 8538 at 150, and that food and power-up density matches a 30-bot world
+- [x] 1.2 Add engine tests: a 150-bot world saves, validates and restores (151 is rejected); a 150-bot Expert simulation stays healthy (bot count, finite state) within the tick budget; verify with `node --test tests/engine.test.js`
+- [x] 1.3 Run `node tools/balance.js --bots 150` on every level; verify that churn per bot, top-bot share and stand-in hunting pressure stay close to the 60-bot numbers (bot density is unchanged), and note the ms per tick
 
 ## 2. Menu and settings
 

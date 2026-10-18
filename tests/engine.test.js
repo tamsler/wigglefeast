@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 require('../engine.js');
-const { Game, Worm, SKINS, DIFFICULTY, DIFFICULTIES, TACTICS, botThink, knowsTactic, predictHead, validateSnapshot } = globalThis.WormEngine;
+const { Game, Worm, SKINS, DIFFICULTY, DIFFICULTIES, TACTICS, MAX_BOTS, arenaRadius, CFG, botThink, knowsTactic, predictHead, validateSnapshot } = globalThis.WormEngine;
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const fixture = () => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v1.json'), 'utf8'));
@@ -733,4 +733,47 @@ test('scavenging bots head for the remains of a big worm that just died (#78)', 
   };
   assert.equal(contested(false), 'scavenge', 'uncontested, these remains are worth it');
   assert.notEqual(contested(true), 'scavenge');
+});
+
+// --- More bots (#81) ----------------------------------------------------------
+
+test('the arena keeps its size up to 60 bots and grows by area above that (#81)', () => {
+  for (let bots = 5; bots <= 60; bots++) assert.equal(arenaRadius(bots), 1800 + 60 * bots, `${bots} bots`);
+  assert.equal(new Game({ botCount: 30 }).R, 3600);
+  assert.ok(Math.abs(arenaRadius(150) - 8538) < 1, `150 bots: ${arenaRadius(150).toFixed(0)}`);
+  for (let bots = 61; bots <= MAX_BOTS; bots++) {
+    assert.ok(arenaRadius(bots) > arenaRadius(bots - 1), 'keeps growing');
+    // Each bot beyond 60 adds the same area as the 60th did.
+    const perBot = (Math.PI * arenaRadius(bots) ** 2) / bots;
+    assert.ok(Math.abs(perBot / ((Math.PI * 5400 ** 2) / 60) - 1) < 1e-9, `${bots} bots: area per bot`);
+  }
+  // Food and power-ups are as dense in a 150-bot world as in a 30-bot one.
+  const small = new Game({ botCount: 30 }), big = new Game({ botCount: 150 });
+  const density = (g, n) => n / (Math.PI * g.R * g.R);
+  assert.ok(Math.abs(density(big, big.foodTarget) / density(small, small.foodTarget) - 1) < 0.01, 'food density');
+  assert.ok(Math.abs(density(big, big.powerupTarget) / density(small, small.powerupTarget) - 1) < 0.02, 'power-up density');
+  assert.equal(big.worms.filter((w) => w.ai).length, 150);
+});
+
+test('a 150-bot world saves, validates and restores; 151 bots is rejected (#81)', () => {
+  const g = new Game({ botCount: MAX_BOTS, difficulty: 'normal' });
+  for (let i = 0; i < 120; i++) g.update(1 / 60);
+  const snap = clone(g);
+  assert.doesNotThrow(() => validateSnapshot(snap));
+  const g2 = new Game(null, snap);
+  assert.equal(g2.R, g.R);
+  assert.equal(g2.worms.length, g.worms.length);
+  assert.doesNotThrow(() => validateSnapshot(clone(g2)), 'and saves again');
+  const tooMany = clone(snap);
+  tooMany.settings.botCount = MAX_BOTS + 1;
+  assert.throws(() => validateSnapshot(tooMany), /settings/);
+});
+
+test('a 150-bot Expert world stays healthy within the tick budget (#81)', () => {
+  const { g, msPerTick, shortfalls, avgBots } = simulate(MAX_BOTS, 'expert', 20);
+  assert.ok(g.worms.every((w) => Number.isFinite(w.mass) && w.sx.every(Number.isFinite)), 'finite state');
+  assert.equal(shortfalls, 0, 'living + queued bots always cover the target');
+  assert.ok(avgBots >= MAX_BOTS * 0.8, `average ${avgBots.toFixed(0)} bots alive`);
+  // Same loose limit as the other simulation tests; locally about 2 ms.
+  assert.ok(msPerTick < 25, `${msPerTick.toFixed(2)} ms per tick is far too slow`);
 });
