@@ -20,7 +20,7 @@ A single-player snake-style .io game you can play offline. Eat, grow, and outsma
 - **P / Esc**: pause
 - **Touch**: drag to steer; hold the boost button (bottom right) or add a second finger to boost; the pause button is top right, beside the leaderboard
 
-The **minimap** (top left) shades where other worms are crowded, without showing any single worm; your own position and view are marked on it.
+The **minimap** (top left) is a density map: it shades where other worms are crowded across the whole arena, without marking any single worm. You're the red-orange dot.
 
 **Growing massive:** any worm that keeps winning can grow huge. Worms only start shedding mass above 10,000 (0.2% of the excess per second), and past that size they grow mostly thicker rather than longer; the camera zooms out as you thicken.
 
