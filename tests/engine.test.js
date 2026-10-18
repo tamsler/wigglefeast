@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 require('../engine.js');
-const { Game, Worm, SKINS, validateSnapshot } = globalThis.WormEngine;
+const { Game, Worm, SKINS, DIFFICULTY, botThink, validateSnapshot } = globalThis.WormEngine;
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const fixture = () => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v1.json'), 'utf8'));
@@ -364,4 +364,63 @@ test('Auto food theme follows the season, by local date (#64)', () => {
   assert.equal(on(12, 26), 'christmas');
   assert.equal(on(12, 27), 'classic');
   assert.equal(on(3, 1), 'classic');
+});
+
+test('a new world starts mostly small, with fewer big bots on easier levels (#16)', () => {
+  const bigShare = {};
+  for (const difficulty of ['easy', 'normal', 'hard']) {
+    const masses = [];
+    for (let i = 0; i < 6; i++) masses.push(...new Game({ botCount: 60, difficulty }).worms.map((w) => w.mass));
+    masses.sort((a, b) => a - b);
+    const big = masses.filter((m) => m >= 400).length / masses.length;
+    const { bigShare: want, bigMax } = DIFFICULTY[difficulty];
+    // 360 bots per level: the share of big bots lands well within +-0.08 of the setting.
+    assert.ok(Math.abs(big - want) < 0.08, `${difficulty}: ${(big * 100).toFixed(0)}% start big, expected about ${want * 100}%`);
+    const median = masses[Math.floor(masses.length / 2)];
+    assert.ok(median < 200, `${difficulty}: median start mass ${median.toFixed(0)}`);
+    assert.ok(masses[masses.length - 1] <= bigMax, `${difficulty}: a bot started above ${bigMax}`);
+    bigShare[difficulty] = want;
+  }
+  assert.ok(bigShare.easy < bigShare.normal && bigShare.normal < bigShare.hard);
+});
+
+test('x2 and x5 multiply natural food only, not food dropped by worms (#16)', () => {
+  const eat = (natural) => {
+    const game = new Game({ botCount: 5 });
+    game.worms = []; game.powerups = [];
+    const w = new Worm({ name: 'Eater', skin: SKINS[0], mass: 100, x: 0, y: 0, angle: 0, worldR: game.R, shield: 1e9 });
+    w.pw.x5 = 10;
+    game.worms = [w];
+    game.food = [];
+    if (natural) game.food.push({ x: 0, y: 0, v: 4, r: 5, c: '#fff', life: Infinity, ph: 0, dead: false, natural: true });
+    else game.addFood(0, 0, 4, '#fff', 30);
+    game.rebuildFoodGrid();
+    game.eatFood(1 / 60);
+    assert.equal(game.food[0].dead, true, 'the food was eaten');
+    return w.mass - 100;
+  };
+  assert.equal(eat(true), 20);
+  assert.equal(eat(false), 4);
+});
+
+test('bots hunt only worms lighter than their difficulty allows (#16)', () => {
+  // A very aggressive bot thinks repeatedly next to one other worm: it may pick that worm
+  // as prey only when the worm is lighter than preyRatio times the bot's mass.
+  const hunts = (difficulty, preyMass) => {
+    const game = new Game({ botCount: 5, difficulty });
+    const bot = new Worm({ name: 'Hunter', skin: SKINS[0], mass: 200, x: 0, y: 0, angle: 0, worldR: game.R,
+      ai: { skill: 1, aggro: 1, interval: 0.1, wx: 0, wy: 0, prey: null, huntUntil: 0 } });
+    const other = new Worm({ name: 'Other', skin: SKINS[1], mass: preyMass, x: 250, y: 200, angle: 0, worldR: game.R });
+    game.worms = [bot, other]; game.food = []; game.powerups = [];
+    game.rebuildFoodGrid();
+    game.rebuildSegGrid();
+    for (let i = 0; i < 200 && !bot.ai.prey; i++) botThink(bot, game);
+    return bot.ai.prey === other;
+  };
+  for (const difficulty of ['easy', 'normal', 'hard']) {
+    const ratio = DIFFICULTY[difficulty].preyRatio;
+    assert.equal(hunts(difficulty, 200 * ratio * 0.95), true, `${difficulty}: hunts a worm just under ${ratio}x`);
+    assert.equal(hunts(difficulty, 200 * ratio * 1.05), false, `${difficulty}: leaves a worm just over ${ratio}x alone`);
+  }
+  assert.ok(DIFFICULTY.easy.preyRatio <= 1, 'easy bots never chase worms heavier than themselves');
 });

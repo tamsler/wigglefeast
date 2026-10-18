@@ -25,7 +25,7 @@ Head-on collisions are won by the bigger worm. The red ring is the arena edge.
 
 **Food themes:** pick how food looks in the menu: Classic dots, Halloween, Christmas, Snacks or Tech. **Auto** (the default) uses Halloween from 15–31 October, Christmas from 1–26 December and Classic otherwise. Themes only change how food looks.
 
-Power-ups: 🧲 magnet · x2 / x5 food multiplier · ⚡ free boost + speed · 🔭 zoom out · 🌀 tight turns (16s each). Active power-ups show as badges next to the minimap (top left); a badge's ring drains as time runs out, and it blinks in the last 3 seconds.
+Power-ups: 🧲 magnet · x2 / x5 food multiplier (arena food only, not what worms drop) · ⚡ free boost + speed · 🔭 zoom out · 🌀 tight turns (16s each). Active power-ups show as badges next to the minimap (top left); a badge's ring drains as time runs out, and it blinks in the last 3 seconds.
 
 ## Saving
 
@@ -45,7 +45,7 @@ Storage keys: `wormarena.world`, `wormarena.profile`, `wormarena.settings` (the 
 - `index.html`, `style.css`: page and UI.
 - `manifest.webmanifest`, `sw.js`, `icons/`: installable app + offline support and release versioning.
 
-Bot count (5–60) and difficulty (easy/normal/hard) are set in the menu. The arena size scales with the bot count.
+Bot count (5–60) and difficulty (easy/normal/hard) are set in the menu. The arena size scales with the bot count. Difficulty and growth numbers live at the top of `engine.js` (`CFG`, `DIFFICULTY`); `node tools/balance.js` runs headless worlds and reports survival, kills and bot sizes per difficulty, and `--set` tries other values without editing the engine.
 
 ## Releasing
 
