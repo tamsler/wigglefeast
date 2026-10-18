@@ -13,6 +13,10 @@ test('player input', async (t) => {
   const boosting = () => page.eval('window.__player.wantBoost');
   const angle = () => page.eval('window.__player.targetAngle');
 
+  await t.test('the mouse shows the normal pointer over the game, not a crosshair (#79)', async () => {
+    assert.equal(await page.eval(`getComputedStyle(document.getElementById('game')).cursor`), 'default');
+  });
+
   await t.test('releasing one boost key keeps another held key boosting (#23)', async () => {
     await page.key('keyDown', 'Space'); await page.key('keyDown', 'KeyW'); await page.key('keyUp', 'KeyW');
     await page.frames(10);
