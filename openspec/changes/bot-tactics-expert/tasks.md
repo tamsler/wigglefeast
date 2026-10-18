@@ -33,7 +33,7 @@
 ## 5. Tuning, docs and integration
 
 - [ ] 5.1 Extend `tools/balance.js`: default levels include expert, report kills by the killer's `ai.mode`, and print ms per tick; verify the report shows on Expert a lower careful-stand-in survival than on Hard and a higher share of tactic kills, and adjust the Normal/Hard shares if their numbers move too far from #16's
-- [ ] 5.2 Extend the simulation health test in `tests/engine.test.js` to cover expert, and add a 60-bot Expert run; verify it passes the existing limits (bot count, wall deaths, < 25 ms/tick)
+- [x] 5.2 Extend the simulation health test in `tests/engine.test.js` to cover expert, and add a 60-bot Expert run; verify it passes the existing limits (bot count, wall deaths, < 25 ms/tick)
 - [ ] 5.3 Update `README.md` (difficulty list, a short note on what Expert bots do) and record the tactic overview in `openspec/specs/bots` through this change's delta; verify `openspec validate bot-tactics-expert --strict` passes
 - [ ] 5.4 Bump `VERSION` in `sw.js` (minor) and run `node --test "tests/**/*.test.js"`; verify all tests pass, then open the PR (`Closes #78`), run the `pr-reviewer` agent, and address its findings
 

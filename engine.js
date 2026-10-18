@@ -541,24 +541,6 @@
       }
     }
 
-    // Scavenging: the remains of a worm that just died nearby, if they beat the best food.
-    if (knows('scavenge') && g.recentDeaths.length) {
-      const SR = FR + 400;
-      let bs = best, sx = 0, sy = 0, sm = 0, sd = 0;
-      for (const rem of g.recentDeaths) {
-        const dx = rem.x - hx, dy = rem.y - hy, d = Math.sqrt(dx * dx + dy * dy);
-        if (d > SR || rem.x * rem.x + rem.y * rem.y > edge2) continue;
-        const sc = rem.mass / (d + 200);
-        if (sc > bs) { bs = sc; sx = rem.x; sy = rem.y; sm = rem.mass * 5; sd = d; }
-      }
-      if (bs > best) {
-        goal = Math.atan2(sy - hy, sx - hx);
-        goalW = 1.3;
-        mode = 'scavenge';
-        if (sm > 300 && sd < 500 && w.mass > 60) boost = true;
-      }
-    }
-
     // Nearby heads, nearest first, for the defensive tactics.
     const anticipate = knows('anticipate'), evade = knows('evade'), headOn = knows('headOn');
     const heads = [];
@@ -571,6 +553,29 @@
       }
       heads.sort((a, b) => a.d - b.d);
       if (heads.length > 8) heads.length = 8;
+    }
+
+    // Scavenging: the remains of a worm that just died nearby, if they beat the best food,
+    // skipping remains that two or more other heads are already closer to (a crowd).
+    if (knows('scavenge') && g.recentDeaths.length) {
+      const SR = FR + 400;
+      let bs = best, sx = 0, sy = 0, sm = 0, sd = 0;
+      for (const rem of g.recentDeaths) {
+        const dx = rem.x - hx, dy = rem.y - hy, d = Math.sqrt(dx * dx + dy * dy);
+        if (d > SR || rem.x * rem.x + rem.y * rem.y > edge2) continue;
+        const sc = rem.mass / (d + 200);
+        if (sc <= bs) continue;
+        let closer = 0;
+        for (const h of heads) if (Math.hypot(h.o.sx[0] - rem.x, h.o.sy[0] - rem.y) < d && ++closer >= 2) break;
+        if (closer >= 2) continue;
+        if (sc > bs) { bs = sc; sx = rem.x; sy = rem.y; sm = rem.mass * 5; sd = d; }
+      }
+      if (bs > best) {
+        goal = Math.atan2(sy - hy, sx - hx);
+        goalW = 1.3;
+        mode = 'scavenge';
+        if (sm > 300 && sd < 500 && w.mass > 60) boost = true;
+      }
     }
 
     // Head-on: the bigger worm wins, so meet a clearly smaller oncoming head.
@@ -666,7 +671,10 @@
         goal = Math.atan2(p.y - hy, p.x - hx);
         goalW = 2;
         ai.aim = p;
-        if (d < 450 && w.mass > 60 && Math.random() < ai.aggro * skill) boost = true;
+        // Experienced (predicting) hunters don't boost at point-blank range or at a prey
+        // heading for them: most hunters that die are killed by their own prey turning in.
+        const safe = !knows('predict') || (d > 150 + 2 * (r + o.r) && Math.abs(angleDiff(o.angle, Math.atan2(-dy, -dx))) > Math.PI / 2);
+        if (d < 450 && w.mass > 60 && safe && Math.random() < ai.aggro * skill) boost = true;
       }
       if (ai.prey) { headMass = 0; ignore = null; }
     }
@@ -732,6 +740,14 @@
     }
     w.targetAngle = bestA;
     w.wantBoost = boost && bestD === 0;
+    // Anticipating bots look as far as a boost will carry them before they boost.
+    if (w.wantBoost && anticipate && !w.boosting) {
+      const c = Math.cos(bestA), s = Math.sin(bestA), boostSpeed = mySpeed * CFG.BOOST_MULT;
+      for (const f of [0.62, 1]) {
+        const t = L * 1.6 * f, px = hx + c * t, py = hy + s * t;
+        if (hitAt(g, w, px, py, rad, headMass) || (ghost && ghostHit(ghost, px, py, rad, t / boostSpeed))) { w.wantBoost = false; break; }
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------

@@ -32,7 +32,7 @@ function simulate(botCount, difficulty, seconds) {
 }
 
 test('simulation stays healthy on every difficulty', () => {
-  for (const diff of ['easy', 'normal', 'hard']) {
+  for (const diff of DIFFICULTIES) {
     const { g, deaths, wall, msPerTick, avgBots, shortfalls } = simulate(40, diff, 60);
     for (const w of g.worms) {
       assert.ok(Number.isFinite(w.mass) && w.sx.every(Number.isFinite) && w.sy.every(Number.isFinite), `${diff}: worm ${w.name} has non-finite state`);
@@ -46,6 +46,14 @@ test('simulation stays healthy on every difficulty', () => {
     // Loose on purpose (locally ~0.4 ms): catches runaway slowdowns, not CI noise.
     assert.ok(msPerTick < 25, `${diff}: ${msPerTick.toFixed(2)} ms per tick is far too slow`);
   }
+});
+
+test('the biggest world on Expert stays within the tick budget (#78)', () => {
+  const { g, msPerTick, shortfalls } = simulate(60, 'expert', 30);
+  assert.ok(g.worms.every((w) => Number.isFinite(w.mass) && w.sx.every(Number.isFinite)), 'finite state');
+  assert.equal(shortfalls, 0);
+  // Same loose limit as above; locally about 0.7 ms.
+  assert.ok(msPerTick < 25, `${msPerTick.toFixed(2)} ms per tick is far too slow`);
 });
 
 test('a saved world restores and keeps running', () => {

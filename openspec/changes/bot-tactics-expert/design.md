@@ -74,6 +74,11 @@ The shares are starting values to tune with `tools/balance.js`. The spec only fi
 4. **scavenge**: `g.recentDeaths` (transient list of `{x, y, mass, time}`, kept 6 s) within `FR + 400`. Score = `mass / (d + 200)`. Go when the score beats the best food score. Weight 1.3. Boost if mass dropped > 300 and the remains are within 500.
 5. Otherwise the existing power-up / food / wander goals.
 
+Caution rules added during apply, after profiling bot deaths (most hunters that die are killed by their own prey, usually while boosting):
+- Hunters that know `predict` boost only when the prey is more than `150 + 2(r + r_prey)` away and not heading toward them.
+- Bots that know `anticipate` only start a boost if the boosted look-ahead (`1.6 L`) on the chosen heading is clear.
+- Scavengers skip remains that two or more other heads are already closer to.
+
 New prey is chosen as today. With `trap`, the bot instead scores up to 3 nearest candidates by `distance × (0.5 + freedom)`, where **freedom** is the share of 8 rays (3 points each, out to 250 px) from the prey's head that `hitAt` finds clear, ignoring the hunter itself.
 
 ### 6. Keep it all in `engine.js`
