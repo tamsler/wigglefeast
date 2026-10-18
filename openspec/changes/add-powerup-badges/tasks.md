@@ -11,7 +11,7 @@
 
 ## 3. Release and integration
 
-- [ ] 3.1 Update the touch-controls help line if it mentions the pause position; bump `VERSION` in `sw.js` to the next minor version; run `node --test "tests/**/*.test.js"` and verify every test passes and `.github/scripts/check-version.sh main` passes after committing
+- [x] 3.1 Update the touch-controls help line if it mentions the pause position; bump `VERSION` in `sw.js` to the next minor version; run `node --test "tests/**/*.test.js"` and verify every test passes and `.github/scripts/check-version.sh main` passes after committing
 - [ ] 3.2 Manual check on desktop and a phone: the cluster reads well, badges blink before running out, and nothing overlaps in portrait or landscape; verify by noting the result in the PR
 
 ## Workflow follow-up
