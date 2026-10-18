@@ -2,9 +2,9 @@
 
 ## 1. Growth rules
 
-- [ ] 1.1 Set `CFG.SHED_ABOVE` to 10000 and `CFG.SHED_RATE` to 0.002; verify with an engine test that a worm at 20,000 loses 20 mass over one second (±1%), and that a worm at 10,000 or below loses none
-- [ ] 1.2 Change `lengthFor` and `radiusFor` above mass 10,000 (design decision 2); verify with engine tests that both are unchanged at and below 10,000, continuous and increasing above it, that a 50,000-mass worm has radius > 62 and is shorter than both 2× its 10,000 length and a 30-bot arena's edge, and that a 100,000-mass worm stays within the save limits and round-trips through save and load
-- [ ] 1.3 Add an engine test that a scripted worm fed a steady intake of 60 mass per second holds above 30,000 (with shedding balancing it), so massive growth is reachable; verify it fails with the old shedding numbers
+- [x] 1.1 Set `CFG.SHED_ABOVE` to 10000 and `CFG.SHED_RATE` to 0.002; verify with an engine test that a worm at 20,000 loses 20 mass over one second (±1%), and that a worm at 10,000 or below loses none
+- [x] 1.2 Change `lengthFor` and `radiusFor` above mass 10,000 (design decision 2); verify with engine tests that both are unchanged at and below 10,000, continuous and increasing above it, that a 50,000-mass worm has radius > 62 and is shorter than both 2× its 10,000 length and a 30-bot arena's edge, and that a 100,000-mass worm stays within the save limits and round-trips through save and load
+- [x] 1.3 Add an engine test that a scripted worm fed a steady intake of 60 mass per second holds above 30,000 (with shedding balancing it), so massive growth is reachable; verify it fails with the old shedding numbers
 - [ ] 1.4 Run `node tools/balance.js` on every level; verify that top-bot median and share stay close to today's numbers (bots are limited by survival), and record them in the PR
 
 ## 2. Camera and drawing
