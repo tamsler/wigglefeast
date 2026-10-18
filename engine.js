@@ -161,6 +161,11 @@
   const MAX_SEGMENTS = 20000;
   const MAX_FOOD = 50000;
   const MAX_ID = 1e9;
+  const MIN_BOTS = 5, MAX_BOTS = 150; // #81
+
+  // Arena radius for a bot count: 1800 + 60 per bot up to 60 bots (worlds made before #81
+  // keep their size); above that the area grows in proportion, so each bot keeps the same room.
+  const arenaRadius = (bots) => (bots <= 60 ? 1800 + 60 * bots : 5400 * Math.sqrt(bots / 60));
   const MAX_TIME = 1e9; // seconds of world time; keeps the save rounding (x100) finite
 
   // ---------------------------------------------------------------------------
@@ -179,11 +184,11 @@
 
     if (!isObj(snap) || !SAVE_APP_IDS.includes(snap.app) || snap.v !== 1) fail('not a world snapshot');
     const s = snap.settings;
-    if (!isObj(s) || !Number.isInteger(s.botCount) || s.botCount < 5 || s.botCount > 60 || !has(DIFFICULTY, s.difficulty)) fail('settings');
+    if (!isObj(s) || !Number.isInteger(s.botCount) || s.botCount < MIN_BOTS || s.botCount > MAX_BOTS || !has(DIFFICULTY, s.difficulty)) fail('settings');
     if (!inRange(snap.time, 0, MAX_TIME)) fail('time');
     if (snap.nextId !== undefined && !isId(snap.nextId)) fail('nextId');
     // Everything lives inside the arena; twice its radius leaves plenty of slack.
-    const B = 2 * (1800 + 60 * s.botCount);
+    const B = 2 * arenaRadius(s.botCount);
     const coord = (v) => inRange(v, -B, B);
     const angle = (v) => inRange(v, -1e9, 1e9); // the player's keyboard heading isn't wrapped
 
@@ -761,7 +766,7 @@
       }
       this.settings = Object.assign({ botCount: 30, difficulty: 'normal' }, settings);
       const bc = this.settings.botCount;
-      this.R = 1800 + 60 * bc;
+      this.R = arenaRadius(bc);
       const area = Math.PI * this.R * this.R;
       this.foodTarget = Math.round(area * CFG.FOOD_DENSITY);
       this.powerupTarget = Math.max(6, Math.round(area * CFG.POWERUP_DENSITY));
@@ -1174,7 +1179,7 @@
   }
 
   root.WormEngine = {
-    CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, DIFFICULTY, DIFFICULTIES, TACTICS, validateSnapshot, seasonalTheme,
+    CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, MIN_BOTS, MAX_BOTS, arenaRadius, DIFFICULTY, DIFFICULTIES, TACTICS, validateSnapshot, seasonalTheme,
     Game, Worm, botThink, knowsTactic, predictHead, radiusFor, lengthFor, angleDiff, TAU,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
