@@ -22,6 +22,8 @@ The cost is one pass over all segments four times a second: about 5,000 addition
 
 *Alternative:* plotting every segment as a translucent blob on the minimap canvas each frame. It looks good, but the cost grows with segments every frame, and overlapping blobs saturate unevenly.
 
+**Changed during apply:** the grid is **24 × 24**, and each cell is averaged with its neighbours (1-2-1 weights in both directions) before drawing. Looking at real minimaps, a 40 × 40 grid traced each worm's body as a recognisable squiggle, which goes against "no individual worms". The coarser, smoothed grid reads as soft clouds. The coverage drawn at full strength (`C`) was tuned to **0.18** by eye at 5, 30 and 60 bots, at 160 px and 110 px.
+
 ### 2. Draw the grid as a smoothed image, clipped to the arena circle
 The grid is written into a 40 × 40 offscreen canvas as `ImageData`. Every pixel gets the same colour (a light cyan, `#7fdcff`), with alpha = `min(1, sqrt(coverage / C))`. `C` is the coverage that counts as "full", about 0.25 to start, tuned by eye during apply. The square root lifts sparse areas so a lone small worm still shows faintly.
 

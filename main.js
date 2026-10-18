@@ -1319,30 +1319,79 @@
     }
   }
 
+  // Minimap density (#80): how much of each part of the arena other worms' bodies cover, as a
+  // grid over the arena's square refreshed a few times a second, drawn smoothed in one colour.
+  // No worm is shown on its own; the player's body doesn't count.
+  const DENSITY_N = 24, DENSITY_MS = 250;
+  const DENSITY_FULL = 0.18; // coverage (after smoothing) drawn at full strength
+  const DENSITY_RGB = [127, 220, 255];
+  const densityCanvas = document.createElement('canvas');
+  densityCanvas.width = densityCanvas.height = DENSITY_N;
+  const dctx = densityCanvas.getContext('2d');
+  const densityImg = dctx.createImageData(DENSITY_N, DENSITY_N);
+  const densityGrid = new Float32Array(DENSITY_N * DENSITY_N);
+  const densitySmooth = new Float32Array(DENSITY_N * DENSITY_N);
+  let densityAt = -Infinity, densityFor = null;
+  function updateDensity() {
+    const R = game.R, n = DENSITY_N, cell = (2 * R) / n, g = densityGrid, player = game.player;
+    g.fill(0);
+    for (const w of game.worms) {
+      if (w.dead || w === player) continue;
+      const area = 2 * w.r * w.r * 0.42; // the body area one segment stands for (spacing 0.42 r, as in the engine)
+      const sx = w.sx, sy = w.sy;
+      for (let i = 0; i < sx.length; i++) {
+        const ix = Math.floor((sx[i] + R) / cell), iy = Math.floor((sy[i] + R) / cell);
+        if (ix >= 0 && ix < n && iy >= 0 && iy < n) g[iy * n + ix] += area;
+      }
+    }
+    // Spread each cell over its neighbours (1-2-1 in both directions), so crowds read as soft
+    // clouds rather than tracing the shape of any one body.
+    const sm = densitySmooth;
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        let sum = 0, wsum = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx, yy = y + dy;
+            if (xx < 0 || xx >= n || yy < 0 || yy >= n) continue;
+            const wt = (2 - Math.abs(dx)) * (2 - Math.abs(dy));
+            sum += g[yy * n + xx] * wt; wsum += wt;
+          }
+        }
+        sm[y * n + x] = sum / wsum;
+      }
+    }
+    const d = densityImg.data, full = cell * cell * DENSITY_FULL;
+    for (let i = 0; i < sm.length; i++) {
+      d[i * 4] = DENSITY_RGB[0]; d[i * 4 + 1] = DENSITY_RGB[1]; d[i * 4 + 2] = DENSITY_RGB[2];
+      d[i * 4 + 3] = Math.round(255 * Math.min(1, Math.sqrt(sm[i] / full))); // sqrt: a lone small worm still shows
+    }
+    dctx.putImageData(densityImg, 0, 0);
+  }
+
   function renderMinimap() {
     // Match the canvas to its on-screen size (110 or 160 px): resize() runs while the HUD is hidden.
     const cw = mini.clientWidth;
     if (cw && mini.width !== Math.round(cw * DPR)) mini.width = mini.height = Math.round(cw * DPR);
     const s = mini.width, c = s / 2, R = game.R, k = (c - 4) / R;
+    const now = performance.now();
+    if (now - densityAt > DENSITY_MS || densityFor !== game.player) { updateDensity(); densityAt = now; densityFor = game.player; }
     mctx.setTransform(1, 0, 0, 1, 0, 0);
     mctx.clearRect(0, 0, s, s);
+    mctx.save();
     mctx.beginPath();
     mctx.arc(c, c, c - 2, 0, TAU);
     mctx.fillStyle = 'rgba(10,14,30,0.6)';
     mctx.fill();
+    mctx.clip();
+    mctx.imageSmoothingEnabled = true;
+    mctx.drawImage(densityCanvas, c - R * k, c - R * k, 2 * R * k, 2 * R * k);
+    mctx.restore();
+    mctx.beginPath();
+    mctx.arc(c, c, c - 2, 0, TAU);
     mctx.lineWidth = 2 * DPR;
     mctx.strokeStyle = 'rgba(255,60,100,0.6)';
     mctx.stroke();
-    const lb = game.leaderboard;
-    for (let i = 0; i < lb.length; i++) {
-      const w = lb[i];
-      if (w.dead || w.isPlayer) continue;
-      const big = i < 10;
-      mctx.fillStyle = big ? w.skin.accent : 'rgba(255,255,255,0.3)';
-      mctx.beginPath();
-      mctx.arc(c + w.x * k, c + w.y * k, (big ? 2.5 : 1.5) * DPR + (big ? Math.min(3, w.r / 15) * DPR : 0), 0, TAU);
-      mctx.fill();
-    }
     const p = game.player;
     if (p) {
       const x = c + p.x * k, y = c + p.y * k;
