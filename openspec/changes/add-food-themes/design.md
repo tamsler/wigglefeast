@@ -36,8 +36,8 @@
 
 ### 3. Drawing order: a colour glow, then the item
 - **Each themed food draws twice:**
-  1. the existing `foodSprite(f.c)` glow at reduced alpha (0.55) and size `f.r × 4.2`
-  2. the item sprite at `f.r × 3.2`, with the same gentle pulse
+  1. the existing `foodSprite(f.c)` glow at reduced alpha (0.55) and size `f.r × 4.8`
+  2. the item sprite at `f.r × 4`, with the same gentle pulse. This was raised from 3.2 after screenshots showed the small items were too small to read; the glow went from 4.2 to 4.8 to match.
 - **Why:** the glow keeps the worm-colour signal of dropped food and the arena's sparkle.
 - **Classic:** draws exactly as today.
 - **Fading food:** it fades both layers, as now.
