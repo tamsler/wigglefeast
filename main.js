@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const { Game, CFG, SKINS, SAVE_APP_IDS, validateSnapshot, TAU } = window.WormEngine;
+  const { Game, CFG, SKINS, SAVE_APP_IDS, DIFFICULTIES, validateSnapshot, TAU } = window.WormEngine;
   const $ = (id) => document.getElementById(id);
 
   const canvas = $('game');
@@ -57,7 +57,7 @@
       if (typeof s.name === 'string') settings.name = s.name.slice(0, 16);
       if (Number.isInteger(s.skin) && s.skin >= 0 && s.skin < SKINS.length) settings.skin = s.skin;
       if (Number.isInteger(s.botCount) && s.botCount >= 5 && s.botCount <= 60) settings.botCount = s.botCount;
-      if (['easy', 'normal', 'hard'].includes(s.difficulty)) settings.difficulty = s.difficulty;
+      if (DIFFICULTIES.includes(s.difficulty)) settings.difficulty = s.difficulty;
       if (['auto', 'classic', 'halloween', 'christmas', 'snacks', 'tech'].includes(s.theme)) settings.theme = s.theme; // #64
     }
   }
@@ -69,7 +69,7 @@
   const PROFILE_VERSION = 1;
   const emptyProfile = () => ({
     v: PROFILE_VERSION,
-    totals: { games: 0, kills: 0, time: 0, eaten: 0, best: 0, bestByDiff: { easy: 0, normal: 0, hard: 0 } },
+    totals: { games: 0, kills: 0, time: 0, eaten: 0, best: 0, bestByDiff: Object.fromEntries(DIFFICULTIES.map((d) => [d, 0])) },
     top: [],
     recent: [],
   });
@@ -84,10 +84,10 @@
     if (p.top.length > 1000 || p.recent.length > 1000) return null;
     const t = p.totals, bd = isObj(t.bestByDiff) ? t.bestByDiff : null;
     if (!['games', 'kills', 'time', 'eaten', 'best'].every((k) => num(t[k])) || !bd) return null;
-    if (!['easy', 'normal', 'hard'].every((d) => bd[d] === undefined || num(bd[d]))) return null;
+    if (!DIFFICULTIES.every((d) => bd[d] === undefined || num(bd[d]))) return null; // Expert (#78) is missing from older profiles
     const cleanRun = (r) => {
       if (!isObj(r) || !['date', 'score', 'peak', 'kills', 'eaten', 'time'].every((k) => num(r[k]))) return null;
-      if (!str(r.name) || !str(r.by) || !['easy', 'normal', 'hard'].includes(r.diff) || !Number.isInteger(r.bots) || r.bots < 0 || r.bots > 1000) return null;
+      if (!str(r.name) || !str(r.by) || !DIFFICULTIES.includes(r.diff) || !Number.isInteger(r.bots) || r.bots < 0 || r.bots > 1000) return null;
       return { date: r.date, name: r.name, score: r.score, peak: r.peak, kills: r.kills, eaten: r.eaten, time: r.time, by: r.by, diff: r.diff, bots: r.bots };
     };
     const top = p.top.map(cleanRun), recent = p.recent.map(cleanRun);
@@ -96,7 +96,7 @@
       v: PROFILE_VERSION,
       totals: {
         games: t.games, kills: t.kills, time: t.time, eaten: t.eaten, best: t.best,
-        bestByDiff: { easy: bd.easy || 0, normal: bd.normal || 0, hard: bd.hard || 0 },
+        bestByDiff: Object.fromEntries(DIFFICULTIES.map((d) => [d, bd[d] || 0])),
       },
       top: top.filter(Boolean).slice(0, 10),
       recent: recent.filter(Boolean).slice(0, 50),
@@ -835,7 +835,7 @@
     $('totals').innerHTML = tile(fmtNum(t.best), 'best') + tile(fmtNum(t.games), 'games') + tile(fmtNum(t.kills), 'kills') + tile(fmtDuration(t.time), 'played') +
       tile(fmtNum(avg), 'avg (recent)') + tile(fmtNum(t.eaten), 'food eaten') + tile(t.games ? (t.kills / t.games).toFixed(1) : '0', 'kills / game') +
       tile(t.games ? fmtDuration(Math.round(t.time / t.games)) : '0s', 'avg survival');
-    $('bestByDiff').innerHTML = ['easy', 'normal', 'hard'].map((d) => tile(fmtNum(t.bestByDiff[d]), d)).join('');
+    $('bestByDiff').innerHTML = DIFFICULTIES.map((d) => tile(fmtNum(t.bestByDiff[d]), d)).join('');
     $('topRuns').innerHTML = runsTable(profile.top, true);
     $('recentRuns').innerHTML = runsTable(profile.recent.slice(0, 15), false);
     $('menu').classList.add('hidden');

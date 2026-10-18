@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 require('../engine.js');
-const { Game, Worm, SKINS, DIFFICULTY, botThink, validateSnapshot } = globalThis.WormEngine;
+const { Game, Worm, SKINS, DIFFICULTY, DIFFICULTIES, TACTICS, botThink, knowsTactic, predictHead, validateSnapshot } = globalThis.WormEngine;
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const fixture = () => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v1.json'), 'utf8'));
@@ -32,7 +32,7 @@ function simulate(botCount, difficulty, seconds) {
 }
 
 test('simulation stays healthy on every difficulty', () => {
-  for (const diff of ['easy', 'normal', 'hard']) {
+  for (const diff of DIFFICULTIES) {
     const { g, deaths, wall, msPerTick, avgBots, shortfalls } = simulate(40, diff, 60);
     for (const w of g.worms) {
       assert.ok(Number.isFinite(w.mass) && w.sx.every(Number.isFinite) && w.sy.every(Number.isFinite), `${diff}: worm ${w.name} has non-finite state`);
@@ -46,6 +46,14 @@ test('simulation stays healthy on every difficulty', () => {
     // Loose on purpose (locally ~0.4 ms): catches runaway slowdowns, not CI noise.
     assert.ok(msPerTick < 25, `${diff}: ${msPerTick.toFixed(2)} ms per tick is far too slow`);
   }
+});
+
+test('the biggest world on Expert stays within the tick budget (#78)', () => {
+  const { g, msPerTick, shortfalls } = simulate(60, 'expert', 30);
+  assert.ok(g.worms.every((w) => Number.isFinite(w.mass) && w.sx.every(Number.isFinite)), 'finite state');
+  assert.equal(shortfalls, 0);
+  // Same loose limit as above; locally about 0.7 ms.
+  assert.ok(msPerTick < 25, `${msPerTick.toFixed(2)} ms per tick is far too slow`);
 });
 
 test('a saved world restores and keeps running', () => {
@@ -423,4 +431,306 @@ test('bots hunt only worms lighter than their difficulty allows (#16)', () => {
     assert.equal(hunts(difficulty, 200 * ratio * 1.05), false, `${difficulty}: leaves a worm just over ${ratio}x alone`);
   }
   assert.ok(DIFFICULTY.easy.preyRatio <= 1, 'easy bots never chase worms heavier than themselves');
+});
+
+// --- Bot tactics (#78) --------------------------------------------------------
+
+test('every level has a full tactic table: none on easy, all on expert (#78)', () => {
+  assert.deepEqual(DIFFICULTIES, ['easy', 'normal', 'hard', 'expert']);
+  for (const level of DIFFICULTIES) assert.deepEqual(Object.keys(DIFFICULTY[level].tactics).sort(), TACTICS.slice().sort(), level);
+  assert.ok(TACTICS.every((k) => DIFFICULTY.easy.tactics[k] === 0), 'easy knows nothing');
+  assert.ok(TACTICS.every((k) => DIFFICULTY.expert.tactics[k] === 1), 'expert knows everything');
+  assert.equal(DIFFICULTY.normal.tactics.coil + DIFFICULTY.normal.tactics.flank, 0, 'normal bots never coil or flank');
+  assert.equal(DIFFICULTY.hard.tactics.flank, 0, 'flanking is expert-only');
+  const masses = [];
+  for (let i = 0; i < 6; i++) masses.push(...new Game({ botCount: 60, difficulty: 'expert' }).worms.map((w) => w.mass));
+  const big = masses.filter((m) => m >= 400).length / masses.length;
+  assert.ok(Math.abs(big - 0.25) < 0.08, `${(big * 100).toFixed(0)}% of expert bots start big`);
+  assert.ok(Math.max(...masses) <= DIFFICULTY.expert.bigMax);
+});
+
+test('a bot keeps its tactics for life, and levels hand them out in their shares (#78)', () => {
+  const g = new Game({ botCount: 40, difficulty: 'hard' });
+  const known = (w) => TACTICS.filter((k) => knowsTactic(w, 'hard', k)).join();
+  const before = new Map(g.worms.map((w) => [w.id, known(w)]));
+  const g2 = new Game(null, clone(g));
+  for (const w of g2.worms) assert.equal(known(w), before.get(w.id), `bot ${w.name} kept its tactics`);
+  // Over 600 ids, the share knowing each tactic is near the table value.
+  for (const k of TACTICS) {
+    const share = DIFFICULTY.hard.tactics[k];
+    let n = 0;
+    for (let id = 1; id <= 600; id++) if (knowsTactic({ id }, 'hard', k)) n++;
+    assert.ok(Math.abs(n / 600 - share) < 0.07, `hard ${k}: ${(n / 6).toFixed(0)}% know it, table says ${share * 100}%`);
+  }
+  assert.equal(knowsTactic({ id: 7 }, 'easy', 'evade'), false);
+  assert.equal(knowsTactic({ id: 7 }, 'expert', 'flank'), true);
+});
+
+test('worms track how they turn, and predictions follow the turning, not the steering target (#78)', () => {
+  const g = { addFood() {} };
+  const w = new Worm({ name: 'Turner', skin: SKINS[0], mass: 100, x: 0, y: 0, angle: 0, worldR: 5000 });
+  for (let i = 0; i < 40; i++) { w.targetAngle = w.angle + 0.5; w.update(1 / 60, g); }
+  assert.ok(w.turnRate > 1, `steady turn toward +angle is observed (${w.turnRate.toFixed(2)} rad/s)`);
+  const p = predictHead(w, 0.5);
+  assert.ok(p.a > w.angle + 0.5, 'the predicted heading keeps turning');
+  const side = Math.cos(w.angle) * (p.y - w.y) - Math.sin(w.angle) * (p.x - w.x);
+  assert.ok(side > 0, 'the predicted head lies on the side it turns toward');
+  // Steering the other way changes nothing until the worm actually turns (Fair information).
+  w.targetAngle = w.angle - 2;
+  assert.deepEqual(predictHead(w, 0.5), p);
+  // A worm going straight is predicted straight ahead at its speed.
+  const s = new Worm({ name: 'Straight', skin: SKINS[0], mass: 100, x: 0, y: 0, angle: 0, worldR: 5000 });
+  const q = predictHead(s, 1);
+  assert.ok(Math.abs(q.x - s.speed) < 1e-9 && Math.abs(q.y) < 1e-9);
+});
+
+test('the game remembers recent deaths for a few seconds, without saving them (#78)', () => {
+  const g = new Game({ botCount: 5, difficulty: 'expert' });
+  const victim = g.worms[0];
+  g.kill(victim, null);
+  const t0 = g.time;
+  const mine = () => g.recentDeaths.filter((d) => d.time === t0);
+  assert.equal(mine().length, 5, 'five points along the body');
+  assert.ok(Math.abs(mine().reduce((a, d) => a + d.mass, 0) - Math.max(10, victim.mass * 0.8)) < 1e-6, 'they share what was dropped');
+  const snap = clone(g);
+  assert.ok(!('recentDeaths' in snap));
+  assert.doesNotThrow(() => validateSnapshot(snap));
+  for (let i = 0; i < 6.2 * 60; i++) g.update(1 / 60);
+  assert.equal(mine().length, 0, 'forgotten after 6 seconds');
+});
+
+// A hand-built scene for bot tests: no food or power-ups, each worm laid out straight
+// behind its head. Bots default to skill 1 and aggro 0 (they never pick prey by chance).
+function scene(difficulty, worms, botCount = 5) {
+  const game = new Game({ botCount, difficulty });
+  game.food = []; game.powerups = []; game.worms = []; game.respawnQueue = [];
+  const out = worms.map((o) => {
+    const ai = o.ai ? { skill: 1, aggro: 0, interval: 0.1, wx: o.x, wy: o.y, prey: null, huntUntil: 0, ...o.ai } : null;
+    const w = new Worm({ name: o.name || 'W', skin: SKINS[0], mass: o.mass, x: o.x, y: o.y, angle: o.angle, worldR: game.R, ai });
+    const sp = w.r * 0.42;
+    for (let i = 0; i < w.sx.length; i++) { w.sx[i] = o.x - Math.cos(o.angle) * sp * i; w.sy[i] = o.y - Math.sin(o.angle) * sp * i; }
+    w.updateBounds();
+    if (o.turnRate) w.turnRate = o.turnRate;
+    game.worms.push(w);
+    return w;
+  });
+  for (const f of worms.food || []) game.food.push({ v: 8, r: 6, c: '#fff', life: Infinity, ph: 0, dead: false, natural: true, ...f });
+  game.settings.botCount = out.filter((w) => w.ai).length; // no replacements spawn mid-test
+  game.rebuildSegGrid();
+  game.rebuildFoodGrid();
+  return { game, worms: out };
+}
+const withFood = (worms, food) => Object.assign(worms, { food });
+// Runs fn with some of a level's tactic shares replaced, so one tactic can be tested alone.
+function withTactics(level, shares, fn) {
+  const saved = { ...DIFFICULTY[level].tactics };
+  Object.assign(DIFFICULTY[level].tactics, shares);
+  try { return fn(); } finally { Object.assign(DIFFICULTY[level].tactics, saved); }
+}
+// Signed distance of point p from the line through worm o's head along its heading.
+const sideOf = (o, x, y) => Math.cos(o.angle) * (y - o.sy[0]) - Math.sin(o.angle) * (x - o.sx[0]);
+
+test('anticipating bots avoid the path a head is about to cross; others do not see it (#78)', () => {
+  // The bot heads for food along +x. Another head is about to cross that line at x=150,
+  // half a second before the bot gets there; no body lies on the line yet.
+  const run = (level) => {
+    const { game, worms: [bot] } = scene(level, withFood([
+      { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
+      { name: 'Crosser', mass: 100, x: 150, y: -120, angle: Math.PI / 2 },
+    ], [{ x: 400, y: 0 }]));
+    botThink(bot, game);
+    return bot;
+  };
+  const sees = withTactics('expert', { evade: 0 }, () => run('expert'));
+  assert.equal(sees.ai.mode, 'food');
+  assert.ok(Math.abs(sees.targetAngle) > 0.2, `anticipating bot turns off the line (${sees.targetAngle.toFixed(2)})`);
+  const blind = run('easy');
+  assert.ok(Math.abs(blind.targetAngle) < 0.05, `bot without the tactic keeps going for the food (${blind.targetAngle.toFixed(2)})`);
+});
+
+test('evading bots turn away from a head lining up to cut them off (#78)', () => {
+  const { game, worms: [bot, threat] } = scene('expert', withFood([
+    { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
+    { name: 'Cutter', mass: 100, x: 200, y: 150, angle: Math.atan2(-150, 40) },
+  ], [{ x: 400, y: 0 }]));
+  botThink(bot, game);
+  assert.equal(bot.ai.mode, 'evade');
+  const now = sideOf(threat, 0, 0);
+  const next = sideOf(threat, Math.cos(bot.targetAngle) * 100, Math.sin(bot.targetAngle) * 100);
+  assert.ok(Math.sign(next) === Math.sign(now) && Math.abs(next) > Math.abs(now) + 30, `moves away from the cutter's line (${now.toFixed(0)} -> ${next.toFixed(0)})`);
+  // Without the tactic the bot keeps chasing the food.
+  const { game: g2, worms: [plain] } = scene('easy', withFood([
+    { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
+    { name: 'Cutter', mass: 100, x: 200, y: 150, angle: Math.atan2(-150, 40) },
+  ], [{ x: 400, y: 0 }]));
+  botThink(plain, g2);
+  assert.equal(plain.ai.mode, 'food');
+});
+
+test('head-on aware bots meet smaller heads and keep away from bigger ones (#78)', () => {
+  const meet = (otherMass) => scene('expert', [
+    { name: 'Bot', mass: 400, x: 0, y: 0, angle: 0, ai: {} },
+    { name: 'Other', mass: otherMass, x: 180, y: 10, angle: Math.PI },
+  ]);
+  const small = meet(100);
+  botThink(small.worms[0], small.game);
+  assert.equal(small.worms[0].ai.mode, 'headOn');
+  assert.ok(Math.abs(small.worms[0].targetAngle - Math.atan2(10, 180)) < 0.3, 'steers into the smaller head');
+  // Run it: the smaller worm dies on contact, the bot lives.
+  let killer = null;
+  small.game.on('death', (e) => { if (e.victim === small.worms[1]) killer = e.killer; });
+  for (let i = 0; i < 90 && !killer; i++) small.game.update(1 / 60);
+  assert.equal(killer, small.worms[0]);
+  assert.equal(small.worms[0].dead, false);
+
+  const big = meet(1000);
+  botThink(big.worms[0], big.game);
+  assert.notEqual(big.worms[0].ai.mode, 'headOn');
+  assert.ok(Math.abs(big.worms[0].targetAngle) > 0.3, `turns away from the bigger head (${big.worms[0].targetAngle.toFixed(2)})`);
+});
+
+// Hunting scenes: hunters are given their prey directly; the other tactics are switched off
+// with withTactics where they would change the mode under test.
+const ONLY = (tactic) => Object.fromEntries(TACTICS.map((k) => [k, k === tactic ? 1 : 0]));
+function hunt(level, hunter, prey, extra = [], botCount = 5) {
+  const s = scene(level, [{ name: 'Hunter', ai: { huntUntil: 1e9 }, ...hunter }, { name: 'Prey', ...prey }, ...extra], botCount);
+  s.worms[0].ai.prey = s.worms[1];
+  return s;
+}
+
+test('predicting hunters aim where a turning prey is going, not straight ahead of it (#78)', () => {
+  // The prey heads +y and has been turning toward -x (its +1 side), toward the hunter.
+  const aimAngle = (level) => withTactics('expert', ONLY('predict'), () => {
+    const { game, worms: [h] } = hunt(level, { mass: 400, x: 0, y: 0, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2, turnRate: 1.5 });
+    botThink(h, game);
+    assert.equal(h.ai.mode, 'cut');
+    return { angle: Math.atan2(h.ai.aim.y, h.ai.aim.x), aim: h.ai.aim };
+  });
+  const predicted = aimAngle('expert'), straight = aimAngle('easy');
+  assert.ok(Math.abs(straight.aim.x - 300) < 1e-6, 'without prediction: straight ahead of the prey');
+  assert.ok(predicted.aim.x < 300 - 40, `with prediction: on the prey's curve (x ${predicted.aim.x.toFixed(0)})`);
+  assert.ok(predicted.angle > straight.angle + 0.15, 'so the hunter aims further round');
+});
+
+test('trapping hunters prefer the prey boxed in by other bodies (#78)', () => {
+  // Two prey 300 px from the hunter: one in open space (listed first), one between two
+  // long bodies too big to hunt.
+  const pick = (level) => {
+    const { game, worms: [h] } = scene(level, [
+      { name: 'Hunter', mass: 400, x: 0, y: 0, angle: Math.PI / 2, ai: { aggro: 1 } },
+      { name: 'Open', mass: 100, x: 300, y: 0, angle: 0 },
+      { name: 'Boxed', mass: 100, x: -300, y: 0, angle: 0 },
+      { name: 'Wall A', mass: 1500, x: -150, y: 80, angle: 0 },
+      { name: 'Wall B', mass: 1500, x: -150, y: -80, angle: 0 },
+    ], 30);
+    for (let i = 0; i < 300 && !h.ai.prey; i++) botThink(h, game);
+    return h.ai.prey && h.ai.prey.name;
+  };
+  assert.equal(pick('expert'), 'Boxed');
+  assert.equal(pick('easy'), 'Open');
+});
+
+test('pinning hunters cut in on the arena side of a prey running along the wall (#78)', () => {
+  const s = withTactics('expert', ONLY('pin'), () => {
+    const s = hunt('expert', { mass: 400, x: 1500, y: -150, angle: Math.PI / 2 }, { mass: 100, x: 1850, y: 0, angle: Math.PI / 2 });
+    botThink(s.worms[0], s.game);
+    return s;
+  });
+  const [h, prey] = s.worms;
+  assert.equal(h.ai.mode, 'pin');
+  assert.ok(Math.hypot(h.ai.aim.x, h.ai.aim.y) < Math.hypot(prey.x, prey.y) - prey.r, 'aims inside the prey, on the arena side');
+  assert.ok(h.ai.aim.y > prey.y, 'ahead of the prey');
+  // The same chase away from the wall is a plain cut-off.
+  const mid = withTactics('expert', ONLY('pin'), () => {
+    const m = hunt('expert', { mass: 400, x: -350, y: -150, angle: Math.PI / 2 }, { mass: 100, x: 0, y: 0, angle: Math.PI / 2 });
+    botThink(m.worms[0], m.game);
+    return m.worms[0].ai.mode;
+  });
+  assert.equal(mid, 'cut');
+});
+
+test('flanking hunters cut in from the side opposite another hunter (#78)', () => {
+  // The prey heads +y. Another bot already hunts it from its +1 side (-x).
+  const s = withTactics('expert', ONLY('flank'), () => {
+    const s = hunt('expert', { mass: 400, x: 500, y: -200, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2 },
+      [{ name: 'First', mass: 400, x: 150, y: 50, angle: Math.PI / 2, ai: { huntUntil: 1e9 } }]);
+    s.worms[2].ai.prey = s.worms[1];
+    botThink(s.worms[0], s.game);
+    return s;
+  });
+  const [h, prey, first] = s.worms;
+  assert.ok(sideOf(prey, first.x, first.y) > 0, 'the first hunter is on the +1 side');
+  assert.equal(h.ai.mode, 'flank');
+  assert.ok(sideOf(prey, h.ai.aim.x, h.ai.aim.y) < -2 * prey.r, 'the flanker aims at the -1 side');
+});
+
+test('coiling hunters circle a small worm and close the loop; short ones cannot (#78)', () => {
+  const { game, worms: [h, prey] } = withTactics('expert', ONLY('coil'), () =>
+    hunt('expert', { mass: 3000, x: 600, y: 200, angle: 0 }, { mass: 100, x: 600, y: 0, angle: 0 }, [], 30));
+  let died = false;
+  game.on('death', (e) => { if (e.victim === prey) died = true; });
+  const modes = new Set();
+  const covered = () => {
+    const sectors = new Set();
+    for (let i = 0; i < h.sx.length; i++) {
+      const dx = h.sx[i] - prey.x, dy = h.sy[i] - prey.y;
+      if (dx * dx + dy * dy < 400 * 400) sectors.add(Math.floor(((Math.atan2(dy, dx) + Math.PI) / (2 * Math.PI)) * 8) % 8);
+    }
+    return sectors.size;
+  };
+  let best = 0;
+  withTactics('expert', ONLY('coil'), () => {
+    for (let i = 0; i < 4 * 60 && !died; i++) {
+      game.update(1 / 60);
+      modes.add(h.ai.mode);
+      best = Math.max(best, covered());
+    }
+  });
+  assert.ok(modes.has('coil'), `coils (modes seen: ${[...modes]})`);
+  // A plain cut-off often kills this straight-moving prey too, but never surrounds it (<= 4 sectors).
+  assert.ok(best >= 6, `the loop closes around the prey (sectors covered: ${best}, prey died: ${died})`);
+  assert.equal(h.dead, false);
+
+  const short = withTactics('expert', ONLY('coil'), () => {
+    const s = hunt('expert', { mass: 300, x: 0, y: 200, angle: 0 }, { mass: 100, x: 0, y: 0, angle: 0 });
+    botThink(s.worms[0], s.game);
+    return s.worms[0].ai.mode;
+  });
+  assert.equal(short, 'cut', 'too short to circle the prey');
+});
+
+test('scavenging bots head for the remains of a big worm that just died (#78)', () => {
+  const think = (level) => {
+    const { game, worms: [bot, big] } = scene(level, [
+      { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
+      { name: 'Big', mass: 2000, x: 300, y: 300, angle: 0 },
+    ], 30);
+    game.kill(big, null);
+    game.rebuildFoodGrid();
+    botThink(bot, game);
+    return { bot, game };
+  };
+  const { bot, game } = think('expert');
+  assert.equal(bot.ai.mode, 'scavenge');
+  const toward = game.recentDeaths.some((d) => Math.abs(Math.atan2(d.y, d.x) - bot.targetAngle) < 0.3);
+  assert.ok(toward, 'heads for the remains');
+  assert.equal(bot.wantBoost, true, 'boosts for large remains');
+  assert.equal(think('easy').bot.ai.mode, 'food', 'bots without the tactic just eat what is near');
+
+  // Remains another head is already closer to are left alone (a race there gets bots killed).
+  const contested = (withRival) => {
+    const worms = [
+      { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
+      { name: 'Small', mass: 400, x: 300, y: 300, angle: 0 },
+    ];
+    if (withRival) worms.push({ name: 'Rival', mass: 100, x: -50, y: 330, angle: Math.PI });
+    const { game, worms: [b, small, rival] } = scene('expert', worms, 30);
+    game.kill(small, null);
+    if (rival) for (const d of game.recentDeaths) assert.ok(Math.hypot(rival.x - d.x, rival.y - d.y) < Math.hypot(d.x, d.y), 'rival is closer to every point');
+    game.rebuildFoodGrid();
+    botThink(b, game);
+    return b.ai.mode;
+  };
+  assert.equal(contested(false), 'scavenge', 'uncontested, these remains are worth it');
+  assert.notEqual(contested(true), 'scavenge');
 });
