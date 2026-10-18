@@ -9,7 +9,7 @@
 ## 2. Release
 
 - [x] 2.1 Update the README's HUD description if it mentions the minimap, bump `VERSION` in `sw.js` (minor), and run `node --test "tests/**/*.test.js"`; verify all tests pass, including `tests/browser/layout.test.js`
-- [ ] 2.2 Open the PR (`Closes #80`), run the `pr-reviewer` agent, address its findings, and merge once checks pass
+- [x] 2.2 Open the PR (`Closes #80`), run the `pr-reviewer` agent, address its findings, and merge once checks pass
 
 ## Workflow follow-up
 

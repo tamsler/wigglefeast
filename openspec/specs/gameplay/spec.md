@@ -6,18 +6,22 @@ Core rules of a Wigglefeast match: how worms move, grow, boost, collide and die,
 ## Requirements
 
 ### Requirement: Arena
-The arena SHALL be a circle whose radius is 1800 + 60 × bot count world units, with natural food and power-up counts scaled to keep the same density at every size.
+The arena SHALL be a circle whose radius is 1800 + 60 × bot count world units for up to 60 bots, and 5400 × √(bot count / 60) above that, so each bot beyond 60 adds the same area. Natural food and power-up counts SHALL scale to keep the same density at every size.
 
 #### Scenario: Arena scales with bot count
 - **WHEN** a world is created with 30 bots
 - **THEN** the arena radius is 3600 units
+
+#### Scenario: Large arena
+- **WHEN** a world is created with 150 bots
+- **THEN** the arena radius is about 8538 units, and food and power-ups are as dense as in a 30-bot world
 
 #### Scenario: Leaving the arena
 - **WHEN** a worm's head crosses the arena edge
 - **THEN** the worm dies with no killer credited
 
 ### Requirement: Movement and growth
-Worms SHALL move forward continuously, turn toward a target angle at a limited rate that decreases as they grow, and derive their radius and body length from their mass. New worms start at mass 15.
+Worms SHALL move forward continuously, turn toward a target angle at a limited rate that decreases as they grow, and derive their radius and body length from their mass. New worms start at mass 15. Above mass 10,000 a worm SHALL grow mostly in thickness: its length grows more slowly than below 10,000, and its radius keeps growing up to 90.
 
 #### Scenario: Eating food
 - **WHEN** a worm's head reaches a food item
@@ -28,8 +32,16 @@ Worms SHALL move forward continuously, turn toward a target angle at a limited r
 - **THEN** the food drifts toward the head before being eaten
 
 #### Scenario: Very large worms shrink slowly
-- **WHEN** a worm's mass is above 1500
-- **THEN** it loses 0.4% of the excess per second
+- **WHEN** a worm's mass is above 10,000
+- **THEN** it loses 0.2% of the excess per second, and a worm at or below 10,000 loses nothing
+
+#### Scenario: Massive worm
+- **WHEN** a worm grows from mass 10,000 to 50,000
+- **THEN** its radius grows past 62, its body grows less than twice as long, and it stays shorter than the edge of a 30-bot arena
+
+#### Scenario: Camera follows a massive player
+- **WHEN** the player's worm grows past mass 10,000
+- **THEN** the view keeps zooming out as it thickens, so more of the arena around it stays visible
 
 ### Requirement: Boosting
 A worm SHALL be able to boost to 2.1× speed while its mass is above 12, losing (3 + 1% of mass) mass per second and dropping 60% of the lost mass as food behind it. While a worm is boosting, it SHALL be drawn with two chevron arrows just in front of its head, pointing in the direction it moves, and while the player's worm is boosting, the HUD SHALL show a BOOST badge next to the score.

@@ -15,7 +15,7 @@
 ## 3. Release
 
 - [x] 3.1 Update the README (growth and shedding note), bump `VERSION` in `sw.js` (minor), and run `node --test "tests/**/*.test.js"`; verify all tests pass, including `tests/fixtures/save-v1.json` still loading
-- [ ] 3.2 Open the PR (`Closes #82`), run the `pr-reviewer` agent, address its findings, and merge once checks pass
+- [x] 3.2 Open the PR (`Closes #82`), run the `pr-reviewer` agent, address its findings, and merge once checks pass
 
 ## Workflow follow-up
 
