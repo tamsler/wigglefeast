@@ -556,8 +556,13 @@
     const s = Math.min(0.9999, Math.max(0, u)) * (stops.length - 1), i = Math.floor(s);
     return mix(stops[i], stops[i + 1], s - i);
   }
+  // While a worm is drawn in the arena, only the segments in `span` ([first, last], on screen)
+  // are traced, so a massive body costs only what is visible (#82). Segment numbers stay
+  // absolute, so skins' patterns don't shift. null elsewhere (menu swatches draw everything).
+  let span = null;
   function traceOn(g, sx, sy, from, to) {
     g.beginPath();
+    if (span) { from = Math.min(from, span[1]); to = Math.max(to, span[0]); if (from < to) return; }
     g.moveTo(sx[from], sy[from]);
     for (let i = from - 1; i >= to; i--) g.lineTo(sx[i], sy[i]);
   }
@@ -567,6 +572,7 @@
     g.lineWidth = 2 * r;
     for (let c = Math.ceil((n - 1) / 3) - 1; c >= 0; c--) {
       const a = c * 3, b = Math.min(n - 1, a + 3);
+      if (span && (b < span[0] || a > span[1])) continue;
       g.strokeStyle = colorAt(a, n);
       traceOn(g, sx, sy, b, a);
       g.stroke();
@@ -1182,6 +1188,7 @@
 
   function tracePath(sx, sy, from, to) {
     ctx.beginPath();
+    if (span && from > to) { from = Math.min(from, span[1]); to = Math.max(to, span[0]); if (from < to) return; }
     ctx.moveTo(sx[from], sy[from]);
     if (from > to) for (let i = from - 1; i >= to; i--) ctx.lineTo(sx[i], sy[i]);
     else for (let i = from + 1; i <= to; i++) ctx.lineTo(sx[i], sy[i]);
@@ -1191,6 +1198,19 @@
     const m = w.boosting ? w.r * 3.5 : 0; // boost arrows reach ahead of the head
     if (w.maxX + m < view.x0 || w.minX - m > view.x1 || w.maxY + m < view.y0 || w.minY - m > view.y1) return;
     const sx = w.sx, sy = w.sy, n = sx.length, r = w.r, skin = w.skin;
+    // The on-screen stretch of the body, padded for the widest glow (neon, boost) (#82).
+    const pad = 1.8 * r + m + 10;
+    let lo = -1, hi = -1;
+    for (let i = 0; i < n; i++) {
+      const x = sx[i], y = sy[i];
+      if (x + pad >= view.x0 && x - pad <= view.x1 && y + pad >= view.y0 && y - pad <= view.y1) { if (lo < 0) lo = i; hi = i; }
+    }
+    if (lo < 0) return;
+    span = [Math.max(0, lo - 1), Math.min(n - 1, hi + 1)];
+    try { drawWormBody(w, t, sx, sy, n, r, skin); } finally { span = null; }
+  }
+
+  function drawWormBody(w, t, sx, sy, n, r, skin) {
     const alpha = w.shield > 0 ? 0.45 + 0.25 * Math.sin(t * 14) : 1;
     ctx.globalAlpha = alpha;
 
