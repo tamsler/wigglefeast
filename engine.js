@@ -18,9 +18,9 @@
     MAGNET_REACH: 230, // extra pull range for food and power-ups while the magnet runs
     SPAWN_SHIELD: 2.5,
     // Very large worms shed mass so nobody grows forever: SHED_RATE of the mass above
-    // SHED_ABOVE per second.
-    SHED_ABOVE: 1500,
-    SHED_RATE: 0.004,
+    // SHED_ABOVE per second. Late and gentle, so a worm that keeps winning can grow massive (#82).
+    SHED_ABOVE: 10000,
+    SHED_RATE: 0.002,
     REMAINS_TIME: 6, // seconds scavenging bots remember where a worm died (#78)
     // Food / power-up density per unit of world area (tuned for a 3600 radius world).
     FOOD_DENSITY: 2600 / (Math.PI * 3600 * 3600),
@@ -50,8 +50,12 @@
   }
 
   // Size curves: everything derives from mass.
-  const radiusFor = (m) => Math.min(62, 9 + 2.2 * Math.pow(Math.max(m, 1), 0.3));
-  const lengthFor = (m) => 40 + 9 * Math.pow(Math.max(m, 1), 0.72);
+  // Above MASSIVE a worm grows mostly thicker: its length grows more slowly, and its radius
+  // keeps growing up to 90, so a massive worm looks massive without walling off the arena (#82).
+  const MASSIVE = 10000;
+  const radiusFor = (m) => Math.min(90, 9 + 2.2 * Math.pow(Math.max(m, 1), 0.3));
+  const lengthFor = (m) => (m <= MASSIVE ? 40 + 9 * Math.pow(Math.max(m, 1), 0.72)
+    : (40 + 9 * Math.pow(MASSIVE, 0.72)) * Math.pow(m / MASSIVE, 0.4));
   const spacingFor = (r) => r * 0.42;
   const turnRateFor = (r) => 5.4 / (1 + (r - 14) / 45);
   const foodRadius = (v) => Math.min(20, 3 + Math.sqrt(v) * 2.4);
@@ -157,7 +161,7 @@
 
   // Limits shared by save validation and the simulation, so a world loaded from a
   // valid save can never grow into one that fails validation (#31).
-  const MAX_MASS = 1e6; // ~7,200 body segments; normal play stays far below (mass sheds above 1500)
+  const MAX_MASS = 1e6; // ~1,150 body segments (#82); normal play stays far below (mass sheds above 10,000)
   const MAX_SEGMENTS = 20000;
   const MAX_FOOD = 50000;
   const MAX_ID = 1e9;

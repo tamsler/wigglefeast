@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 require('../engine.js');
-const { Game, Worm, SKINS, DIFFICULTY, DIFFICULTIES, TACTICS, MAX_BOTS, arenaRadius, CFG, botThink, knowsTactic, predictHead, validateSnapshot } = globalThis.WormEngine;
+const { Game, Worm, SKINS, DIFFICULTY, DIFFICULTIES, TACTICS, MAX_BOTS, arenaRadius, CFG, radiusFor, lengthFor, botThink, knowsTactic, predictHead, validateSnapshot } = globalThis.WormEngine;
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const fixture = () => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v1.json'), 'utf8'));
@@ -776,4 +776,58 @@ test('a 150-bot Expert world stays healthy within the tick budget (#81)', () => 
   assert.ok(avgBots >= MAX_BOTS * 0.8, `average ${avgBots.toFixed(0)} bots alive`);
   // Same loose limit as the other simulation tests; locally about 2 ms.
   assert.ok(msPerTick < 25, `${msPerTick.toFixed(2)} ms per tick is far too slow`);
+});
+
+// --- Massive growth (#82) -------------------------------------------------------
+
+test('worms shed only above 10,000 mass, at 0.2% of the excess per second (#82)', () => {
+  const g = { addFood() {} };
+  const shedOver = (mass, seconds) => {
+    const w = new Worm({ name: 'Big', skin: SKINS[0], mass, x: 0, y: 0, angle: 0, worldR: 1e5 });
+    for (let i = 0; i < seconds * 60; i++) w.update(1 / 60, g);
+    return mass - w.mass;
+  };
+  assert.ok(Math.abs(shedOver(20000, 1) - 20) < 0.2, `20,000 loses about 20 a second (${shedOver(20000, 1).toFixed(2)})`);
+  assert.equal(shedOver(10000, 2), 0);
+  assert.equal(shedOver(5000, 2), 0, 'mid-size worms (which used to shed above 1500) keep their mass');
+});
+
+test('above 10,000 worms grow mostly thicker; sizes below are unchanged (#82)', () => {
+  // Below 10,000: the curves from before #82.
+  for (const m of [15, 100, 1500, 5000, 9999, 10000]) {
+    assert.equal(radiusFor(m), Math.min(62, 9 + 2.2 * Math.pow(m, 0.3)), `radius at ${m}`);
+    assert.equal(lengthFor(m), 40 + 9 * Math.pow(m, 0.72), `length at ${m}`);
+  }
+  // Continuous and increasing above it.
+  assert.ok(Math.abs(lengthFor(10000.001) - lengthFor(10000)) < 0.01);
+  for (let m = 10000; m < 200000; m += 5000) {
+    assert.ok(lengthFor(m + 5000) > lengthFor(m) && radiusFor(m + 5000) >= radiusFor(m), `grows at ${m}`);
+  }
+  assert.ok(radiusFor(50000) > 62, `radius at 50,000 is ${radiusFor(50000).toFixed(1)}`);
+  assert.ok(radiusFor(1e6) <= 90);
+  assert.ok(lengthFor(50000) < 2 * lengthFor(10000), 'less than twice as long as at 10,000');
+  assert.ok(lengthFor(50000) < 2 * Math.PI * new Game({ botCount: 30 }).R, "shorter than a 30-bot arena's edge");
+});
+
+test('a 100,000-mass worm stays within the save limits and round-trips (#82)', () => {
+  const g = new Game({ botCount: 30, difficulty: 'normal' });
+  const big = g.worms.find((w) => w.ai);
+  big.mass = 100000;
+  big.shield = 1e6; // can't die during the test
+  for (let i = 0; i < 60; i++) g.update(1 / 60); // the body grows to its new length
+  assert.equal(big.dead, false);
+  const snap = clone(g);
+  assert.doesNotThrow(() => validateSnapshot(snap));
+  const saved = snap.worms.find((w) => w.id === big.id);
+  const back = new Game(null, snap).worms.find((w) => w.id === big.id);
+  assert.ok(Math.abs(back.mass - saved.mass) < 1);
+  assert.ok(back.sx.length > 400 && back.sx.length < 2000, `${back.sx.length} segments`);
+});
+
+test('a worm that keeps eating can hold massive size (#82)', () => {
+  // A steady intake of 60 mass a second, balanced only by shedding.
+  const g = { addFood() {} };
+  const w = new Worm({ name: 'Feeder', skin: SKINS[0], mass: 30000, x: 0, y: 0, angle: 0, worldR: 1e6 });
+  for (let i = 0; i < 60 * 60; i++) { w.mass += 1; w.update(1 / 60, g); }
+  assert.ok(w.mass > 30000, `holds ${w.mass.toFixed(0)} after a minute (the old shedding left it near 16,500)`);
 });
