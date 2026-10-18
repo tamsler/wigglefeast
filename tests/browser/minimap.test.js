@@ -32,6 +32,7 @@ test('minimap shows density', async (t) => {
   await page.goto(gameUrl());
   await page.startRun();
   await page.press('KeyP'); // paused: nothing moves, the minimap keeps drawing
+  await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'the game to pause');
   await page.eval(HELPERS);
   // Crowd every bot except the biggest into the (+, +) quadrant; the biggest alone in (+, -);
   // the player in (-, +) with its own large body clustered beside it; (-, -) stays empty.
@@ -50,8 +51,11 @@ test('minimap shows density', async (t) => {
     return { R, leader: g.leaderboard[0] === big };
   })()`);
   assert.ok(setup.leader, 'the moved bot leads the leaderboard');
-  await sleep(500); // past the 250 ms refresh
   const R = setup.R;
+  // Frames are being drawn again once the player marker shows at its new spot; then wait
+  // out the 250 ms shading refresh.
+  await page.waitFor(`(() => { const m = window.__mini.at(${-R * 0.5}, ${R * 0.5}); return m[0] > 200 && m[1] > 180; })()`, 'the minimap to redraw');
+  await sleep(400);
   const px = (x, y) => page.eval(`window.__mini.at(${x}, ${y})`);
   const empty = await px(-R * 0.5, -R * 0.5);
   const crowd = await px(R * 0.5 + 300, R * 0.5); // among the bodies, away from the heads at the centre
