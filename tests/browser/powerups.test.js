@@ -10,7 +10,13 @@ test('power-ups in the HUD', async (t) => {
   page = await launch();
   await page.goto(gameUrl());
   await page.startRun();
-  await page.eval('window.__player.shield = 1e5');
+  // Only the power-ups a test adds: none in the arena and none spawning. Otherwise the magnet
+  // (which pulls power-ups in from far away) can collect a random one and restart a timer.
+  await page.eval(`window.__player.shield = 1e5; Object.assign(window.__game, { powerups: [], powerupTarget: 0 })`);
+  const pause = async (on) => {
+    await page.press('KeyP');
+    await page.waitFor(`${on ? '!' : ''}document.getElementById('paused').classList.contains('hidden')`, on ? 'pause' : 'resume');
+  };
   const badge = (type) => `document.querySelector('#powerups .badge[data-type="${type}"]')`;
   const shown = (type) => page.eval(`!${badge(type)}.classList.contains('hidden')`);
   const ring = (type) => page.eval(`+getComputedStyle(${badge(type)}).getPropertyValue('--left')`);
@@ -30,14 +36,14 @@ test('power-ups in the HUD', async (t) => {
   });
 
   await t.test('a fresh power-up has a full ring that drains (#63)', async () => {
+    await pause(true); // game time stands still while paused; badges still update
     await page.eval('window.__player.pw.magnet = 16');
     await page.waitFor(`!${badge('magnet')}.classList.contains('hidden')`, 'magnet badge');
-    assert.ok(await ring('magnet') > 0.95, 'full ring');
+    assert.equal(await ring('magnet'), 1, 'full ring');
     assert.equal(await cls('magnet'), '', 'not blinking');
     await page.eval('window.__player.pw.magnet = 8');
-    await page.frames(3);
-    const r = await ring('magnet');
-    assert.ok(r > 0.45 && r < 0.52, `half ring at 8 s: ${r}`);
+    await page.waitFor(`+getComputedStyle(${badge('magnet')}).getPropertyValue('--left') === 0.5`, 'half ring at 8 s');
+    await pause(false);
   });
 
   await t.test('about to expire: blinks in the last 3 s, faster in the last second, then hides (#63)', async () => {
@@ -55,7 +61,7 @@ test('power-ups in the HUD', async (t) => {
     await page.waitFor(`${badge('x2')}.classList.contains('ending')`, 'blinking');
     await page.eval(`window.__game.powerups.push({ x: window.__player.x, y: window.__player.y, type: 'x2', ph: 0, dead: false })`);
     await page.waitFor(`!${badge('x2')}.classList.contains('ending')`, 'blink stops');
-    assert.ok(await ring('x2') > 0.95, 'ring full again');
+    assert.ok(await ring('x2') > 0.85, 'ring (nearly) full again'); // time keeps running here
     assert.equal(await shown('x2'), true);
   });
 });
