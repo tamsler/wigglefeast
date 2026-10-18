@@ -20,13 +20,16 @@
 
   <!-- In-game HUD -->
   <div id="hud" class="hidden">
-    <div id="powerups"></div>
     <div id="stats">
       <div class="score"><span id="score">0</span><small>score</small><span id="boostBadge" class="hidden">Boost</span></div>
       <div class="line">Rank <b id="rank">-</b> of <b id="total">-</b> · Kills <b id="kills">0</b></div>
     </div>
     <div id="leaderboard"><h3>Leaderboard</h3><ol id="lb"></ol></div>
-    <canvas id="minimap" width="160" height="160"></canvas>
+    <!-- Top-left cluster: the minimap with the active power-up badges beside it (#63) -->
+    <div id="cluster">
+      <canvas id="minimap" width="160" height="160"></canvas>
+      <div id="powerups"></div>
+    </div>
     <div id="feed"></div>
     <!-- Touch screens only, and only while playing -->
     <div id="touchControls" class="hidden">
@@ -56,7 +59,7 @@
       <div class="help">
         <div><kbd>Mouse</kbd> steer · <kbd>Hold click</kbd> / <kbd>Space</kbd> boost</div>
         <div><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> keyboard steer · <kbd>P</kbd> pause</div>
-        <div class="touch">Touch: drag to steer · hold the boost button (or add a second finger) · pause button top left</div>
+        <div class="touch">Touch: drag to steer · hold the boost button (or add a second finger) · pause button top right</div>
       </div>
       <div id="best"></div>
       <div id="version"></div>

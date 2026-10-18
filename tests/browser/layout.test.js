@@ -50,9 +50,9 @@ async function startTouchRun(t, width, height, coarse) {
   if (coarse) await page.coarsePointer();
   await page.goto(gameUrl());
   await page.startRun();
-  // Shielded, with every power-up running so their timers take the most space in the HUD.
+  // Shielded, with every power-up running so their badges take the most space in the HUD.
   await page.eval(`Object.assign(window.__player, { shield: 1e9 }); Object.assign(window.__player.pw, { magnet: 15, x2: 15, x5: 15, speed: 15, zoom: 15, turn: 15 })`);
-  await page.waitFor(`document.querySelectorAll('#powerups .pw').length === 6`, 'power-up timers');
+  await page.waitFor(`document.querySelectorAll('#powerups .badge:not(.hidden)').length === 6`, 'power-up badges');
   // Boosting, so the BOOST badge next to the score takes its space too (#37).
   await page.eval('window.__player.mass = 300');
   await page.key('keyDown', 'Space');
@@ -83,10 +83,19 @@ for (const [width, height] of [[390, 844], [360, 640], [844, 390], [667, 375], [
 }
 
 for (const [width, height] of [[1280, 713], [1440, 900]]) {
-  test(`no touch buttons with a mouse at ${width}x${height}`, async (t) => {
+  test(`desktop HUD fits without overlaps and has no touch buttons at ${width}x${height}`, async (t) => {
     const page = await startTouchRun(t, width, height, false);
     const m = await page.eval(MEASURE_HUD);
     assert.equal(m['#boostBtn'].shown, false, 'boost button hidden');
     assert.equal(m['#pauseBtn'].shown, false, 'pause button hidden');
+    // The rest of the HUD fits without overlaps on desktop too (#63).
+    const DESK = HUD.filter((s) => !s.endsWith('Btn'));
+    for (const s of DESK) assert.ok(m[s].shown && m[s].left >= 0 && m[s].top >= 0 && m[s].right <= width + 0.5 && m[s].bottom <= height + 0.5, `${s} inside the screen`);
+    for (let i = 0; i < DESK.length; i++) {
+      for (let j = i + 1; j < DESK.length; j++) {
+        const a = m[DESK[i]], b = m[DESK[j]];
+        assert.ok(!(a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom), `${DESK[i]} overlaps ${DESK[j]}`);
+      }
+    }
   });
 }
