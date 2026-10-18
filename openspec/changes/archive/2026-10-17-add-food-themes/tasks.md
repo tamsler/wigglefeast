@@ -17,7 +17,8 @@
 ## 4. Release and integration
 
 - [x] 4.1 Mention food themes in the README; bump `VERSION` in `sw.js` to the next minor version (no new files); run `node --test "tests/**/*.test.js"` and verify every test passes and `.github/scripts/check-version.sh main` passes after committing
-- [ ] 4.2 Manual check on desktop and a phone: every theme's items are recognisable at small and large sizes, the picker is easy to use, and frame rate is unchanged; verify by noting the result in the PR
+- [x] 4.2 Manual check on desktop and a phone: every theme's items are recognisable at small and large sizes, the picker is easy to use, and frame rate is unchanged; verify by noting the result in the PR
+  - Confirmed by the user on 2026-10-17 ("I was able to test/verify all remaining features/specs").
 
 ## 5. Picker follow-up (#67)
 
