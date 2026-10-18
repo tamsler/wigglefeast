@@ -45,7 +45,11 @@ Storage keys: `wormarena.world`, `wormarena.profile`, `wormarena.settings` (the 
 - `index.html`, `style.css`: page and UI.
 - `manifest.webmanifest`, `sw.js`, `icons/`: installable app + offline support and release versioning.
 
-Bot count (5–60) and difficulty (easy/normal/hard) are set in the menu. The arena size scales with the bot count. Difficulty and growth numbers live at the top of `engine.js` (`CFG`, `DIFFICULTY`); `node tools/balance.js` runs headless worlds and reports survival, kills and bot sizes per difficulty, and `--set` tries other values without editing the engine.
+Bot count (5–60) and difficulty (easy/normal/hard/expert) are set in the menu. The arena size scales with the bot count.
+
+**Difficulty:** Easy bots steer clumsily and rarely hunt. On harder levels bots see further, react faster and use more tactics: they predict where a turning worm is going, avoid heads about to cross their path, get out of the way of a cut-off, go head-on at smaller worms, and rush to fresh remains nobody else is closer to. On Hard some also trap worms between other bodies, pin them against the wall, or circle them. On **Expert** every bot does all of that, and two bots hunting the same worm cut in from opposite sides. Bots only use what you could see on screen, never your steering input, and treat you like any other worm.
+
+Difficulty and growth numbers live at the top of `engine.js` (`CFG`, `DIFFICULTY`, including each level's tactic shares). `node tools/balance.js` runs headless worlds and reports survival, kills (by the killer's tactic), bot sizes and time per tick for each level; `--set` tries other values without editing the engine (for example `--set expert.tactics.coil=0`).
 
 ## Releasing
 

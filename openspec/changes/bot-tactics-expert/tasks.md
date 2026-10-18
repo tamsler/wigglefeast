@@ -2,7 +2,7 @@
 
 ## 1. Groundwork
 
-- [ ] 1.1 Rebase this branch onto `main` once #77 (#16 tuning) has merged; verify `git log main..HEAD` shows only this change's commits and `node --test "tests/**/*.test.js"` passes
+- [x] 1.1 Rebase this branch onto `main` once #77 (#16 tuning) has merged; verify `git log main..HEAD` shows only this change's commits and `node --test "tests/**/*.test.js"` passes
 - [x] 1.2 Add `expert` to `DIFFICULTY` (skill 0.85–1, aggro 0.6–1, preyRatio 2, bigShare 0.25, bigMax 3000), a `tactics` share table on every level (design decision 1), and export `DIFFICULTIES`; verify with an engine test that every level has all nine tactic keys, Easy's are all 0, Expert's are all 1, and an Expert world spawns about 25% big bots
 - [x] 1.3 Add `knows(w, tactic)` (integer hash of id and tactic index against the level's share); verify with an engine test that the result is stable across save/load (`new Game(null, clone(g))`) and that the share of bots knowing a tactic on Hard is near its table value over 600 bots
 - [x] 1.4 Track the observed `turnRate` in `Worm.update` (smoothed actual heading change, not saved) and add `predictHead(o, t)`; verify with an engine test that a worm turning steadily left gets a positive `turnRate`, that `predictHead` curves the same way, and that changing `targetAngle` alone does not change the prediction (Fair information scenario)
@@ -34,7 +34,7 @@
 
 - [x] 5.1 Extend `tools/balance.js`: default levels include expert, report kills by the killer's `ai.mode`, and print ms per tick; verify that, over both stand-ins together, the share of stand-in deaths caused by tactics and the number of bots hunting it rise from Easy to Expert, and that Easy stays within noise of #16 (stand-in survival is not the check: it tracks how crowded the arena is with big bodies and is lowest on Easy; changed with the owner's approval during apply)
 - [x] 5.2 Extend the simulation health test in `tests/engine.test.js` to cover expert, and add a 60-bot Expert run; verify it passes the existing limits (bot count, wall deaths, < 25 ms/tick)
-- [ ] 5.3 Update `README.md` (difficulty list, a short note on what Expert bots do) and record the tactic overview in `openspec/specs/bots` through this change's delta; verify `openspec validate bot-tactics-expert --strict` passes
+- [x] 5.3 Update `README.md` (difficulty list, a short note on what Expert bots do) and record the tactic overview in `openspec/specs/bots` through this change's delta; verify `openspec validate bot-tactics-expert --strict` passes
 - [ ] 5.4 Bump `VERSION` in `sw.js` (minor) and run `node --test "tests/**/*.test.js"`; verify all tests pass, then open the PR (`Closes #78`), run the `pr-reviewer` agent, and address its findings
 
 ## Workflow follow-up
