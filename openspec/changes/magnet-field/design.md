@@ -37,6 +37,8 @@ A `drawMagnetField(w, time)` step runs in `render` **after the arena floor and e
 
 *Alternative:* a field-lines drawing (curved lines from pole to pole). It's more "physics", but harder to read at small zoom, and more strokes.
 
+**Tuned during apply,** after looking at it on desktop and phone: the first values (alpha 0.45 / 0.22, a fade of `(1 − p)²`, width `max(2, 0.12·r)`) were too faint to read. Now: `base` is 0.7 for the player and 0.35 for bots, the ring alpha is `base × (1 − p)`, the width is `max(3.5, 0.2·r)`, and the glow is at `base × 0.3`.
+
 ### 3. Fading at the end
 Everything is multiplied by `min(1, pw.magnet / 3)`, so it fades linearly over the last 3 seconds, the same window in which the badge blinks.
 

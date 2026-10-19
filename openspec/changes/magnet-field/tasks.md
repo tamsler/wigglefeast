@@ -2,8 +2,8 @@
 
 ## 1. Field
 
-- [ ] 1.1 Add `drawMagnetField` and call it in `render` after the arena floor and before food, for live worms with an active magnet whose head is near the view (design decisions 1–4); verify by looking at a player and a bot with magnets on desktop and phone sizes, including the last 3 seconds and while paused
-- [ ] 1.2 Add `tests/browser/magnet.test.js`, recording arcs, stroke colours and alpha on the game canvas. Verify:
+- [x] 1.1 Add `drawMagnetField` and call it in `render` after the arena floor and before food, for live worms with an active magnet whose head is near the view (design decisions 1–4); verify by looking at a player and a bot with magnets on desktop and phone sizes, including the last 3 seconds and while paused
+- [x] 1.2 Add `tests/browser/magnet.test.js`, recording arcs, stroke colours and alpha on the game canvas. Verify:
   - with the player's magnet active, red and blue rings are drawn, none beyond the food pull range
   - with no magnet, none are drawn
   - a bot's rings are fainter than the player's
