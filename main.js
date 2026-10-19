@@ -542,6 +542,13 @@
   // any size. t is game time, so animated finishes freeze while paused.
   const SEGMENT = 0.42;
   const every = (lengths) => Math.max(1, Math.round(lengths / SEGMENT)); // body lengths (in r) -> segments
+  // Segments a per-segment decoration visits: every `step` from `first` up to `last`, limited to
+  // the on-screen span while a worm is drawn in the arena (#99). Numbers stay absolute, so a
+  // decoration stays put as the worm moves on and off screen.
+  function stepRange(first, step, last) {
+    if (!span) return [first, last];
+    return [Math.max(first, first + Math.ceil((span[0] - first) / step) * step), Math.min(last, span[1])];
+  }
   const rgbCache = new Map();
   function rgbOf(hex) {
     let v = rgbCache.get(hex);
@@ -616,7 +623,8 @@
       traceOn(g, sx, sy, n - 1, 0);
       g.stroke();
       g.fillStyle = lights;
-      for (let i = every(2.8); i < n - 1; i += every(2.8)) {
+      const lit = every(2.8), [l0, l1] = stepRange(lit, lit, n - 2);
+      for (let i = l0; i <= l1; i += lit) {
         g.globalAlpha = a0 * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 6 - i * 0.3)));
         g.beginPath();
         g.arc(sx[i], sy[i], r * 0.26, 0, TAU);
@@ -643,8 +651,10 @@
     spots(g, sx, sy, r, skin) {
       const [base, spot, ring] = skin.colors, n = sx.length, step = every(2.8);
       solid(g, sx, sy, r, base);
-      for (let i = step, k = 0; i < n - 1; i += step, k++) {
-        const [, , nx, ny] = normalAt(sx, sy, i), side = k % 2 ? 1 : -1;
+      const [s0, s1] = stepRange(step, step, n - 2);
+      for (let i = s0; i <= s1; i += step) {
+        // The side comes from the spot's own number, so spots don't swap sides when only part is drawn.
+        const [, , nx, ny] = normalAt(sx, sy, i), side = (i / step - 1) % 2 ? 1 : -1;
         const x = sx[i] + nx * side * r * 0.42, y = sy[i] + ny * side * r * 0.42;
         g.beginPath();
         g.arc(x, y, r * 0.3, 0, TAU);
@@ -666,7 +676,8 @@
       g.fillStyle = mark;
       g.strokeStyle = dark;
       g.lineWidth = r * 0.1;
-      for (let i = every(2.1); i < n - 1; i += every(2.1)) {
+      const sc = every(2.1), [c0, c1] = stepRange(sc, sc, n - 2);
+      for (let i = c0; i <= c1; i += sc) {
         const [tx, ty, nx, ny] = normalAt(sx, sy, i), x = sx[i], y = sy[i];
         g.beginPath();
         g.moveTo(x + tx * L, y + ty * L);
@@ -683,7 +694,8 @@
       inRuns(g, sx, sy, r, (a) => mix(base, nebula, 0.35 + 0.35 * Math.sin(a * 0.168 + 1)));
       // Stars batched into three brightness levels: three fills per worm, however long.
       const paths = [new Path2D(), new Path2D(), new Path2D()];
-      for (let i = 0; i < n; i += 3) {
+      const [g0, g1] = stepRange(0, 3, n - 1);
+      for (let i = g0; i <= g1; i += 3) {
         const [, , nx, ny] = normalAt(sx, sy, i);
         for (let k = 0; k < 2; k++) {
           const seed = i * 2 + k, off = (hash01(seed) - 0.5) * 1.5 * r, size = r * (0.06 + 0.08 * hash01(seed + 99));

@@ -57,7 +57,18 @@ async function startTouchRun(t, width, height, coarse) {
   await page.eval('window.__player.mass = 300');
   await page.key('keyDown', 'Space');
   await page.waitFor(`!document.getElementById('boostBadge').classList.contains('hidden')`, 'boost badge');
-  await page.frames(5);
+  // Freeze the world and fill the HUD with its widest realistic content, so it is measured at one
+  // stable moment, at its worst, instead of while 30 bots keep changing it (#71). Frames still draw.
+  // Bot names reach 16 characters once names run out (above 68 bots, "Name NN"), masses reach six
+  // digits now that worms can grow massive (#82), and the player row shows a 16-character name.
+  await page.eval(`(() => {
+    const g = window.__game, p = window.__player;
+    g.update = () => {};
+    g.worms.filter((w) => w.ai).forEach((b, i) => { b.name = 'Captain Slurp 99'; b.mass = 199999 - i; });
+    p.name = 'WWWWWWWWWWWWWWWW';
+    g.updateLeaderboard();
+  })()`);
+  await page.frames(15);
   return page;
 }
 
