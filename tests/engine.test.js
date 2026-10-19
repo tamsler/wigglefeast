@@ -934,9 +934,46 @@ test('readers leave a worm they saw kill alone, unless it is much smaller (#83)'
   assert.equal(pickPrey({ mass: 300 }, { mass: 300 }, () => {}).prey, 'Near', 'nearest by default');
   assert.equal(pickPrey({ mass: 300 }, { mass: 300 }, (s) => memo(s, 'Near', 1.5, 0)).prey, 'Far', 'Seen killer gets room');
   assert.equal(pickPrey({ mass: 150 }, { mass: 300 }, (s) => memo(s, 'Near', 1.5, 0)).prey, 'Near', 'Much smaller killer');
-  // The memory fades: half-life 15 s, so 30 s later 1.5 kills are down to about 0.4.
-  const later = pickPrey({ mass: 300 }, { mass: 300 }, (s) => { memo(s, 'Near', 1.5, 0); s.game.time += 30; });
-  assert.equal(later.prey, 'Near', 'wariness fades after about half a minute');
+});
+
+test('one real kill keeps a reader wary for about half a minute (#83)', () => {
+  // A real kill seen by the reader, then later thinks (review: a single kill used to fade below the
+  // old >= 1 threshold before the next think).
+  const after = (seconds) => pickPrey({ mass: 300 }, { mass: 300 }, (s) => {
+    const near = s.worms.find((w) => w.name === 'Near');
+    const victim = new Worm({ name: 'Victim', skin: SKINS[0], mass: 100, x: 300, y: 60, angle: 0, worldR: s.game.R });
+    s.game.worms.push(victim);
+    s.game.kill(victim, near);
+    s.game.time += seconds;
+  }).prey;
+  assert.equal(after(0.5), 'Far', 'half a second later the killer is left alone');
+  assert.equal(after(20), 'Far', 'still wary after 20 s');
+  assert.equal(after(35), 'Near', 'forgotten after about half a minute');
+});
+
+test('one real cut-off is enough to retaliate, for about 20 seconds (#83)', () => {
+  // The cutter from the evasion scene, then a later prey choice among it and a nearer worm.
+  const run = (seconds) => withTactics('expert', { ...ONLY('read'), evade: 1 }, () => {
+    const s = scene('expert', [
+      { name: 'Bot', mass: 400, x: 0, y: 0, angle: 0, ai: { aggro: 1 } },
+      { name: 'Cutter', mass: 100, x: 200, y: 150, angle: Math.atan2(-150, 40) },
+    ], 30);
+    const [bot, cutter] = s.worms;
+    botThink(bot, s.game);
+    assert.equal(bot.ai.mode, 'evade');
+    // Afterwards: a neutral worm nearer than the cutter.
+    const neutral = new Worm({ name: 'Neutral', skin: SKINS[0], mass: 100, x: -120, y: 0, angle: Math.PI, worldR: s.game.R });
+    s.game.worms.push(neutral);
+    for (const w of [bot, cutter]) { w.sx.fill(w.sx[0]); w.sy.fill(w.sy[0]); }
+    cutter.sx[0] = cutter.sx[0] + 100; cutter.angle = Math.PI / 2; // now heading away, just a candidate
+    s.game.rebuildSegGrid();
+    s.game.time += seconds;
+    bot.ai.prey = null;
+    for (let i = 0; i < 300 && !bot.ai.prey; i++) botThink(bot, s.game);
+    return bot.ai.prey && bot.ai.prey.name;
+  });
+  assert.equal(run(2), 'Cutter', 'retaliates against the cutter rather than the nearer worm');
+  assert.equal(run(25), 'Neutral', 'the grudge is gone after about 20 s');
 });
 
 test('readers retaliate against a worm they hold a grudge against, two at most (#83)', () => {

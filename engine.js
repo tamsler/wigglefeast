@@ -507,6 +507,9 @@
   // that worm make and grudges (the worm tried to cut it off, or killed right next to it).
   // Values fade by half-life; nothing here is saved.
   const KILL_HALF = 15, GRUDGE_HALF = 10, SEEN_MAX = 16, KILL_VIEW = 900, KILL_NEAR = 300;
+  // One event stores 1 and fades from there: it counts while at least SEEN_MIN is left, so one seen
+  // kill counts for 30 s (two half-lives) and one grudge for 20 s.
+  const SEEN_MIN = 0.25;
   function recall(ai, id, now) {
     const m = ai.seen && ai.seen.get(id);
     if (!m) return null;
@@ -657,7 +660,7 @@
         if (d2 < td && o.mass < w.mass * diff.preyRatio) {
           // A reader leaves alone a worm it saw kill, unless that worm is much smaller.
           const m = read ? recall(ai, o.id, g.time) : null;
-          if (m && m.kills >= 1 && o.mass > w.mass * 0.5) continue;
+          if (m && m.kills >= SEEN_MIN && o.mass > w.mass * 0.5) continue;
           cands.push({ o, d2, grudge: m ? m.grudge : 0 });
         }
       }
@@ -667,7 +670,7 @@
         if (read) {
           // Retaliate against the worm it holds the biggest grudge against, unless two other
           // bots are already doing so (no gang-ups).
-          let bg = 1;
+          let bg = SEEN_MIN;
           for (const c of cands) {
             if (c.grudge < bg) continue;
             let others = 0;

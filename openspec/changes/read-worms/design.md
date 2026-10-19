@@ -38,10 +38,11 @@
 
 ### 3. Uses (bots that know `read`)
 - **Wariness:** `wary(X) = kills + grudge` (after decay).
+- **Thresholds (changed in review):** an event stores 1 and starts fading immediately, so a `≥ 1` check would only ever see two events close together. Skipping a seen killer and retaliating both use **0.25** instead. That makes one seen kill count for 30 s (two half-lives) and one grudge for 20 s, which matches the spec's "about half a minute" and "about 20 seconds".
 - **Prey choice:**
   - Candidates are unchanged (range and prey limit).
-  - Drop candidates with `kills ≥ 1` unless their mass is ≤ 0.5× the bot's.
-  - If any candidate has `grudge ≥ 1` and **fewer than two other bots have `ai.retaliating === X`**, pick the one with the highest grudge, set `ai.retaliating = X`, and hunt it with the usual hunting modes.
+  - Drop candidates with `kills ≥ 0.25` unless their mass is ≤ 0.5× the bot's.
+  - If any candidate has `grudge ≥ 0.25` and **fewer than two other bots have `ai.retaliating === X`**, pick the one with the highest grudge, set `ai.retaliating = X`, and hunt it with the usual hunting modes.
   - Otherwise use the existing choice (nearest, or `trap`).
   - `ai.retaliating` clears when that hunt ends.
 - **Keep away:** the evade range for a head is multiplied by `1 + 0.5·min(2, wary(X))`.
