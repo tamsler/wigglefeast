@@ -25,7 +25,12 @@ test('draw order around the player', async (t) => {
     const lay = (w, mass, skin, pts) => {
       w.mass = mass; w.r = radiusFor(mass); w.skin = skin;
       w.sx = pts.map((q) => q[0]); w.sy = pts.map((q) => q[1]); w.shield = 0; w.updateBounds();
+      // Heading along the laid-out body (head first), so a tick could only move it along its own line.
+      w.angle = w.targetAngle = Math.atan2(pts[0][1] - pts[1][1], pts[0][0] - pts[1][0]);
     };
+    // Nothing moves from here on, paused or not (CI once caught a tick moving the player off the
+    // sampled line); frames still draw.
+    g.update = () => {};
     const line = (x0, y0, x1, y1, step) => {
       const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / step), out = [];
       for (let i = 0; i <= n; i++) out.push([x0 + ((x1 - x0) * i) / n, y0 + ((y1 - y0) * i) / n]);

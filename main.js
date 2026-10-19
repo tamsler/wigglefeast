@@ -1309,6 +1309,34 @@
     ctx.globalAlpha = 1;
   }
 
+  // Magnet field (#103): while a worm's magnet runs, waves ripple forward from its head to the edge
+  // of its food pull range and dissipate: arcs about 110 degrees wide in front of it, alternating
+  // blue, red, blue... like a magnet's two poles. Drawn on the floor (under food, power-ups and
+  // worms), fainter on bots, fading over the magnet's last 3 seconds, and moving with game time,
+  // so it is still while paused.
+  const FIELD_COLORS = ['#4cc9f0', '#ff4d6d']; // blue, red, by each wave's birth number
+  const FIELD_PERIOD = 1.4, FIELD_WAVES = 4; // seconds from head to edge; waves in flight at once
+  const FIELD_HALF = (55 * Math.PI) / 180; // half of the ~110 degree arc
+  const fieldReach = (w) => 2.2 * w.r + 24 + CFG.MAGNET_REACH; // the food pull range (engine.js)
+  function drawMagnetField(w, time) {
+    const r = w.r, A = fieldReach(w), hx = w.sx[0], hy = w.sy[0], a = w.angle;
+    const base = (w === game.player ? 0.7 : 0.35) * Math.min(1, w.pw.magnet / 3);
+    const gap = FIELD_PERIOD / FIELD_WAVES, newest = Math.floor(time / gap);
+    ctx.lineWidth = Math.max(3.5, 0.2 * r);
+    ctx.lineCap = 'round';
+    for (let j = 0; j < FIELD_WAVES; j++) {
+      const n = newest - j, p = (time - n * gap) / FIELD_PERIOD; // 0 at the head, 1 at the edge
+      const alpha = base * (1 - p);
+      if (alpha < 0.01) continue;
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = FIELD_COLORS[((n % 2) + 2) % 2];
+      ctx.beginPath();
+      ctx.arc(hx, hy, r + (A - r) * p, a - FIELD_HALF, a + FIELD_HALF);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function render(t) {
     const z = cam.z;
     boostArrowsDrawn = 0;
@@ -1336,6 +1364,14 @@
     ctx.lineWidth = 10 / z;
     ctx.strokeStyle = `rgba(255, 60, 100, ${0.55 + 0.2 * Math.sin(t * 3)})`;
     ctx.stroke();
+
+    // Magnet fields, under everything else in the arena (#103)
+    for (const w of game.worms) {
+      if (w.dead || !(w.pw.magnet > 0)) continue;
+      const A = fieldReach(w), x = w.sx[0], y = w.sy[0];
+      if (x + A < view.x0 || x - A > view.x1 || y + A < view.y0 || y - A > view.y1) continue;
+      drawMagnetField(w, game.time);
+    }
 
     // Food: a glow in the food's colour, plus the theme's item unless the theme is Classic (#64)
     const themed = activeTheme !== 'classic';

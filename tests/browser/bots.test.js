@@ -36,6 +36,8 @@ test('bot count', async (t) => {
       await withSettings({ name: 'A', skin: 0, botCount, difficulty: 'expert' });
       await page.startRun();
       await page.eval('window.__player.shield = 1e9');
+      // At 150 every worm also has a magnet, so the magnet fields' drawing cost is in the worst case (#103).
+      if (botCount === 150) await page.eval('window.__game.worms.forEach((w) => { w.pw.magnet = 16; })');
       const m = await page.eval(`new Promise((resolve) => {
         const g = window.__game, orig = g.update;
         let engine = 0;
@@ -52,7 +54,7 @@ test('bot count', async (t) => {
         };
         requestAnimationFrame(tick);
       })`);
-      st.diagnostic(`${botCount} bots: engine ${m.engine.toFixed(2)} ms/frame, frame p50 ${m.p50.toFixed(1)} ms, p95 ${m.p95.toFixed(1)} ms (${m.frames} frames)`);
+      st.diagnostic(`${botCount} bots${botCount === 150 ? ', all with magnets' : ''}: engine ${m.engine.toFixed(2)} ms/frame, frame p50 ${m.p50.toFixed(1)} ms, p95 ${m.p95.toFixed(1)} ms (${m.frames} frames)`);
       assert.ok(m.engine < 12, `${botCount} bots: engine ${m.engine.toFixed(2)} ms per frame`);
       assert.ok(m.p50 < 50, `${botCount} bots: median frame ${m.p50.toFixed(1)} ms`);
       await page.press('KeyP');
