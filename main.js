@@ -1206,7 +1206,11 @@
     else for (let i = from + 1; i <= to; i++) ctx.lineTo(sx[i], sy[i]);
   }
 
-  function drawWorm(w, t, view) {
+  // part: 'all'; 'body' (everything but the eyes and boost arrows); 'head' (the first few
+  // segments, eyes and arrows). The player is drawn body first, then everyone else, then its head
+  // on top, so a body the player can run into is never hidden under the player's own (#102).
+  const HEAD_SEGS = 4; // segments drawn again in the head pass: about 1.7 r, enough to cover the head
+  function drawWorm(w, t, view, part = 'all') {
     const m = w.boosting ? w.r * 3.5 : 0; // boost arrows reach ahead of the head
     if (w.maxX + m < view.x0 || w.minX - m > view.x1 || w.maxY + m < view.y0 || w.minY - m > view.y1) return;
     const sx = w.sx, sy = w.sy, n = sx.length, r = w.r, skin = w.skin;
@@ -1218,15 +1222,19 @@
       if (x + pad >= view.x0 && x - pad <= view.x1 && y + pad >= view.y0 && y - pad <= view.y1) { if (lo < 0) lo = i; hi = i; }
     }
     if (lo < 0) return;
-    span = [Math.max(0, lo - 1), Math.min(n - 1, hi + 1)];
-    try { drawWormBody(w, t, sx, sy, n, r, skin); } finally { span = null; }
+    if (part === 'head') {
+      if (lo > HEAD_SEGS) return; // the head is off screen
+      hi = Math.min(hi, HEAD_SEGS);
+    }
+    span = [Math.max(0, lo - 1), Math.min(n - 1, hi + 1, part === 'head' ? HEAD_SEGS : n - 1)];
+    try { drawWormBody(w, t, sx, sy, n, r, skin, part); } finally { span = null; }
   }
 
-  function drawWormBody(w, t, sx, sy, n, r, skin) {
+  function drawWormBody(w, t, sx, sy, n, r, skin, part) {
     const alpha = w.shield > 0 ? 0.45 + 0.25 * Math.sin(t * 14) : 1;
     ctx.globalAlpha = alpha;
 
-    if (w.boosting) {
+    if (w.boosting && part !== 'head') { // the glow along the whole body, drawn once
       ctx.globalAlpha = alpha * (0.3 + 0.15 * Math.sin(t * 18));
       ctx.strokeStyle = skin.accent;
       ctx.lineWidth = 2 * r + 16;
@@ -1252,6 +1260,8 @@
       ctx.stroke();
       ctx.restore();
     }
+
+    if (part === 'body') { ctx.globalAlpha = 1; return; } // eyes and arrows come with the head pass
 
     // Eyes
     const hx = sx[0], hy = sy[0], ex = Math.cos(w.angle), ey = Math.sin(w.angle);
@@ -1332,8 +1342,9 @@
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     const player = game.player;
+    if (player) drawWorm(player, t, view, 'body');
     for (const w of game.worms) if (w !== player) drawWorm(w, t, view);
-    if (player) drawWorm(player, t, view);
+    if (player) drawWorm(player, t, view, 'head');
 
     // Names
     ctx.textAlign = 'center';

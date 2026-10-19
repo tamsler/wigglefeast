@@ -37,14 +37,15 @@ test('decorations of a long worm', async (t) => {
   })()`);
 
   // Spots are the arcs with radius 0.3 r; each maps back to its segment along the straight body.
+  // Counts the frames actually drawn in the window (not estimated from time), so a busy machine
+  // drawing fewer frames doesn't skew the per-frame count.
   const spotsDrawn = async (w) => {
-    await page.eval('window.__arcs.length = 0');
-    const f0 = await page.eval('performance.now()');
+    await page.eval(`(() => { window.__arcs.length = 0; window.__frames = 0; const tick = () => { window.__frames++; if (window.__counting) requestAnimationFrame(tick); }; window.__counting = true; requestAnimationFrame(tick); })()`);
     await sleep(300);
-    const ms = (await page.eval('performance.now()')) - f0;
-    const arcs = await page.eval('window.__arcs');
+    await page.eval('window.__counting = false');
+    const arcs = await page.eval('window.__arcs'), frames = await page.eval('window.__frames');
     const spots = arcs.filter(([, , r]) => Math.abs(r - 0.3 * w.r) < 1e-6).map(([x, y]) => ({ i: Math.round((w.x0 - x) / w.sp), side: Math.sign(y - w.y) }));
-    return { spots, frames: Math.max(1, Math.round(ms / (1000 / 60))) };
+    return { spots, frames: Math.max(1, frames) };
   };
 
   for (const shift of [0, 7]) {

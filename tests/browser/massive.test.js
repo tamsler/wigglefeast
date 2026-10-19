@@ -37,7 +37,7 @@ test('massive worms', async (t) => {
       for (let i = 0; i < n; i++) { b.sx.push(p.x - 8000 + i * step); b.sy.push(p.y + 150); }
       b.updateBounds();
     })()`);
-    await page.frames(5);
+    await page.frames(10);
     const after = await page.eval(column);
     let changed = 0;
     for (let i = 0; i < before.length; i += 4) if (Math.abs(before[i] - after[i]) + Math.abs(before[i + 1] - after[i + 1]) + Math.abs(before[i + 2] - after[i + 2]) > 30) changed++;
@@ -71,10 +71,18 @@ test('massive worms', async (t) => {
   });
 
   await t.test('the camera keeps zooming out as the player thickens past 10,000', async () => {
+    // Waits until the camera has eased to its new zoom (two readings 250 ms apart within 0.5%),
+    // rather than a fixed time that a busy machine may not keep up with.
     const zoomAt = async (mass) => {
       await page.eval(`window.__player.mass = ${mass}`);
-      await sleep(2000); // the camera eases to its new zoom
-      return page.eval(ZOOM);
+      let prev = await page.eval(ZOOM);
+      for (let i = 0; i < 40; i++) {
+        await sleep(250);
+        const z = await page.eval(ZOOM);
+        if (i >= 3 && Math.abs(z - prev) / prev < 0.005) return z;
+        prev = z;
+      }
+      return prev;
     };
     const z10 = await zoomAt(10000), z50 = await zoomAt(50000), z100 = await zoomAt(100000);
     assert.ok(z50 < z10 * 0.9, `50,000 zooms out from 10,000 (${z10.toFixed(3)} -> ${z50.toFixed(3)})`);
