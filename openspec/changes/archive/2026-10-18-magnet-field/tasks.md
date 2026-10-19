@@ -17,7 +17,7 @@
 ## 2. Release
 
 - [x] 2.1 Update the README's power-up line (the magnet shows its field), bump `VERSION` in `sw.js` (minor), and run `node --test "tests/**/*.test.js"`; verify all tests pass
-- [ ] 2.2 Open the PR (`Closes #103`), run the `pr-reviewer` agent in an isolated worktree, address its findings, and merge once checks pass
+- [x] 2.2 Open the PR (`Closes #103`), run the `pr-reviewer` agent in an isolated worktree, address its findings, and merge once checks pass
 
 ## Workflow follow-up
 

@@ -28,18 +28,15 @@
 A `drawMagnetField(w, time)` step runs in `render` **after the arena floor and edge, before food**, for every live worm with `pw.magnet > 0` whose head is within view, padded by the field radius. Everything else is drawn over it (spec: *Nothing hidden*).
 
 ### 2. The waves
-
-**Revised during apply (owner's request):** each wave is a single-colour **forward arc** of about 110° (±55° around the heading), not a ring. Consecutive waves **alternate blue and red**: a wave's colour comes from its birth number, `floor(time / gap)`, so it keeps its colour all the way out. There are 4 waves in flight, born every 1.4 / 4 s. The circular glow is dropped, because the owner wants no circle. The ring details below are the original plan, kept for reference.
+What shipped. The first plan was full red/blue rings with a round glow; it was changed during apply at the owner's request, and its alpha and width tuned after looking at it on desktop and phone.
 - **Field radius:** `A = 2.2·r + 24 + CFG.MAGNET_REACH`, the food pull range.
-- **Rings:** 3 rings at once, each expanding from radius `r` to `A` over a 1.4 s period, offset by a third of a period, using `game.time`.
-- **Ring alpha:** `base × (1 − p)²`, where `p` is the ring's progress from 0 to 1, so rings fade as they spread. `base` is 0.45 for the player and 0.22 for bots.
-- **Ring width:** `max(2, 0.12·r)` world units.
-- **Colours:** each ring is two half-arcs split along the worm's heading. Red `#ff4d6d` (the magnet badge's colour) on the left of the direction of travel, blue `#4cc9f0` on the right, like a magnet's two poles.
-- **Faint inner glow:** a radial gradient from the head to `0.35·A`, at `base × 0.25`, so a magnet worm reads as charged even between waves.
+- **Shape:** each wave is a single-colour **forward arc** of about 110° (±55° around the heading), not a ring. There's no glow and no full circle.
+- **Rhythm:** 4 waves in flight. A new one is born every `1.4 / 4` s at the head and travels to `A` in 1.4 s on `game.time`.
+- **Colours alternate** blue `#4cc9f0`, red `#ff4d6d` (the magnet badge's red). The colour comes from the wave's birth number `floor(time / gap)`, so a wave keeps its colour all the way out.
+- **Alpha:** `base × (1 − p)`, where `p` is progress from 0 to 1 and `base` is 0.7 for the player and 0.35 for bots.
+- **Width:** `max(3.5, 0.2·r)` world units, with round caps.
 
-*Alternative:* a field-lines drawing (curved lines from pole to pole). It's more "physics", but harder to read at small zoom, and more strokes.
-
-**Tuned during apply,** after looking at it on desktop and phone: the first values (alpha 0.45 / 0.22, a fade of `(1 − p)²`, width `max(2, 0.12·r)`) were too faint to read. Now: `base` is 0.7 for the player and 0.35 for bots, the ring alpha is `base × (1 − p)`, the width is `max(3.5, 0.2·r)`, and the glow is at `base × 0.3`.
+*Alternatives considered:* full rings split red/blue (the first plan; the owner wanted a forward wave), and a field-lines drawing (harder to read at small zoom, more strokes).
 
 ### 3. Fading at the end
 Everything is multiplied by `min(1, pw.magnet / 3)`, so it fades linearly over the last 3 seconds, the same window in which the badge blinks.
