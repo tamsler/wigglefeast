@@ -22,7 +22,7 @@
 ## 4. Release
 
 - [x] 4.1 Update the README's difficulty paragraph (seen kills, grudges) and HUD notes (⚔N tags, red-orange names), bump `VERSION` in `sw.js` (minor), and run `node --test "tests/**/*.test.js"`; verify all tests pass
-- [ ] 4.2 Open the PR (`Closes #83`), run the `pr-reviewer` agent in an isolated worktree, address its findings, and merge once checks pass
+- [x] 4.2 Open the PR (`Closes #83`), run the `pr-reviewer` agent in an isolated worktree, address its findings, and merge once checks pass
 
 ## Workflow follow-up
 
