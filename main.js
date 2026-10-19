@@ -1333,9 +1333,12 @@
       const x = w.sx[0], y = w.sy[0];
       if (x < view.x0 || x > view.x1 || y < view.y0 || y > view.y1) continue;
       const ty = y - w.r - 8 / z;
-      ctx.fillStyle = w === player ? '#ffd60a' : 'rgba(255,255,255,0.85)';
-      ctx.strokeText(w.name, x, ty);
-      ctx.fillText(w.name, x, ty);
+      // Reputation tags (#83): recent kills after the name; a bot coming after you in red-orange.
+      // ⚔ in emoji form (U+FE0F): the plain glyph is tiny at name size and reads like "x2".
+      const kills = w.recentKills(game.time), label = kills ? `${w.name} \u2694\uFE0F${kills}` : w.name;
+      ctx.fillStyle = w === player ? '#ffd60a' : player && w.ai && w.ai.retaliating === player ? PLAYER_DOT : 'rgba(255,255,255,0.85)';
+      ctx.strokeText(label, x, ty);
+      ctx.fillText(label, x, ty);
     }
   }
 

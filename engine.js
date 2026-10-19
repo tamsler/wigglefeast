@@ -122,7 +122,7 @@
 
   // Bot tactics (#78). Their order is part of each bot's identity (see knowsTactic):
   // only ever append.
-  const TACTICS = ['predict', 'anticipate', 'evade', 'headOn', 'scavenge', 'trap', 'pin', 'coil', 'flank'];
+  const TACTICS = ['predict', 'anticipate', 'evade', 'headOn', 'scavenge', 'trap', 'pin', 'coil', 'flank', 'read'];
   const tactics = (shares) => Object.fromEntries(TACTICS.map((k) => [k, shares[k] || 0]));
 
   // Per difficulty (#16). skill: look-ahead, reaction time and steering precision.
@@ -133,11 +133,11 @@
     easy: { skill: [0.12, 0.45], aggro: [0.0, 0.35], preyRatio: 1, bigShare: 0.1, bigMax: 1200, tactics: tactics({}) },
     normal: {
       skill: [0.35, 0.8], aggro: [0.1, 0.65], preyRatio: 1.3, bigShare: 0.15, bigMax: 2000,
-      tactics: tactics({ predict: 0.5, anticipate: 0.3, evade: 0.3, headOn: 0.2, scavenge: 0.3 }),
+      tactics: tactics({ predict: 0.5, anticipate: 0.3, evade: 0.3, headOn: 0.2, scavenge: 0.3, read: 0.2 }),
     },
     hard: {
       skill: [0.7, 1.0], aggro: [0.35, 1.0], preyRatio: 1.6, bigShare: 0.2, bigMax: 2500,
-      tactics: tactics({ predict: 1, anticipate: 0.7, evade: 0.6, headOn: 0.5, scavenge: 0.5, trap: 0.4, pin: 0.4, coil: 0.3 }),
+      tactics: tactics({ predict: 1, anticipate: 0.7, evade: 0.6, headOn: 0.5, scavenge: 0.5, trap: 0.4, pin: 0.4, coil: 0.3, read: 0.5 }),
     },
     expert: {
       skill: [0.85, 1.0], aggro: [0.6, 1.0], preyRatio: 2, bigShare: 0.25, bigMax: 3000,
@@ -333,6 +333,13 @@
       this.updateBounds();
     }
 
+    // Kills in the last 60 seconds (#83), for the name tag. killTimes is in time order and not saved.
+    recentKills(now) {
+      const k = this.killTimes || (this.killTimes = []);
+      while (k.length && now - k[0] > 60) k.shift();
+      return k.length;
+    }
+
     get x() { return this.sx[0]; }
     get y() { return this.sy[0]; }
     get multiplier() { return this.pw.x5 > 0 ? 5 : this.pw.x2 > 0 ? 2 : 1; }
@@ -496,6 +503,42 @@
     return false;
   }
 
+  // Reading other worms (#83): each bot that knows `read` remembers, per worm id, kills it saw
+  // that worm make and grudges (the worm tried to cut it off, or killed right next to it).
+  // Values fade by half-life; nothing here is saved.
+  const KILL_HALF = 15, GRUDGE_HALF = 10, SEEN_MAX = 16, KILL_VIEW = 900, KILL_NEAR = 300;
+  // One event stores 1 and fades from there: it counts while at least SEEN_MIN is left, so one seen
+  // kill counts for 30 s (two half-lives) and one grudge for 20 s.
+  const SEEN_MIN = 0.25;
+  function recall(ai, id, now) {
+    const m = ai.seen && ai.seen.get(id);
+    if (!m) return null;
+    const dt = now - m.at;
+    if (dt > 0) {
+      m.kills *= Math.pow(0.5, dt / KILL_HALF);
+      m.grudge *= Math.pow(0.5, dt / GRUDGE_HALF);
+      m.at = now;
+    }
+    if (m.kills < 0.05 && m.grudge < 0.05 && now - m.cutAt >= 1) { ai.seen.delete(id); return null; }
+    return m;
+  }
+  function remember(ai, id, now) {
+    if (!ai.seen) ai.seen = new Map();
+    let m = recall(ai, id, now);
+    if (!m) {
+      m = { kills: 0, grudge: 0, at: now, cutAt: -Infinity };
+      ai.seen.set(id, m);
+      if (ai.seen.size > SEEN_MAX) {
+        let oldId = null, oldAt = Infinity;
+        for (const [k, e] of ai.seen) if (e.at < oldAt) { oldAt = e.at; oldId = k; }
+        ai.seen.delete(oldId);
+      }
+    }
+    return m;
+  }
+  const wariness = (ai, o, now) => { const m = recall(ai, o.id, now); return m ? m.kills + m.grudge : 0; };
+  const endHunt = (ai) => { ai.prey = null; ai.coilDir = 0; ai.retaliating = null; };
+
   function botThink(w, g) {
     const ai = w.ai, skill = ai.skill, r = w.r;
     const level = g.settings.difficulty;
@@ -607,18 +650,36 @@
 
     // Hunting: pick a nearby worm lighter than the level allows; with trap, prefer one with
     // few ways out.
-    if (ai.prey && (ai.prey.dead || g.time > ai.huntUntil)) { ai.prey = null; ai.coilDir = 0; }
+    const read = knows('read');
+    if (ai.prey && (ai.prey.dead || g.time > ai.huntUntil)) endHunt(ai);
     if (!ai.prey && w.mass > 30 && Math.random() < ai.aggro * 0.2) {
       const td = Math.pow(300 + 350 * ai.aggro, 2), cands = [];
       for (const o of g.worms) {
         if (o === w || o.dead || o.shield > 0) continue;
         const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d2 = dx * dx + dy * dy;
-        if (d2 < td && o.mass < w.mass * diff.preyRatio) cands.push({ o, d2 });
+        if (d2 < td && o.mass < w.mass * diff.preyRatio) {
+          // A reader leaves alone a worm it saw kill, unless that worm is much smaller.
+          const m = read ? recall(ai, o.id, g.time) : null;
+          if (m && m.kills >= SEEN_MIN && o.mass > w.mass * 0.5) continue;
+          cands.push({ o, d2, grudge: m ? m.grudge : 0 });
+        }
       }
       if (cands.length) {
         cands.sort((a, b) => a.d2 - b.d2);
-        let tgt = cands[0].o;
-        if (knows('trap')) {
+        let tgt = cands[0].o, grudgeTgt = null;
+        if (read) {
+          // Retaliate against the worm it holds the biggest grudge against, unless two other
+          // bots are already doing so (no gang-ups).
+          let bg = SEEN_MIN;
+          for (const c of cands) {
+            if (c.grudge < bg) continue;
+            let others = 0;
+            for (const b of g.worms) if (b !== w && !b.dead && b.ai && b.ai.retaliating === c.o) others++;
+            if (others < 2) { bg = c.grudge; grudgeTgt = c.o; }
+          }
+        }
+        if (grudgeTgt) tgt = grudgeTgt;
+        else if (knows('trap')) {
           let bs = Infinity;
           for (const c of cands.slice(0, 3)) {
             const sc = Math.sqrt(c.d2) * (0.5 + freedom(g, c.o, w, 0));
@@ -626,6 +687,7 @@
           }
         }
         ai.prey = tgt;
+        ai.retaliating = grudgeTgt;
         ai.huntUntil = g.time + rand(1.5, 4.5);
         ai.coilDir = 0;
       }
@@ -634,7 +696,7 @@
       const o = ai.prey;
       const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d = Math.sqrt(dx * dx + dy * dy);
       const R0 = Math.max(120, 4 * o.r + 2 * r);
-      if (d > 900) { ai.prey = null; ai.coilDir = 0; }
+      if (d > 900) endHunt(ai);
       else if (knows('coil') && o.mass <= w.mass * 0.5 && lengthFor(w.mass) >= TAU * R0 * 1.3 && d < (ai.coilDir ? 2.5 * R0 : 350)) {
         // Coil: circle the prey's head at a shrinking radius; our own body is the trap.
         if (!ai.coilDir) {
@@ -695,7 +757,9 @@
       const ER = 250 + 150 * skill;
       const mine = EVADE_T.map((t) => predictHead(w, t));
       for (const { o, d } of heads) {
-        if (d > ER) break;
+        if (d > ER * 2) break;
+        // Readers give worms they are wary of more room (#83).
+        if (d > ER * (read ? 1 + 0.5 * Math.min(2, wariness(ai, o, g.time)) : 1)) continue;
         if (headOn && o.mass < w.mass * HEAD_ON) continue; // a head-on there is a win
         let threat = false;
         for (let j = 0; j < EVADE_T.length && !threat; j++) {
@@ -705,6 +769,10 @@
           }
         }
         if (!threat) continue;
+        if (read) { // it tried to cut us off: a grudge, at most once a second per worm
+          const m = remember(ai, o.id, g.time);
+          if (g.time - m.cutAt >= 1) { m.grudge += 1; m.cutAt = g.time; }
+        }
         // Head away from its line, on the side we are on.
         const side = Math.cos(o.angle) * (hy - o.sy[0]) - Math.sin(o.angle) * (hx - o.sx[0]) >= 0 ? 1 : -1;
         goal = o.angle + side * Math.PI / 2;
@@ -1146,7 +1214,21 @@
         const i = Math.floor(((k + 0.5) * n) / 5);
         this.recentDeaths.push({ x: w.sx[i], y: w.sy[i], mass: total / 5, time: this.time });
       }
-      if (killer) killer.kills++;
+      if (killer) {
+        killer.kills++;
+        killer.recentKills(this.time); // drops kills older than a minute
+        killer.killTimes.push(this.time); // for name tags (#83); not saved
+        // Bots that read other worms remember a kill they saw, and a grudge if it was right next to them.
+        const vx = w.sx[0], vy = w.sy[0], level = this.settings.difficulty;
+        for (const b of this.worms) {
+          if (b === killer || b === w || b.dead || !b.ai || !knowsTactic(b, level, 'read')) continue;
+          const d = Math.hypot(b.sx[0] - vx, b.sy[0] - vy);
+          if (d > KILL_VIEW) continue;
+          const m = remember(b.ai, killer.id, this.time);
+          m.kills += 1;
+          if (d <= KILL_NEAR) m.grudge += 1;
+        }
+      }
       if (w.isPlayer) { this.player = null; this.lastPlayer = w; }
       return { victim: w, killer, cause: cause || (killer ? 'eaten' : 'wall') };
     }

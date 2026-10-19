@@ -831,3 +831,184 @@ test('a worm that keeps eating can hold massive size (#82)', () => {
   for (let i = 0; i < 60 * 60; i++) { w.mass += 1; w.update(1 / 60, g); }
   assert.ok(w.mass > 30000, `holds ${w.mass.toFixed(0)} after a minute (the old shedding left it near 16,500)`);
 });
+
+// --- Reading other worms (#83) ---------------------------------------------------
+
+test('the read tactic is appended, so existing bots keep their other tactics (#83)', () => {
+  assert.deepEqual(TACTICS.slice(0, 9), ['predict', 'anticipate', 'evade', 'headOn', 'scavenge', 'trap', 'pin', 'coil', 'flank']);
+  assert.equal(TACTICS[9], 'read');
+  assert.deepEqual(TACTICS.map((k) => DIFFICULTY.easy.tactics[k]), TACTICS.map(() => 0), 'easy knows nothing');
+  for (let id = 1; id <= 200; id++) assert.equal(knowsTactic({ id }, 'expert', 'read'), true);
+  let hard = 0;
+  for (let id = 1; id <= 600; id++) if (knowsTactic({ id }, 'hard', 'read')) hard++;
+  assert.ok(Math.abs(hard / 600 - 0.5) < 0.07, `${(hard / 6).toFixed(0)}% of hard bots read`);
+});
+
+// A reading bot (expert), a killer and its victim, laid out by distance from the bot.
+function killScene(victimAt, extra = []) {
+  const s = scene('expert', [
+    { name: 'Reader', mass: 400, x: 0, y: 0, angle: 0, ai: {} },
+    { name: 'Killer', mass: 300, x: victimAt + 60, y: 200, angle: Math.PI, ai: {} },
+    { name: 'Victim', mass: 100, x: victimAt, y: 200, angle: 0 },
+    ...extra,
+  ], 30);
+  s.game.kill(s.worms[2], s.worms[1]);
+  return s;
+}
+
+test('readers remember kills they saw, and a grudge for a kill right next to them (#83)', () => {
+  const near = killScene(100);
+  const m = near.worms[0].ai.seen.get(near.worms[1].id);
+  assert.equal(m.kills, 1);
+  assert.equal(m.grudge, 1, 'a kill within 300 also makes a grudge');
+  const inView = killScene(700);
+  assert.equal(inView.worms[0].ai.seen.get(inView.worms[1].id).kills, 1);
+  assert.equal(inView.worms[0].ai.seen.get(inView.worms[1].id).grudge, 0);
+  const far = killScene(2000);
+  assert.ok(!far.worms[0].ai.seen || !far.worms[0].ai.seen.has(far.worms[1].id), 'a kill far out of view is unknown (Unseen kill)');
+  const easy = scene('easy', [
+    { name: 'Reader', mass: 400, x: 0, y: 0, angle: 0, ai: {} },
+    { name: 'Killer', mass: 300, x: 160, y: 200, angle: Math.PI },
+    { name: 'Victim', mass: 100, x: 100, y: 200, angle: 0 },
+  ], 30);
+  easy.game.kill(easy.worms[2], easy.worms[1]);
+  assert.ok(!easy.worms[0].ai.seen, 'easy bots do not read');
+});
+
+test("a bot's memory stays small (#83)", () => {
+  const { game, worms: [reader] } = scene('expert', [{ name: 'Reader', mass: 400, x: 0, y: 0, angle: 0, ai: {} }], 30);
+  for (let i = 0; i < 25; i++) {
+    const [k, v] = ['K', 'V'].map((n, j) => new Worm({ name: n + i, skin: SKINS[0], mass: 100, x: 200 + j * 60, y: 100, angle: 0, worldR: game.R }));
+    game.worms.push(k, v);
+    game.time += 0.1;
+    game.kill(v, k);
+  }
+  assert.ok(reader.ai.seen.size <= 16, `${reader.ai.seen.size} worms remembered`);
+});
+
+test('readers hold a grudge against a worm that tried to cut them off, once a second at most (#83)', () => {
+  const s = scene('expert', withFood([
+    { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
+    { name: 'Cutter', mass: 100, x: 200, y: 150, angle: Math.atan2(-150, 40) },
+  ], [{ x: 400, y: 0 }]));
+  const [bot, cutter] = s.worms;
+  botThink(bot, s.game);
+  assert.equal(bot.ai.mode, 'evade');
+  assert.equal(bot.ai.seen.get(cutter.id).grudge, 1);
+  botThink(bot, s.game);
+  assert.equal(bot.ai.seen.get(cutter.id).grudge, 1, 'the same dodge is not counted twice');
+});
+
+test('impressions and grudges are not saved (#83)', () => {
+  const s = killScene(100);
+  s.worms[0].ai.retaliating = s.worms[1];
+  s.game.settings.botCount = 30; // the scene lowers it so no bots respawn; a save needs a real setting
+  const snap = clone(s.game);
+  assert.doesNotThrow(() => validateSnapshot(snap));
+  const loaded = new Game(null, snap);
+  for (const w of loaded.worms) if (w.ai) { assert.ok(!w.ai.seen); assert.ok(!w.ai.retaliating); }
+  for (const w of loaded.worms) assert.equal(w.recentKills(loaded.time), 0, 'name tags start empty');
+});
+
+// Prey choice for a reading bot with only `read` on: a near and a far candidate.
+function pickPrey(near, far, setup, extra = []) {
+  return withTactics('expert', ONLY('read'), () => {
+    const s = scene('expert', [
+      { name: 'Reader', mass: 400, x: 0, y: 0, angle: 0, ai: { aggro: 1 } },
+      { name: 'Near', x: 250, y: 0, angle: Math.PI / 2, ...near },
+      { name: 'Far', x: 0, y: 450, angle: 0, ...far },
+      ...extra,
+    ], 30);
+    setup(s);
+    const [h] = s.worms;
+    for (let i = 0; i < 300 && !h.ai.prey; i++) botThink(h, s.game);
+    return { prey: h.ai.prey && h.ai.prey.name, retaliating: h.ai.retaliating && h.ai.retaliating.name, s };
+  });
+}
+const memo = (s, name, kills, grudge) => {
+  const [reader] = s.worms, o = s.worms.find((w) => w.name === name);
+  reader.ai.seen = new Map([[o.id, { kills, grudge, at: s.game.time, cutAt: -Infinity }]]);
+};
+
+test('readers leave a worm they saw kill alone, unless it is much smaller (#83)', () => {
+  assert.equal(pickPrey({ mass: 300 }, { mass: 300 }, () => {}).prey, 'Near', 'nearest by default');
+  assert.equal(pickPrey({ mass: 300 }, { mass: 300 }, (s) => memo(s, 'Near', 1.5, 0)).prey, 'Far', 'Seen killer gets room');
+  assert.equal(pickPrey({ mass: 150 }, { mass: 300 }, (s) => memo(s, 'Near', 1.5, 0)).prey, 'Near', 'Much smaller killer');
+});
+
+test('one real kill keeps a reader wary for about half a minute (#83)', () => {
+  // A real kill seen by the reader, then later thinks (review: a single kill used to fade below the
+  // old >= 1 threshold before the next think).
+  const after = (seconds) => pickPrey({ mass: 300 }, { mass: 300 }, (s) => {
+    const near = s.worms.find((w) => w.name === 'Near');
+    const victim = new Worm({ name: 'Victim', skin: SKINS[0], mass: 100, x: 300, y: 60, angle: 0, worldR: s.game.R });
+    s.game.worms.push(victim);
+    s.game.kill(victim, near);
+    s.game.time += seconds;
+  }).prey;
+  assert.equal(after(0.5), 'Far', 'half a second later the killer is left alone');
+  assert.equal(after(20), 'Far', 'still wary after 20 s');
+  assert.equal(after(35), 'Near', 'forgotten after about half a minute');
+});
+
+test('one real cut-off is enough to retaliate, for about 20 seconds (#83)', () => {
+  // The cutter from the evasion scene, then a later prey choice among it and a nearer worm.
+  const run = (seconds) => withTactics('expert', { ...ONLY('read'), evade: 1 }, () => {
+    const s = scene('expert', [
+      { name: 'Bot', mass: 400, x: 0, y: 0, angle: 0, ai: { aggro: 1 } },
+      { name: 'Cutter', mass: 100, x: 200, y: 150, angle: Math.atan2(-150, 40) },
+    ], 30);
+    const [bot, cutter] = s.worms;
+    botThink(bot, s.game);
+    assert.equal(bot.ai.mode, 'evade');
+    // Afterwards: a neutral worm nearer than the cutter.
+    const neutral = new Worm({ name: 'Neutral', skin: SKINS[0], mass: 100, x: -120, y: 0, angle: Math.PI, worldR: s.game.R });
+    s.game.worms.push(neutral);
+    for (const w of [bot, cutter]) { w.sx.fill(w.sx[0]); w.sy.fill(w.sy[0]); }
+    cutter.sx[0] = cutter.sx[0] + 100; cutter.angle = Math.PI / 2; // now heading away, just a candidate
+    s.game.rebuildSegGrid();
+    s.game.time += seconds;
+    bot.ai.prey = null;
+    for (let i = 0; i < 300 && !bot.ai.prey; i++) botThink(bot, s.game);
+    return bot.ai.prey && bot.ai.prey.name;
+  });
+  assert.equal(run(2), 'Cutter', 'retaliates against the cutter rather than the nearer worm');
+  assert.equal(run(25), 'Neutral', 'the grudge is gone after about 20 s');
+});
+
+test('readers retaliate against a worm they hold a grudge against, two at most (#83)', () => {
+  const r = pickPrey({ mass: 300 }, { mass: 300 }, (s) => memo(s, 'Far', 0, 2));
+  assert.equal(r.prey, 'Far', 'Cut off, then retaliates (over a nearer worm)');
+  assert.equal(r.retaliating, 'Far');
+  // Bigger culprit: too heavy to hunt (expert prey limit 2x), so not prey.
+  assert.equal(pickPrey({ mass: 300 }, { mass: 900 }, (s) => memo(s, 'Far', 0, 2)).prey, 'Near', 'Bigger culprit');
+  // No gang-ups: two other bots already retaliate against Far.
+  const crowd = [1, 2].map((i) => ({ name: 'Other' + i, mass: 400, x: -900, y: 900 * i, angle: 0, ai: {} }));
+  const g = pickPrey({ mass: 300 }, { mass: 300 }, (s) => {
+    memo(s, 'Far', 0, 2);
+    const far = s.worms.find((w) => w.name === 'Far');
+    for (const o of s.worms.filter((w) => w.name.startsWith('Other'))) o.ai.retaliating = far;
+  }, crowd);
+  assert.equal(g.prey, 'Near', 'No gang-ups');
+  // A hunt that ends clears the retaliation.
+  const [h] = r.s.worms;
+  r.s.game.time = h.ai.huntUntil + 1;
+  withTactics('expert', ONLY('read'), () => botThink(h, r.s.game));
+  assert.ok(!h.ai.retaliating || h.ai.retaliating === h.ai.prey, 'retaliation ends with the hunt');
+});
+
+test('readers evade worms they are wary of from farther away (#83)', () => {
+  // A head 470 away, beyond the usual evade range (400 at skill 1), crossing our path ahead.
+  const run = (otherMass, setup) => withTactics('expert', { ...ONLY('read'), evade: 1 }, () => {
+    const s = scene('expert', [
+      { name: 'Bot', mass: 400, x: 0, y: 0, angle: 0, ai: {} },
+      { name: 'Other', mass: otherMass, x: 400, y: 250, angle: Math.atan2(-250, -150) },
+    ], 30);
+    setup(s);
+    botThink(s.worms[0], s.game);
+    return s.worms[0].ai.mode;
+  });
+  assert.notEqual(run(100, () => {}), 'evade', 'an unknown worm at that distance is ignored');
+  assert.equal(run(100, (s) => memo(s, 'Other', 1, 0)), 'evade', 'a seen killer is evaded from farther');
+  assert.equal(run(1000, (s) => memo(s, 'Other', 0, 1)), 'evade', 'a bigger culprit is kept away from');
+});
