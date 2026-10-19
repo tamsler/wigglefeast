@@ -35,7 +35,7 @@ Head-on collisions are won by the bigger worm. The red ring is the arena edge.
 - **Power-up badges** sit next to the minimap; a badge's ring drains as time runs out, and it blinks in the last 3 seconds.
 - **Minimap** (top left): a density map that shades where other worms are crowded across the whole arena, without marking any single worm. You're the red-orange dot.
 - **Names:** ⚔ and a count show a worm's kills in the last minute, and a bot that's coming after you for cutting it off has its name in red-orange.
-- **Messages** pop up for your kills, your power-ups, and when the #1 worm is taken down. After you die, the camera follows the leader until you play again.
+- **Messages** pop up for your kills, your power-ups, and when the #1 worm is taken down. After you die, the camera follows the worm that was on top until you play again (or until that worm dies).
 
 ## Menu
 
@@ -110,6 +110,7 @@ No dependencies: Node 22+ and Google Chrome (set `CHROME_PATH` if it isn't in th
   - the minimap, name tags and massive worms
   - frame times at up to 150 bots
   - offline play and the release update flow
+- `tests/release.test.js` checks the release rules: versions only go up and are never reused.
 - `tests/fixtures/save-v1.json` is a real save in the current format; it must keep loading.
 
 The **Tests** workflow runs the suite on every PR.
