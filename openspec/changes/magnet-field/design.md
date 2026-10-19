@@ -28,6 +28,8 @@
 A `drawMagnetField(w, time)` step runs in `render` **after the arena floor and edge, before food**, for every live worm with `pw.magnet > 0` whose head is within view, padded by the field radius. Everything else is drawn over it (spec: *Nothing hidden*).
 
 ### 2. The waves
+
+**Revised during apply (owner's request):** each wave is a single-colour **forward arc** of about 110° (±55° around the heading), not a ring. Consecutive waves **alternate blue and red**: a wave's colour comes from its birth number, `floor(time / gap)`, so it keeps its colour all the way out. There are 4 waves in flight, born every 1.4 / 4 s. The circular glow is dropped, because the owner wants no circle. The ring details below are the original plan, kept for reference.
 - **Field radius:** `A = 2.2·r + 24 + CFG.MAGNET_REACH`, the food pull range.
 - **Rings:** 3 rings at once, each expanding from radius `r` to `A` over a 1.4 s period, offset by a third of a period, using `game.time`.
 - **Ring alpha:** `base × (1 − p)²`, where `p` is the ring's progress from 0 to 1, so rings fade as they spread. `base` is 0.45 for the player and 0.22 for bots.

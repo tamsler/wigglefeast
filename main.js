@@ -1309,37 +1309,29 @@
     ctx.globalAlpha = 1;
   }
 
-  // Magnet field (#103): while a worm's magnet runs, red and blue waves ripple out from its head
-  // to the edge of its food pull range: red on its left, blue on its right, like a magnet's poles.
-  // Drawn on the floor (under food, power-ups and worms), fainter on bots, fading over the
-  // magnet's last 3 seconds, and moving with game time, so it is still while paused.
-  const FIELD_RED = '#ff4d6d', FIELD_BLUE = '#4cc9f0', FIELD_PERIOD = 1.4, FIELD_RINGS = 3;
+  // Magnet field (#103): while a worm's magnet runs, waves ripple forward from its head to the edge
+  // of its food pull range and dissipate: arcs about 110 degrees wide in front of it, alternating
+  // blue, red, blue... like a magnet's two poles. Drawn on the floor (under food, power-ups and
+  // worms), fainter on bots, fading over the magnet's last 3 seconds, and moving with game time,
+  // so it is still while paused.
+  const FIELD_COLORS = ['#4cc9f0', '#ff4d6d']; // blue, red, by each wave's birth number
+  const FIELD_PERIOD = 1.4, FIELD_WAVES = 4; // seconds from head to edge; waves in flight at once
+  const FIELD_HALF = (55 * Math.PI) / 180; // half of the ~110 degree arc
   const fieldReach = (w) => 2.2 * w.r + 24 + CFG.MAGNET_REACH; // the food pull range (engine.js)
   function drawMagnetField(w, time) {
     const r = w.r, A = fieldReach(w), hx = w.sx[0], hy = w.sy[0], a = w.angle;
     const base = (w === game.player ? 0.7 : 0.35) * Math.min(1, w.pw.magnet / 3);
-    // A faint charge around the head, so it reads between waves too.
-    const glow = ctx.createRadialGradient(hx, hy, r, hx, hy, r + 0.35 * A);
-    glow.addColorStop(0, `rgba(170, 120, 230, ${(base * 0.3).toFixed(3)})`);
-    glow.addColorStop(1, 'rgba(170, 120, 230, 0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(hx, hy, r + 0.35 * A, 0, TAU);
-    ctx.fill();
+    const gap = FIELD_PERIOD / FIELD_WAVES, newest = Math.floor(time / gap);
     ctx.lineWidth = Math.max(3.5, 0.2 * r);
-    for (let k = 0; k < FIELD_RINGS; k++) {
-      const p = (time / FIELD_PERIOD + k / FIELD_RINGS) % 1; // 0 at the head, 1 at the edge
+    ctx.lineCap = 'round';
+    for (let j = 0; j < FIELD_WAVES; j++) {
+      const n = newest - j, p = (time - n * gap) / FIELD_PERIOD; // 0 at the head, 1 at the edge
       const alpha = base * (1 - p);
       if (alpha < 0.01) continue;
-      const rad = r + (A - r) * p;
       ctx.globalAlpha = alpha;
-      ctx.strokeStyle = FIELD_RED; // the worm's left
+      ctx.strokeStyle = FIELD_COLORS[((n % 2) + 2) % 2];
       ctx.beginPath();
-      ctx.arc(hx, hy, rad, a - Math.PI, a);
-      ctx.stroke();
-      ctx.strokeStyle = FIELD_BLUE; // its right
-      ctx.beginPath();
-      ctx.arc(hx, hy, rad, a, a + Math.PI);
+      ctx.arc(hx, hy, r + (A - r) * p, a - FIELD_HALF, a + FIELD_HALF);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;

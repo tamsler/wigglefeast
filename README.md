@@ -27,7 +27,7 @@ Head-on collisions are won by the bigger worm. The red ring is the arena edge. O
 
 **Growing massive:** any worm that keeps winning can grow huge. Worms only start shedding mass above 10,000 (0.2% of the excess per second), and past that size they grow mostly thicker rather than longer; the camera zooms out as you thicken.
 
-**Power-ups:** 🧲 magnet · x2 / x5 food multiplier (arena food only, not what worms drop) · ⚡ free boost + speed · 🔭 zoom out · 🌀 tight turns (16s each).
+**Power-ups:** 🧲 magnet (blue and red waves ripple forward from the worm's head as far as it pulls food) · x2 / x5 food multiplier (arena food only, not what worms drop) · ⚡ free boost + speed · 🔭 zoom out · 🌀 tight turns (16s each).
 
 ## On screen
 

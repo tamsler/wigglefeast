@@ -3,15 +3,18 @@
 ## ADDED Requirements
 
 ### Requirement: Magnet field
-While a worm's magnet is active, the arena SHALL show waves rippling outward from its head as rings, red on one side of the worm and blue on the other, fading as they spread and ending at the edge of the magnet's food pull range. The field SHALL be drawn beneath food, power-ups and worms, SHALL be fainter on bots than on the player, SHALL fade out over the magnet's last 3 seconds, and SHALL not be shown when the magnet is not active. It SHALL move with game time, so it is still while paused.
+While a worm's magnet is active, the arena SHALL show waves rippling forward from its head: arcs about 110 degrees wide in front of the worm, alternating blue and red from one wave to the next, fading as they spread and ending at the edge of the magnet's food pull range. There SHALL be no full circle, and nothing SHALL be shown for a worm without an active magnet.
 
 #### Scenario: Player picks up a magnet
 - **WHEN** the player's magnet is active
-- **THEN** red and blue waves ripple out from the player's head and reach about as far as food is pulled in
+- **THEN** arcs about 110 degrees wide ripple forward from the player's head, alternating blue and red, and fade out about as far as food is pulled in
 
 #### Scenario: No magnet
 - **WHEN** a worm has no active magnet
 - **THEN** no field is drawn around it
+
+### Requirement: Magnet field stays in the background
+The magnet field SHALL be drawn beneath food, power-ups and worms, SHALL be fainter on bots than on the player, SHALL fade out over the magnet's last 3 seconds, and SHALL move with game time, so it is still while paused.
 
 #### Scenario: Bot with a magnet
 - **WHEN** a bot's magnet is active and its head is on screen

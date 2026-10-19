@@ -6,7 +6,7 @@ While the 🧲 magnet runs, food and power-ups slide toward a worm from much far
 
 ## What Changes
 
-- **While a worm's magnet is active,** waves ripple outward from its head across the arena floor. Each wave is a ring, half red and half blue (one colour on each side of the worm, like a magnet's poles). The waves fade as they spread, and stop at the edge of the food pull range, so the effect shows how far the magnet reaches.
+- **While a worm's magnet is active,** waves ripple **forward** from its head across the arena floor. Each wave is an arc about 110° wide in front of the worm, not a full circle. The waves **alternate blue and red**, like a magnet's two poles, and fade as they spread out, stopping at the edge of the food pull range, so the effect shows how far the magnet reaches. (Revised during apply, at the owner's request: first a forward arc instead of rings, then alternating single-colour waves.)
 - **Subtle:** drawn on the floor, beneath food, power-ups and worms, so nothing is hidden.
 - **Every worm** with a magnet shows it (visible information, fair to show for bots), fainter on bots than on the player.
 - **Over the magnet's last 3 seconds,** the field fades out, alongside the badge's blink. It's gone when the magnet ends.
