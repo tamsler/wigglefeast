@@ -20,6 +20,8 @@ A single-player snake-style .io game you can play offline. Eat, grow, and outsma
 - **P / Esc**: pause
 - **Touch**: drag to steer; hold the boost button (bottom right) or add a second finger to boost; the pause button is top right, beside the leaderboard
 
+**Names** show ⚔ and a count for a worm's kills in the last minute, and a bot that's coming after you for cutting it off has its name in red-orange.
+
 The **minimap** (top left) is a density map: it shades where other worms are crowded across the whole arena, without marking any single worm. You're the red-orange dot.
 
 **Growing massive:** any worm that keeps winning can grow huge. Worms only start shedding mass above 10,000 (0.2% of the excess per second), and past that size they grow mostly thicker rather than longer; the camera zooms out as you thicken.
@@ -51,7 +53,7 @@ Storage keys: `wormarena.world`, `wormarena.profile`, `wormarena.settings` (the 
 
 Bot count (5–150) and difficulty (easy/normal/hard/expert) are set in the menu. The arena grows with the bot count: up to 60 bots its radius is 1800 + 60 per bot, and above that its area grows in step with the bots, so a big world is bigger, not more crowded.
 
-**Difficulty:** Easy bots steer clumsily and rarely hunt. On harder levels bots see further, react faster and use more tactics: they predict where a turning worm is going, avoid heads about to cross their path, get out of the way of a cut-off, go head-on at smaller worms, and rush to fresh remains nobody else is closer to. On Hard some also trap worms between other bodies, pin them against the wall, or circle them. On **Expert** every bot does all of that, and two bots hunting the same worm cut in from opposite sides. Bots only use what you could see on screen, never your steering input, and treat you like any other worm.
+**Difficulty:** Easy bots steer clumsily and rarely hunt. On harder levels bots see further, react faster and use more tactics: they predict where a turning worm is going, avoid heads about to cross their path, get out of the way of a cut-off, go head-on at smaller worms, and rush to fresh remains nobody else is closer to. On Hard some also trap worms between other bodies, pin them against the wall, or circle them. On **Expert** every bot does all of that, and two bots hunting the same worm cut in from opposite sides. Bots that read other worms (some on Normal, half on Hard, all on Expert) keep their distance from a worm they just saw kill, and hold a grudge against one that tried to cut them off: they come after it if they can (never more than two at once), or keep away if it's too big. Bots only use what you could see on screen, never your steering input, and treat you like any other worm.
 
 Difficulty and growth numbers live at the top of `engine.js` (`CFG`, `DIFFICULTY`, including each level's tactic shares). `node tools/balance.js` runs headless worlds and reports survival, kills (by the killer's tactic), bot sizes and time per tick for each level; `--set` tries other values without editing the engine (for example `--set expert.tactics.coil=0`).
 

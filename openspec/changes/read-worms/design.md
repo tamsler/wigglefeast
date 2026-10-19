@@ -48,7 +48,7 @@
 
 ### 4. Reputation tags (UI)
 - Each worm keeps a transient `killTimes` array. `Game.die` appends the time to the killer's array, and entries older than 60 s are dropped when read.
-- `render` appends `" ⚔N"` to the name when `N ≥ 1`.
+- `render` appends `" ⚔N"` to the name when `N ≥ 1`. It uses the emoji form of ⚔ (with U+FE0F): looking at it in play showed the plain glyph is tiny at name size and reads like "x2", the food power-up.
 - It draws the name in red-orange (`#ff5a1f`, the minimap dot colour) when `w.ai && w.ai.retaliating === game.player`.
 - The tags are transient (not in `toJSON`), so after a load they start empty.
 
