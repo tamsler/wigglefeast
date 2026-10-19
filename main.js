@@ -1206,7 +1206,21 @@
     else for (let i = from + 1; i <= to; i++) ctx.lineTo(sx[i], sy[i]);
   }
 
-  function drawWorm(w, t, view) {
+  // part: 'all'; 'body' (everything but the eyes and boost arrows); 'head' (the first few
+  // segments, eyes and arrows). The player is drawn body first, then everyone else, then its head
+  // on top, so a body the player can run into is never hidden under the player's own (#102).
+  const HEAD_SEGS = 4; // segments drawn again in the head pass: about 1.7 r, enough to cover the head
+  // Is another worm's body (one that could be hit, so not shielded) over this worm's head?
+  function headCovered(w) {
+    const hx = w.sx[0], hy = w.sy[0], gw = game.gridWorms;
+    return game.segGrid.query(hx, hy, w.r + game.maxR + 4, (oi, si) => {
+      const o = gw[oi];
+      if (o === w || o.dead) return false;
+      const dx = o.sx[si] - hx, dy = o.sy[si] - hy, rr = w.r + o.r + 4;
+      return dx * dx + dy * dy < rr * rr;
+    });
+  }
+  function drawWorm(w, t, view, part = 'all') {
     const m = w.boosting ? w.r * 3.5 : 0; // boost arrows reach ahead of the head
     if (w.maxX + m < view.x0 || w.minX - m > view.x1 || w.maxY + m < view.y0 || w.minY - m > view.y1) return;
     const sx = w.sx, sy = w.sy, n = sx.length, r = w.r, skin = w.skin;
@@ -1218,15 +1232,19 @@
       if (x + pad >= view.x0 && x - pad <= view.x1 && y + pad >= view.y0 && y - pad <= view.y1) { if (lo < 0) lo = i; hi = i; }
     }
     if (lo < 0) return;
-    span = [Math.max(0, lo - 1), Math.min(n - 1, hi + 1)];
-    try { drawWormBody(w, t, sx, sy, n, r, skin); } finally { span = null; }
+    if (part === 'head') {
+      if (lo > HEAD_SEGS) return; // the head is off screen
+      hi = Math.min(hi, HEAD_SEGS);
+    }
+    span = [Math.max(0, lo - 1), Math.min(n - 1, hi + 1, part === 'head' ? HEAD_SEGS : n - 1)];
+    try { drawWormBody(w, t, sx, sy, n, r, skin, part); } finally { span = null; }
   }
 
-  function drawWormBody(w, t, sx, sy, n, r, skin) {
+  function drawWormBody(w, t, sx, sy, n, r, skin, part) {
     const alpha = w.shield > 0 ? 0.45 + 0.25 * Math.sin(t * 14) : 1;
     ctx.globalAlpha = alpha;
 
-    if (w.boosting) {
+    if (w.boosting && part !== 'head') { // the glow along the whole body, drawn once
       ctx.globalAlpha = alpha * (0.3 + 0.15 * Math.sin(t * 18));
       ctx.strokeStyle = skin.accent;
       ctx.lineWidth = 2 * r + 16;
@@ -1235,23 +1253,40 @@
       ctx.globalAlpha = alpha;
     }
 
-    // Outline
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.lineWidth = 2 * r + 4;
-    tracePath(sx, sy, n - 1, 0);
-    ctx.stroke();
+    // The head pass repaints the head (clipped to a disc around it) only when another worm's body
+    // actually touches it; otherwise the worm is drawn in one piece, exactly as before, with no seam.
+    // While shielded nothing can hurt the player, so it never repaints (that would show through the
+    // shield's transparency) and draws just the eyes and arrows (#102).
+    const repaint = part !== 'head' || (w.shield <= 0 && headCovered(w));
+    if (repaint) {
+      if (part === 'head') {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(sx[0], sy[0], r + 3, 0, TAU);
+        ctx.clip();
+      }
 
-    // Body, painted by the skin's finish (#58), then the glossy highlight
-    FINISH[skin.finish](ctx, sx, sy, r, skin, game.time);
-    if (GLOSSY(skin)) {
-      ctx.save();
-      ctx.translate(-r * 0.22, -r * 0.3);
-      ctx.strokeStyle = 'rgba(255,255,255,0.16)';
-      ctx.lineWidth = r * 0.55;
+      // Outline
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.lineWidth = 2 * r + 4;
       tracePath(sx, sy, n - 1, 0);
       ctx.stroke();
-      ctx.restore();
+
+      // Body, painted by the skin's finish (#58), then the glossy highlight
+      FINISH[skin.finish](ctx, sx, sy, r, skin, game.time);
+      if (GLOSSY(skin)) {
+        ctx.save();
+        ctx.translate(-r * 0.22, -r * 0.3);
+        ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+        ctx.lineWidth = r * 0.55;
+        tracePath(sx, sy, n - 1, 0);
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (part === 'head') ctx.restore();
     }
+
+    if (part === 'body') { ctx.globalAlpha = 1; return; } // eyes and arrows come with the head pass
 
     // Eyes
     const hx = sx[0], hy = sy[0], ex = Math.cos(w.angle), ey = Math.sin(w.angle);
@@ -1332,8 +1367,9 @@
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     const player = game.player;
+    if (player) drawWorm(player, t, view, 'body');
     for (const w of game.worms) if (w !== player) drawWorm(w, t, view);
-    if (player) drawWorm(player, t, view);
+    if (player) drawWorm(player, t, view, 'head');
 
     // Names
     ctx.textAlign = 'center';

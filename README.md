@@ -23,7 +23,7 @@ A single-player snake-style .io game you can play offline. Eat, grow, and outsma
 - **Touch**: drag to steer; hold the boost button (bottom right) or add a second finger to boost; the pause button is top right, beside the leaderboard
 
 Run into another worm's body and you die. Make others run into yours and eat what they leave behind.
-Head-on collisions are won by the bigger worm. The red ring is the arena edge.
+Head-on collisions are won by the bigger worm. The red ring is the arena edge. Other worms are drawn over your body (your head stays on top), so you can always see what you could run into.
 
 **Growing massive:** any worm that keeps winning can grow huge. Worms only start shedding mass above 10,000 (0.2% of the excess per second), and past that size they grow mostly thicker rather than longer; the camera zooms out as you thicken.
 
