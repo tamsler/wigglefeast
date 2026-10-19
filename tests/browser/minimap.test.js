@@ -1,4 +1,4 @@
-// The minimap shows worm density, not individual worms (#80). Run with `node --test "tests/**/*.test.js"`.
+// The minimap is a density map of other worms, not individual worms (#80, #91). Run with `node --test "tests/**/*.test.js"`.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { launch, gameUrl, sleep } = require('../helpers/browser');
@@ -52,9 +52,9 @@ test('minimap shows density', async (t) => {
   })()`);
   assert.ok(setup.leader, 'the moved bot leads the leaderboard');
   const R = setup.R;
-  // Frames are being drawn again once the player marker shows at its new spot; then wait
-  // out the 250 ms shading refresh.
-  await page.waitFor(`(() => { const m = window.__mini.at(${-R * 0.5}, ${R * 0.5}); return m[0] > 200 && m[1] > 180; })()`, 'the minimap to redraw');
+  // Frames are being drawn again once the player's red-orange dot shows at its new spot; then
+  // wait out the 250 ms shading refresh.
+  await page.waitFor(`(() => { const m = window.__mini.at(${-R * 0.5}, ${R * 0.5}); return m[0] > 200 && m[1] < 140 && m[2] < 80; })()`, 'the minimap to redraw');
   await sleep(400);
   const px = (x, y) => page.eval(`window.__mini.at(${x}, ${y})`);
   const empty = await px(-R * 0.5, -R * 0.5);
@@ -81,10 +81,23 @@ test('minimap shows density', async (t) => {
     assert.ok(onShadingLine(head), `pixel at its head ${head.map((v) => v.toFixed(0))} is shading, not a marker`);
   });
 
-  await t.test("the player's own body adds no shading, and the player marker still draws", async () => {
+  await t.test("the player's own body adds no shading, and the player shows as a red-orange dot", async () => {
     const body = await px(-R * 0.5 + 90, R * 0.5 + 1000);
     assert.ok(Math.abs(body[3] - empty[3]) < 10, `alpha at the player's body ${body[3].toFixed(0)} vs empty ${empty[3].toFixed(0)}`);
-    const marker = await px(-R * 0.5, R * 0.5);
-    assert.ok(marker[0] > 200 && marker[1] > 180, `the player marker is white/yellow (${marker.map((v) => v.toFixed(0))})`);
+    const dot = await px(-R * 0.5, R * 0.5);
+    assert.ok(dot[0] > 200 && dot[1] > 50 && dot[1] < 140 && dot[2] < 80, `the player dot is red-orange (${dot.map((v) => v.toFixed(0))})`);
+  });
+
+  await t.test('two crowds about 900 units apart show a clear gap between them (#91)', async () => {
+    // Regroup the crowd into two tight clusters in the empty quadrant, 900 units apart.
+    const cx = -R * 0.5, cy = -R * 0.5;
+    await page.eval(`(() => {
+      const g = window.__game, { place } = window.__mini;
+      const bots = g.worms.filter((w) => w.ai).sort((a, b) => b.mass - a.mass).slice(1);
+      bots.forEach((w, i) => place(w, ${cx} + (i % 2 ? 450 : -450), ${cy}, 150));
+    })()`);
+    await sleep(400); // past the 250 ms refresh
+    const left = await px(cx - 450, cy), right = await px(cx + 450, cy), gap = await px(cx, cy);
+    assert.ok(left[3] > gap[3] + 40 && right[3] > gap[3] + 40, `crowds ${left[3].toFixed(0)} / ${right[3].toFixed(0)} vs gap ${gap[3].toFixed(0)}`);
   });
 });

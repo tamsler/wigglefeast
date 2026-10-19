@@ -32,7 +32,7 @@ Each active power-up on the player's worm SHALL show as a round badge with its i
 - **THEN** its ring is full again and it stops blinking
 
 ### Requirement: Minimap shows worm density
-The minimap SHALL show the arena edge, the player's position and the current view, and a shading of how densely other worms' bodies cover each part of the arena, in one colour whose strength grows with density. It SHALL NOT show individual worms: no per-worm markers, no worm colours, and nothing that singles out large or leading worms. The player's own body SHALL NOT add to the shading.
+The minimap SHALL show the arena edge, the player's position as a red-orange dot, and a density map of how densely other worms' bodies cover each part of the whole arena, in one colour whose strength grows with density and fine enough to tell nearby crowds apart. It SHALL NOT show a rectangle for the current view. It SHALL NOT show individual worms: no per-worm markers, no worm colours, and nothing that singles out large or leading worms. The player's own body SHALL NOT add to the shading.
 
 #### Scenario: Crowded and empty areas
 - **WHEN** many worms' bodies lie in one part of the arena and none in another
@@ -42,6 +42,10 @@ The minimap SHALL show the arena edge, the player's position and the current vie
 - **WHEN** the biggest worm on the leaderboard is alone in an otherwise empty area
 - **THEN** the minimap shows it only as shading in the same colour as any other worm's body, with no marker or skin colour
 
+#### Scenario: Nearby crowds stay apart
+- **WHEN** two crowds of worms lie about 900 units apart with empty space between them
+- **THEN** the minimap shows two shaded areas with a clearly dimmer gap between them
+
 #### Scenario: Player still sees where they are
 - **WHEN** a run is in progress
-- **THEN** the minimap shows the player's own marker and the view rectangle on top of the shading, and the player's body adds no shading
+- **THEN** the minimap shows the player as a red-orange dot on top of the shading, with no view rectangle, and the player's body adds no shading
