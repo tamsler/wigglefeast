@@ -440,7 +440,7 @@ test('every level has a full tactic table: none on easy, all on expert (#78)', (
   const masses = [];
   for (let i = 0; i < 6; i++) masses.push(...new Game({ botCount: 60, difficulty: 'expert' }).worms.map((w) => w.mass));
   const big = masses.filter((m) => m >= 400).length / masses.length;
-  assert.ok(Math.abs(big - 0.25) < 0.08, `${(big * 100).toFixed(0)}% of expert bots start big`);
+  assert.ok(Math.abs(big - DIFFICULTY.expert.bigShare) < 0.08, `${(big * 100).toFixed(0)}% of expert bots start big`);
   assert.ok(Math.max(...masses) <= DIFFICULTY.expert.bigMax);
 });
 
@@ -994,8 +994,9 @@ test('readers retaliate against a worm they hold a grudge against, two at most (
 
 test('readers evade worms they are wary of from farther away (#83)', () => {
   // A head 470 away, beyond the usual evade range (400 at skill 1), crossing our path ahead.
-  const run = (otherMass, setup) => withTactics('expert', { ...ONLY('read'), evade: 1 }, () => {
-    const s = scene('expert', [
+  // On hard: expert bots sense threats from farther anyway (#110).
+  const run = (otherMass, setup) => withTactics('hard', { ...ONLY('read'), evade: 1 }, () => {
+    const s = scene('hard', [
       { name: 'Bot', mass: 400, x: 0, y: 0, angle: 0, ai: {} },
       { name: 'Other', mass: otherMass, x: 400, y: 250, angle: Math.atan2(-250, -150) },
     ], 30);
@@ -1036,4 +1037,126 @@ test('a worm built outside a world never shares an id with the world\'s own worm
   const ids = game.worms.map((w) => w.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.doesNotThrow(() => validateSnapshot(JSON.parse(JSON.stringify(game.toJSON()))), 'still saves');
+});
+
+// --- Expert sharpness (#110) ---------------------------------------------------
+function withSharp(patch, fn) {
+  const saved = { ...DIFFICULTY.expert.sharp };
+  Object.assign(DIFFICULTY.expert.sharp, patch);
+  try { return fn(); } finally { Object.assign(DIFFICULTY.expert.sharp, saved); }
+}
+// Re-plans of each bot over `secs`: its think timer jumps up whenever it re-plans.
+function replans(game, bots, secs) {
+  const n = new Map(bots.map((b) => [b, 0])), prev = new Map(bots.map((b) => [b, b.thinkT]));
+  for (let i = 0; i < secs * 60; i++) {
+    game.update(1 / 60);
+    for (const b of bots) { if (b.thinkT > prev.get(b)) n.set(b, n.get(b) + 1); prev.set(b, b.thinkT); }
+  }
+  return n;
+}
+
+test('only expert is sharp, and only expert starts with more and bigger large bots (#110)', () => {
+  assert.deepEqual(Object.keys(DIFFICULTY.expert.sharp).sort(), ['dense', 'escape', 'headings', 'heads', 'look', 'sense', 'think']);
+  for (const level of ['easy', 'normal', 'hard']) assert.equal(DIFFICULTY[level].sharp, undefined, level);
+  const big = DIFFICULTIES.map((l) => [DIFFICULTY[l].bigShare, DIFFICULTY[l].bigMax]);
+  assert.deepEqual(big, [[0.1, 1200], [0.15, 2000], [0.2, 2500], [0.35, 5000]]);
+  const masses = [];
+  for (let seed = 1; seed <= 6; seed++) masses.push(...new Game({ botCount: 60, difficulty: 'expert' }, null, { seed }).worms.map((w) => w.mass));
+  const share = masses.filter((m) => m >= 400).length / masses.length;
+  assert.ok(Math.abs(share - 0.35) < 0.08, `${(share * 100).toFixed(0)}% start large`);
+  assert.ok(Math.max(...masses) <= 5000 && Math.max(...masses) > 3000, `largest ${Math.round(Math.max(...masses))}`);
+});
+
+test('expert bots re-plan more often than hard bots of the same skill; the saved interval is unchanged (#110)', () => {
+  const count = (level) => {
+    const { game, worms: [bot] } = scene(level, [{ name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} }]);
+    return replans(game, [bot], 10).get(bot);
+  };
+  const hard = count('hard'), expert = count('expert');
+  assert.ok(expert > hard * 1.25, `expert ${expert} vs hard ${hard} re-plans in 10 s`);
+  // A loaded expert world re-plans at the sharp rate too, from the unchanged saved interval.
+  const g = new Game({ botCount: 10, difficulty: 'expert' }, null, { seed: 3 });
+  for (let i = 0; i < 60; i++) g.update(1 / 60);
+  const snap = JSON.parse(JSON.stringify(g.toJSON()));
+  for (const d of snap.worms.filter((d) => d.ai)) assert.ok(Math.abs(d.ai.interval - (0.32 - 0.22 * d.ai.skill)) < 0.01, 'saved interval is the base one');
+  const loaded = new Game(null, snap, { seed: 3 });
+  const bots = loaded.worms.filter((w) => w.ai);
+  const n = replans(loaded, bots, 5);
+  for (const b of bots) {
+    const base = 5 / (b.ai.interval * 1.2); // fewest re-plans at the base rate
+    assert.ok(n.get(b) > base * 1.25, `${b.name}: ${n.get(b)} re-plans in 5 s, base rate gives at least ${Math.round(base)}`);
+  }
+});
+
+test('expert bots see a thin body that slips between a hard bot\'s look-ahead points (#110)', () => {
+  const r = radiusFor(100), hardL = 320 + 3 * r, expertL = 320 * DIFFICULTY.expert.sharp.look + 3 * r;
+  // A thin worm's body across the path at x, ahead of the bot heading for food along +x.
+  const run = (level, x, sharp = {}) => withSharp(sharp, () => withTactics(level, ONLY(null), () => {
+    const { game, worms: [bot] } = scene(level, withFood([
+      { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
+      { name: 'Thin', mass: 15, x, y: 50, angle: Math.PI / 2 },
+    ], [{ x: 480, y: 0 }]));
+    botThink(bot, game);
+    return bot.targetAngle;
+  }));
+  // Midway between a hard bot's last two points: the hard bot doesn't see it, the expert does.
+  const gapH = hardL * 0.81;
+  assert.ok(Math.abs(run('hard', gapH)) < 0.02, 'hard bot keeps its line');
+  assert.ok(Math.abs(run('expert', gapH)) > 0.05, 'expert bot turns off its line');
+  // Midway between an expert bot's own last two sparse points: only the close check finds it.
+  const gapE = expertL * 0.81;
+  assert.ok(Math.abs(run('expert', gapE, { dense: 0 })) < 0.02, 'sparse points alone miss it');
+  assert.ok(Math.abs(run('expert', gapE)) > 0.05, 'the close check of the winning heading finds it');
+});
+
+test('expert bots notice a cutter from farther than a hard bot of the same skill (#110)', () => {
+  // A head 470 away (hard evade range at skill 1: 400), crossing ahead.
+  const run = (level, sharp = {}) => withSharp(sharp, () => withTactics(level, ONLY('evade'), () => {
+    const s = scene(level, [
+      { name: 'Bot', mass: 400, x: 0, y: 0, angle: 0, ai: {} },
+      { name: 'Other', mass: 100, x: 400, y: 250, angle: Math.atan2(-250, -150) },
+    ], 30);
+    botThink(s.worms[0], s.game);
+    return s.worms[0].ai.mode;
+  }));
+  assert.notEqual(run('hard'), 'evade');
+  assert.equal(run('expert'), 'evade');
+  assert.notEqual(run('expert', { sense: 1 }), 'evade', 'it is the wider sensing');
+});
+
+test('expert bots steer clear of two cutters at once (#110)', () => {
+  const { game, worms: [bot, a, b] } = scene('expert', withFood([
+    { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
+    { name: 'A', mass: 100, x: 200, y: 150, angle: Math.atan2(-150, 40) },
+    { name: 'B', mass: 100, x: -250, y: -150, angle: Math.PI / 3 },
+  ], [{ x: 400, y: 0 }]));
+  // Does heading `h` from the bot's head meet worm o's coming head within a second?
+  const meets = (o, h) => {
+    for (let k = 1; k <= 30; k++) {
+      const t = k / 30, x = Math.cos(h) * bot.speed * t, y = Math.sin(h) * bot.speed * t;
+      for (let j = 1; j <= 20; j++) { const p = predictHead(o, j / 20); if (Math.hypot(x - p.x, y - p.y) < bot.r + o.r) return true; }
+    }
+    return false;
+  };
+  // Turning away from A's line alone would run into B.
+  const away = a.angle + (sideOf(a, 0, 0) >= 0 ? 1 : -1) * Math.PI / 2;
+  assert.ok(meets(b, away), 'scene: escaping A alone meets B');
+  botThink(bot, game);
+  assert.equal(bot.ai.mode, 'evade');
+  assert.ok(!meets(a, bot.targetAngle) && !meets(b, bot.targetAngle), `heading ${bot.targetAngle.toFixed(2)} clears both`);
+});
+
+test('sharpness changes nothing on the other levels (#110)', () => {
+  const run = () => {
+    const g = new Game({ botCount: 12, difficulty: 'hard' }, null, { seed: 77 });
+    g.spawnPlayer('You', 0);
+    for (let i = 0; i < 60 * 20; i++) g.update(1 / 60);
+    const snap = g.toJSON();
+    delete snap.savedAt;
+    return JSON.stringify(snap);
+  };
+  const withSharpness = run();
+  const saved = DIFFICULTY.expert.sharp;
+  delete DIFFICULTY.expert.sharp;
+  try { assert.equal(run(), withSharpness); } finally { DIFFICULTY.expert.sharp = saved; }
 });

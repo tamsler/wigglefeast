@@ -141,6 +141,10 @@
   // aggro: how often and how far a bot hunts. preyRatio: it hunts worms lighter than this
   // times its own mass. bigShare: share of the bots in a new world that start large, at
   // up to bigMax mass; the rest start small. tactics: share of bots that know each tactic.
+  // sharp (expert only, #110): sharper than skill allows, applied when a bot thinks, so nothing
+  // is saved. think: re-plan delay x; look: look-ahead x; dense: check the winning heading
+  // closely (1/0); headings: candidates x; sense: threat-sensing range x; heads: heads tracked;
+  // escape: steer clear of every cutter, not only the nearest (1/0). 1 (or 8 heads) is off.
   const DIFFICULTY = {
     easy: { skill: [0.12, 0.45], aggro: [0.0, 0.35], preyRatio: 1, bigShare: 0.1, bigMax: 1200, tactics: tactics({}) },
     normal: {
@@ -152,8 +156,9 @@
       tactics: tactics({ predict: 1, anticipate: 0.7, evade: 0.6, headOn: 0.5, scavenge: 0.5, trap: 0.4, pin: 0.4, coil: 0.3, read: 0.5 }),
     },
     expert: {
-      skill: [0.85, 1.0], aggro: [0.6, 1.0], preyRatio: 2, bigShare: 0.25, bigMax: 3000,
+      skill: [0.85, 1.0], aggro: [0.6, 1.0], preyRatio: 2, bigShare: 0.35, bigMax: 5000,
       tactics: tactics(Object.fromEntries(TACTICS.map((k) => [k, 1]))),
+      sharp: { think: 0.7, look: 1.25, dense: 1, headings: 1.3, sense: 1.4, heads: 12, escape: 1 },
     },
   };
   const DIFFICULTIES = Object.keys(DIFFICULTY);
@@ -448,6 +453,14 @@
   // turning (turnRate), never a worm's targetAngle.
   const SAMPLE_T = [0.15, 0.35, 0.62, 1];
   const SAMPLE_W = [12, 6, 3, 1.5];
+  // Danger weight of a hit at fraction f of the look-ahead, between the SAMPLE_T points (#110).
+  function dangerAt(f) {
+    if (f <= SAMPLE_T[0]) return SAMPLE_W[0];
+    for (let j = 1; j < SAMPLE_T.length; j++) {
+      if (f <= SAMPLE_T[j]) return SAMPLE_W[j - 1] + ((f - SAMPLE_T[j - 1]) / (SAMPLE_T[j] - SAMPLE_T[j - 1])) * (SAMPLE_W[j] - SAMPLE_W[j - 1]);
+    }
+    return SAMPLE_W[SAMPLE_W.length - 1];
+  }
   const GHOST_T = [0.25, 0.5, 0.75];
   const EVADE_T = [0.25, 0.5, 0.75, 1];
   const HEAD_ON = 0.85; // a head-on collision is a safe win against worms under this share of own mass
@@ -559,10 +572,12 @@
     const ai = w.ai, skill = ai.skill, r = w.r;
     const level = g.settings.difficulty;
     const diff = DIFFICULTY[level] || DIFFICULTY.normal;
+    const sharp = diff.sharp; // expert only (#110)
+    const sense = sharp ? sharp.sense : 1;
     const knows = (k) => knowsTactic(w, level, k);
     const hx = w.sx[0], hy = w.sy[0];
     const edge = g.R - r * 3 - 40, edge2 = edge * edge;
-    const L = (80 + 240 * skill) * (w.boosting ? 1.6 : 1) + r * 3;
+    const L = (80 + 240 * skill) * (w.boosting ? 1.6 : 1) * (sharp ? sharp.look : 1) + r * 3;
     const mySpeed = Math.max(w.speed, CFG.BASE_SPEED);
     let goal = null, goalW = 0, boost = false, mode = 'wander';
     let headMass = 0, ignore = null; // set while going head-on
@@ -613,14 +628,15 @@
     const anticipate = knows('anticipate'), evade = knows('evade'), headOn = knows('headOn');
     const heads = [];
     if (anticipate || evade || headOn) {
-      const HR = L + 300;
+      const HR = (L + 300) * sense;
       for (const o of g.worms) {
         if (o === w || o.dead || o.shield > 0) continue;
         const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d2 = dx * dx + dy * dy;
         if (d2 < HR * HR) heads.push({ o, d: Math.sqrt(d2) });
       }
       heads.sort((a, b) => a.d - b.d);
-      if (heads.length > 8) heads.length = 8;
+      const maxHeads = sharp ? sharp.heads : 8;
+      if (heads.length > maxHeads) heads.length = maxHeads;
     }
 
     // Scavenging: the remains of a worm that just died nearby, if they beat the best food and
@@ -769,8 +785,13 @@
     }
 
     // Evasion: a head that will cross our path in the next second before we get there.
+    // Sharp bots (#110) weigh every cutter: they sum each one's sideways escape, nearer ones
+    // counting more, and treat each cutter's coming path as an obstacle.
+    let threatPath = null;
     if (evade) {
-      const ER = 250 + 150 * skill;
+      const ER = (250 + 150 * skill) * sense;
+      const multi = sharp && sharp.escape > 0;
+      let ex = 0, ey = 0, nearD = Infinity;
       const mine = EVADE_T.map((t) => predictHead(w, t));
       for (const { o, d } of heads) {
         if (d > ER * 2) break;
@@ -791,13 +812,30 @@
         }
         // Head away from its line, on the side we are on.
         const side = Math.cos(o.angle) * (hy - o.sy[0]) - Math.sin(o.angle) * (hx - o.sx[0]) >= 0 ? 1 : -1;
-        goal = o.angle + side * Math.PI / 2;
+        const away = o.angle + side * Math.PI / 2;
+        if (multi) {
+          const k = 1 / Math.max(d, 1);
+          ex += Math.cos(away) * k; ey += Math.sin(away) * k;
+          nearD = Math.min(nearD, d);
+          if (!threatPath) threatPath = [];
+          for (const t of EVADE_T) { const p = predictHead(o, t); threatPath.push(p.x, p.y, -1, o.r); }
+          continue;
+        }
+        goal = away;
         goalW = 3;
         mode = 'evade';
         headMass = 0;
         ignore = null;
         if (w.mass > 60 && d < 200) boost = true;
         break;
+      }
+      if (threatPath) {
+        goal = Math.atan2(ey, ex);
+        goalW = 3;
+        mode = 'evade';
+        headMass = 0;
+        ignore = null;
+        if (w.mass > 60 && nearD < 200) boost = true;
       }
     }
 
@@ -818,20 +856,47 @@
     }
 
     // Evaluate candidate headings.
-    const N = 2 * Math.round(4 + 6 * skill) + 1;
+    const N = 2 * Math.round((4 + 6 * skill) * (sharp ? sharp.headings : 1)) + 1;
     const spread = Math.PI * (0.6 + 0.35 * skill);
     const rad = r + 4 + 6 * skill;
+    // Going head-on, a sharp bot ignores the target's body: meeting the head ends the fight
+    // first, and it re-plans the moment the target swerves (#110).
+    const pass = sharp ? ignore : null;
+    const blocked = (px, py, t, speed) => hitAt(g, w, px, py, rad, headMass, pass)
+      || (ghost && ghostHit(ghost, px, py, rad, t / speed)) || (threatPath && ghostHit(threatPath, px, py, rad, 0));
+    const dense = sharp && sharp.dense > 0 ? [] : null; // [angle, score, danger] per candidate
     let bestA = w.angle, bestS = -Infinity, bestD = 0;
     for (let k = 0; k <= N; k++) {
       const a = k === N ? goal : w.angle + spread * ((2 * k) / (N - 1) - 1);
       const c = Math.cos(a), s = Math.sin(a);
       let danger = 0;
       for (let j = 0; j < 4; j++) {
-        const t = L * SAMPLE_T[j], px = hx + c * t, py = hy + s * t;
-        if (hitAt(g, w, px, py, rad, headMass) || (ghost && ghostHit(ghost, px, py, rad, t / mySpeed))) { danger = SAMPLE_W[j]; break; }
+        const t = L * SAMPLE_T[j];
+        if (blocked(hx + c * t, hy + s * t, t, mySpeed)) { danger = SAMPLE_W[j]; break; }
       }
       const score = -danger + goalW * Math.cos(angleDiff(a, goal)) - 0.25 * Math.abs(angleDiff(w.angle, a));
+      if (dense) dense.push([a, score, danger]);
       if (score > bestS) { bestS = score; bestA = a; bestD = danger; }
+    }
+    // Sharp bots check the best clear headings closely, at most 2·rad apart along the whole
+    // look-ahead, so a thin body between the sparse points can't slip through (#110).
+    if (dense && bestD === 0) {
+      const step = 2 * rad;
+      for (let tries = 0; tries < 4; tries++) {
+        let bi = -1;
+        for (let i = 0; i < dense.length; i++) if (!dense[i][3] && dense[i][2] === 0 && (bi < 0 || dense[i][1] > dense[bi][1])) bi = i;
+        if (bi < 0) break;
+        const e = dense[bi], c = Math.cos(e[0]), s = Math.sin(e[0]);
+        e[3] = true; // checked closely
+        for (let t = step; ; t += step) {
+          const tt = Math.min(t, L);
+          if (blocked(hx + c * tt, hy + s * tt, tt, mySpeed)) { e[2] = dangerAt(tt / L); e[1] -= e[2]; break; }
+          if (tt >= L) break;
+        }
+        if (e[2] === 0) break; // clear all the way
+      }
+      bestS = -Infinity;
+      for (const e of dense) if (e[1] > bestS) { bestS = e[1]; bestA = e[0]; bestD = e[2]; }
     }
     w.targetAngle = bestA;
     w.wantBoost = boost && bestD === 0;
@@ -840,7 +905,7 @@
       const c = Math.cos(bestA), s = Math.sin(bestA), boostSpeed = mySpeed * CFG.BOOST_MULT;
       for (const f of [0.62, 1]) {
         const t = L * 1.6 * f, px = hx + c * t, py = hy + s * t;
-        if (hitAt(g, w, px, py, rad, headMass) || (ghost && ghostHit(ghost, px, py, rad, t / boostSpeed))) { w.wantBoost = false; break; }
+        if (blocked(px, py, t, boostSpeed)) { w.wantBoost = false; break; }
       }
     }
   }
@@ -1075,10 +1140,15 @@
       this.time += dt;
       this.tick++;
 
+      const sharp = (DIFFICULTY[this.settings.difficulty] || DIFFICULTY.normal).sharp;
       for (const w of this.worms) {
         if (!w.ai || w.dead) continue;
         w.thinkT -= dt;
-        if (w.thinkT <= 0) { botThink(w, this); w.thinkT = w.ai.interval * rand(this.rng, 0.8, 1.2); }
+        if (w.thinkT <= 0) {
+          botThink(w, this);
+          w.thinkT = w.ai.interval * rand(this.rng, 0.8, 1.2);
+          if (sharp) w.thinkT = Math.max(0.04, w.thinkT * sharp.think); // saved ai.interval stays the base (#110)
+        }
       }
 
       let maxR = 0;
