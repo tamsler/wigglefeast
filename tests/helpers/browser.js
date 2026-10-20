@@ -78,7 +78,10 @@ async function launch({ width = 1280, height = 800, mobile = false, profile } = 
   page.close = async () => {
     try { page.ws.close(); } catch { /* already closed */ }
     proc.kill();
-    await new Promise((r) => (proc.exitCode !== null ? r() : proc.once('exit', r)));
+    // A Chrome that ignores SIGTERM is killed after 5 s, so a failed test can't hang the run (#112).
+    const force = setTimeout(() => proc.kill('SIGKILL'), 5000);
+    await new Promise((r) => (proc.exitCode !== null || proc.signalCode !== null ? r() : proc.once('exit', r)));
+    clearTimeout(force);
     if (ownProfile) fs.rmSync(userDataDir, { recursive: true, force: true });
   };
   return page;
@@ -228,7 +231,7 @@ class Page {
     const tab = await attach(target.webSocketDebuggerUrl, this.opts);
     tab.port = this.port;
     tab.close = async () => {
-      try { await fetch(`${base}/json/close/${target.id}`); } catch { /* already gone */ }
+      try { await fetch(`${base}/json/close/${target.id}`, { signal: AbortSignal.timeout(3000) }); } catch { /* already gone */ }
       try { tab.ws.close(); } catch { /* already closed */ }
     };
     return tab;
