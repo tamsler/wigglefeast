@@ -1028,3 +1028,12 @@ test('a world replays exactly from its seed, and the seed is not saved (#100)', 
   assert.equal(strip(g1), strip(g2));
   assert.ok(!('seed' in new Game({ botCount: 5 }, null, { seed: 9 }).toJSON()));
 });
+
+test('a worm built outside a world never shares an id with the world\'s own worms (#100)', () => {
+  const game = new Game({ botCount: 5 }, null, { seed: 3 });
+  game.worms.push(new Worm({ name: 'Extra', skin: SKINS[0], mass: 15, x: 0, y: 0, angle: 0, worldR: game.R, isPlayer: true }));
+  for (let i = 0; i < 5; i++) game.spawnBot(false);
+  const ids = game.worms.map((w) => w.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.doesNotThrow(() => validateSnapshot(JSON.parse(JSON.stringify(game.toJSON()))), 'still saves');
+});

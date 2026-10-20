@@ -292,8 +292,10 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Ids for worms made outside a Game (tests); a Game hands out its own (game.nextId).
-  let nextId = 1;
+  // Ids for worms made outside a Game (tests); a Game hands out its own from 1 (game.nextId).
+  // Kept far above any world's ids, so adding such a worm to a world never duplicates an id,
+  // and below MAX_ID, so the world still saves.
+  let nextId = MAX_ID / 2 + 1;
 
   class Worm {
     constructor(o) {
