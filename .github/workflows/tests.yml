@@ -10,14 +10,30 @@ permissions:
   contents: read
 
 jobs:
-  tests:
-    name: Tests
+  # The test files, split into parallel shards balanced by duration (tests/shard.js, #112).
+  shard:
+    name: Tests ${{ matrix.shard }}/3
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Engine and browser tests (headless Chrome)
-        run: node --test --test-concurrency=1 "tests/**/*.test.js"
+        run: node tests/shard.js ${{ matrix.shard }}/3
+
+  # The required "Tests" check: passes only when every shard passed.
+  tests:
+    name: Tests
+    needs: shard
+    if: always()
+    runs-on: ubuntu-26.04
+    timeout-minutes: 2
+    steps:
+      - name: All shards passed
+        run: test "${{ needs.shard.result }}" = success

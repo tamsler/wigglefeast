@@ -101,6 +101,8 @@ node --test "tests/**/*.test.js"
 
 No dependencies: Node 22+ and Google Chrome (set `CHROME_PATH` if it isn't in the usual place).
 
+CI splits the files into three parallel shards balanced by duration: `node tests/shard.js 2/3` runs shard 2 locally. Every file runs in exactly one shard, and a new file needs no setup. Add a slow one to `SECONDS` in `tests/shard.js` to keep the shards even.
+
 - `tests/engine.test.js` runs headlessly: the simulation on every difficulty and at 150 bots, save round trips and save validation, growth and shedding, and each bot tactic in a hand-built scene.
 - `tests/browser/` drives headless Chrome through the DevTools protocol:
   - imports and stored-data safety, and one window at a time
