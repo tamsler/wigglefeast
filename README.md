@@ -54,7 +54,7 @@ Bots that read other worms (some on Normal, half on Hard, all on Expert) keep th
 
 Bots only use what you could see on screen, never your steering input, and treat you like any other worm.
 
-Difficulty and growth numbers live at the top of `engine.js` (`CFG`, `DIFFICULTY`, including each level's tactic shares). `node tools/balance.js` runs headless worlds and reports survival, kills (by the killer's tactic), bot sizes and time per tick for each level; `--set` tries other values without editing the engine (for example `--set expert.tactics.coil=0`).
+Difficulty and growth numbers live at the top of `engine.js` (`CFG`, `DIFFICULTY`, including each level's tactic shares). `node tools/balance.js` runs headless worlds and reports survival, kills (by the killer's tactic), bot sizes and time per tick for each level; `--set` tries other values without editing the engine (for example `--set expert.tactics.coil=0`). Each report prints its seed; `--seed` replays the same worlds, so two settings can be compared on identical runs.
 
 ## Saving
 

@@ -28,8 +28,20 @@
   };
 
   const TAU = Math.PI * 2;
-  const rand = (a, b) => a + Math.random() * (b - a);
-  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  // Seedable random numbers (mulberry32): each world draws from its own stream, so a world
+  // replays exactly from its seed (#100). rng() returns [0, 1) like Math.random.
+  function makeRng(seed) {
+    let s = seed >>> 0;
+    return () => {
+      s = (s + 0x6d2b79f5) >>> 0;
+      let t = Math.imul(s ^ (s >>> 15), s | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const newSeed = () => Math.floor(Math.random() * 4294967296);
+  const rand = (rng, a, b) => a + rng() * (b - a);
+  const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   function angleDiff(from, to) {
     let d = (to - from) % TAU;
@@ -37,14 +49,14 @@
     else if (d < -Math.PI) d += TAU;
     return d;
   }
-  function randomInCircle(R) {
-    const a = Math.random() * TAU, d = R * Math.sqrt(Math.random());
+  function randomInCircle(rng, R) {
+    const a = rng() * TAU, d = R * Math.sqrt(rng());
     return { x: Math.cos(a) * d, y: Math.sin(a) * d };
   }
-  function weighted(table) {
+  function weighted(rng, table) {
     let total = 0;
     for (const k in table) total += table[k];
-    let t = Math.random() * total;
+    let t = rng() * total;
     for (const k in table) { t -= table[k]; if (t <= 0) return k; }
     return Object.keys(table)[0];
   }
@@ -280,7 +292,10 @@
   }
 
   // ---------------------------------------------------------------------------
-  let nextId = 1;
+  // Ids for worms made outside a Game (tests); a Game hands out its own from 1 (game.nextId).
+  // Kept far above any world's ids, so adding such a worm to a world never duplicates an id,
+  // and below MAX_ID, so the world still saves.
+  let nextId = MAX_ID / 2 + 1;
 
   class Worm {
     constructor(o) {
@@ -302,7 +317,8 @@
       this.shield = o.shield || 0;
       this.pw = Object.assign({ magnet: 0, x2: 0, x5: 0, speed: 0, zoom: 0, turn: 0 }, o.pw);
       this.ai = o.ai || null;
-      this.thinkT = Math.random() * 0.3;
+      const rng = o.rng || Math.random; // the world's random numbers; Math.random outside a Game
+      this.thinkT = rng() * 0.3;
       this.born = o.time || 0;
       this.peak = Math.max(o.peak || 0, this.mass);
       this.r = radiusFor(this.mass);
@@ -321,7 +337,7 @@
       this.sx = new Array(n);
       this.sy = new Array(n);
       let px = o.x, py = o.y, b = o.angle + Math.PI;
-      const curl = rand(-0.06, 0.06);
+      const curl = rand(rng, -0.06, 0.06);
       for (let i = 0; i < n; i++) {
         this.sx[i] = px;
         this.sy[i] = py;
@@ -389,7 +405,7 @@
 
       if (this.dropAcc >= 1.5) {
         const t = n - 1;
-        g.addFood(sx[t] + rand(-r, r) * 0.5, sy[t] + rand(-r, r) * 0.5, this.dropAcc, this.stripeColor(t), 18);
+        g.addFood(sx[t] + rand(g.rng, -r, r) * 0.5, sy[t] + rand(g.rng, -r, r) * 0.5, this.dropAcc, this.stripeColor(t), 18);
         this.dropAcc = 0;
       }
 
@@ -554,8 +570,8 @@
 
     // Wander point, refreshed when reached or occasionally.
     const wdx = ai.wx - hx, wdy = ai.wy - hy;
-    if (wdx * wdx + wdy * wdy < 200 * 200 || Math.random() < 0.01) {
-      const p = randomInCircle(g.R * 0.75);
+    if (wdx * wdx + wdy * wdy < 200 * 200 || g.rng() < 0.01) {
+      const p = randomInCircle(g.rng, g.R * 0.75);
       ai.wx = p.x; ai.wy = p.y;
     }
 
@@ -578,7 +594,7 @@
       goal = Math.atan2(by - hy, bx - hx);
       goalW = 1;
       mode = 'food';
-      if (bv >= 6 && bd < 260 && skill > 0.45 && w.mass > 50 && Math.random() < skill * 0.5) boost = true;
+      if (bv >= 6 && bd < 260 && skill > 0.45 && w.mass > 50 && g.rng() < skill * 0.5) boost = true;
     }
 
     // Power-ups are worth a detour.
@@ -652,7 +668,7 @@
     // few ways out.
     const read = knows('read');
     if (ai.prey && (ai.prey.dead || g.time > ai.huntUntil)) endHunt(ai);
-    if (!ai.prey && w.mass > 30 && Math.random() < ai.aggro * 0.2) {
+    if (!ai.prey && w.mass > 30 && g.rng() < ai.aggro * 0.2) {
       const td = Math.pow(300 + 350 * ai.aggro, 2), cands = [];
       for (const o of g.worms) {
         if (o === w || o.dead || o.shield > 0) continue;
@@ -688,7 +704,7 @@
         }
         ai.prey = tgt;
         ai.retaliating = grudgeTgt;
-        ai.huntUntil = g.time + rand(1.5, 4.5);
+        ai.huntUntil = g.time + rand(g.rng, 1.5, 4.5);
         ai.coilDir = 0;
       }
     }
@@ -747,7 +763,7 @@
         // Experienced (predicting) hunters don't boost at point-blank range or at a prey
         // heading for them: most hunters that die are killed by their own prey turning in.
         const safe = !knows('predict') || (d > 150 + 2 * (r + o.r) && Math.abs(angleDiff(o.angle, Math.atan2(-dy, -dx))) > Math.PI / 2);
-        if (d < 450 && w.mass > 60 && safe && Math.random() < ai.aggro * skill) boost = true;
+        if (d < 450 && w.mass > 60 && safe && g.rng() < ai.aggro * skill) boost = true;
       }
       if (ai.prey) { headMass = 0; ignore = null; }
     }
@@ -831,7 +847,12 @@
 
   // ---------------------------------------------------------------------------
   class Game {
-    constructor(settings, snapshot) {
+    // opts.seed replays a world exactly (#100); without one each world gets a random seed.
+    // The seed isn't saved: a loaded world continues with a new one.
+    constructor(settings, snapshot, opts = {}) {
+      this.seed = opts.seed !== undefined ? opts.seed >>> 0 : newSeed();
+      this.rng = makeRng(this.seed);
+      this.nextId = 1; // per world, so worm ids (and the tactics they pick) replay from the seed too
       if (snapshot) {
         validateSnapshot(snapshot); // before its settings size the world
         settings = snapshot.settings;
@@ -898,7 +919,7 @@
         savedAt: Date.now(),
         settings: { botCount: this.settings.botCount, difficulty: this.settings.difficulty },
         time: r2(this.time),
-        nextId,
+        nextId: this.nextId,
         worms: this.worms.filter((w) => !w.dead).map((w) => ({
           id: w.id,
           name: w.name,
@@ -929,7 +950,7 @@
     load(snap) {
       this.time = snap.time || 0;
       // Never hand out an id a loaded worm already has, even if nextId is missing or stale (#31).
-      nextId = Math.max(nextId, snap.nextId || 1, ...snap.worms.map((d) => d.id + 1));
+      this.nextId = Math.max(snap.nextId || 1, ...snap.worms.map((d) => d.id + 1));
       const byId = new Map();
       for (const d of snap.worms) {
         const w = new Worm({
@@ -937,7 +958,7 @@
           angle: d.angle, targetAngle: d.targetAngle, kills: d.kills, eaten: d.eaten, dropAcc: d.dropAcc,
           shield: d.shield, pw: d.pw, time: d.born, peak: d.peak,
           ai: d.ai ? { skill: d.ai.skill, aggro: d.ai.aggro, interval: d.ai.interval, wx: d.ai.wx, wy: d.ai.wy, prey: d.ai.prey, huntUntil: d.ai.huntUntil } : null,
-          sx: d.sx.slice(), sy: d.sy.slice(), worldR: this.R,
+          sx: d.sx.slice(), sy: d.sy.slice(), worldR: this.R, rng: this.rng,
         });
         byId.set(w.id, w);
         this.worms.push(w);
@@ -957,9 +978,9 @@
     // --- spawning -----------------------------------------------------------
     spawnNaturalFood() {
       if (this.food.length >= MAX_FOOD) return;
-      const p = randomInCircle(this.R - 30);
-      const v = weighted({ 1: 55, 2: 30, 4: 12, 8: 3 }) | 0;
-      this.food.push({ x: p.x, y: p.y, v, r: foodRadius(v), c: pick(FOOD_COLORS), life: Infinity, ph: rand(0, TAU), dead: false, natural: true });
+      const p = randomInCircle(this.rng, this.R - 30);
+      const v = weighted(this.rng, { 1: 55, 2: 30, 4: 12, 8: 3 }) | 0;
+      this.food.push({ x: p.x, y: p.y, v, r: foodRadius(v), c: pick(this.rng, FOOD_COLORS), life: Infinity, ph: rand(this.rng, 0, TAU), dead: false, natural: true });
       this.naturalFood++;
     }
 
@@ -967,18 +988,18 @@
       if (this.food.length >= MAX_FOOD) return; // keeps saves within the food limit
       const lim = this.R - 20, d2 = x * x + y * y;
       if (d2 > lim * lim) { const k = lim / Math.sqrt(d2); x *= k; y *= k; }
-      this.food.push({ x, y, v, r: foodRadius(v), c: color, life, ph: rand(0, TAU), dead: false, natural: false });
+      this.food.push({ x, y, v, r: foodRadius(v), c: color, life, ph: rand(this.rng, 0, TAU), dead: false, natural: false });
     }
 
     spawnPowerup() {
-      const p = randomInCircle(this.R * 0.92);
-      this.powerups.push({ x: p.x, y: p.y, type: weighted(POWERUP_WEIGHTS), ph: rand(0, TAU), dead: false });
+      const p = randomInCircle(this.rng, this.R * 0.92);
+      this.powerups.push({ x: p.x, y: p.y, type: weighted(this.rng, POWERUP_WEIGHTS), ph: rand(this.rng, 0, TAU), dead: false });
     }
 
     findSpawnPoint(clearance) {
       let best = null, bestD = -1;
       for (let t = 0; t < 40; t++) {
-        const p = randomInCircle(this.R * 0.8);
+        const p = randomInCircle(this.rng, this.R * 0.8);
         let minD = Infinity;
         for (const w of this.worms) {
           if (w.dead) continue;
@@ -996,30 +1017,32 @@
     uniqueName() {
       const used = new Set(this.worms.map((w) => w.name));
       const free = BOT_NAMES.filter((n) => !used.has(n));
-      if (free.length) return pick(free);
-      return pick(BOT_NAMES) + ' ' + Math.floor(rand(2, 99));
+      if (free.length) return pick(this.rng, free);
+      return pick(this.rng, BOT_NAMES) + ' ' + Math.floor(rand(this.rng, 2, 99));
     }
 
     spawnBot(initial) {
       const d = DIFFICULTY[this.settings.difficulty] || DIFFICULTY.normal;
-      const skill = rand(d.skill[0], d.skill[1]);
+      const skill = rand(this.rng, d.skill[0], d.skill[1]);
       // A new world starts mostly small, with a few large bots (bigShare) to look up to (#16).
-      const big = initial && Math.random() < d.bigShare;
-      const mass = big ? 400 + Math.pow(Math.random(), 2) * (d.bigMax - 400)
-        : initial ? CFG.START_MASS + Math.pow(Math.random(), 2) * 185
-        : CFG.START_MASS + rand(0, 25);
+      const big = initial && this.rng() < d.bigShare;
+      const mass = big ? 400 + Math.pow(this.rng(), 2) * (d.bigMax - 400)
+        : initial ? CFG.START_MASS + Math.pow(this.rng(), 2) * 185
+        : CFG.START_MASS + rand(this.rng, 0, 25);
       const p = this.findSpawnPoint(300);
-      const wp = randomInCircle(this.R * 0.75);
+      const wp = randomInCircle(this.rng, this.R * 0.75);
       const w = new Worm({
+        id: this.nextId++,
+        rng: this.rng,
         name: this.uniqueName(),
-        skin: pick(PICKABLE_SKINS),
+        skin: pick(this.rng, PICKABLE_SKINS),
         mass,
         x: p.x,
         y: p.y,
-        angle: Math.atan2(-p.y, -p.x) + rand(-1.2, 1.2),
+        angle: Math.atan2(-p.y, -p.x) + rand(this.rng, -1.2, 1.2),
         worldR: this.R,
         time: this.time,
-        ai: { skill, aggro: rand(d.aggro[0], d.aggro[1]), interval: 0.32 - 0.22 * skill, wx: wp.x, wy: wp.y, prey: null, huntUntil: 0 },
+        ai: { skill, aggro: rand(this.rng, d.aggro[0], d.aggro[1]), interval: 0.32 - 0.22 * skill, wx: wp.x, wy: wp.y, prey: null, huntUntil: 0 },
       });
       this.worms.push(w);
       return w;
@@ -1028,6 +1051,8 @@
     spawnPlayer(name, skinIndex) {
       const p = this.findSpawnPoint(450);
       const w = new Worm({
+        id: this.nextId++,
+        rng: this.rng,
         name: name || 'You',
         skin: SKINS[skinIndex] || SKINS[0],
         mass: CFG.START_MASS,
@@ -1053,7 +1078,7 @@
       for (const w of this.worms) {
         if (!w.ai || w.dead) continue;
         w.thinkT -= dt;
-        if (w.thinkT <= 0) { botThink(w, this); w.thinkT = w.ai.interval * rand(0.8, 1.2); }
+        if (w.thinkT <= 0) { botThink(w, this); w.thinkT = w.ai.interval * rand(this.rng, 0.8, 1.2); }
       }
 
       let maxR = 0;
@@ -1074,12 +1099,12 @@
         this.foodBudget += CFG.FOOD_REFILL_RATE * dt; // reset below once the food is back at its target
         for (; this.foodBudget >= 1 && this.naturalFood < this.foodTarget; this.foodBudget--) this.spawnNaturalFood();
       } else this.foodBudget = 0;
-      if (this.powerups.length < this.powerupTarget && Math.random() < 1 - Math.exp(-CFG.POWERUP_SPAWN_RATE * dt)) this.spawnPowerup();
+      if (this.powerups.length < this.powerupTarget && this.rng() < 1 - Math.exp(-CFG.POWERUP_SPAWN_RATE * dt)) this.spawnPowerup();
 
       let bots = 0;
       for (const w of this.worms) if (w.ai) bots++;
       const q = this.respawnQueue;
-      while (bots + q.length < this.settings.botCount) q.push(this.time + rand(1, 3));
+      while (bots + q.length < this.settings.botCount) q.push(this.time + rand(this.rng, 1, 3));
       q.sort((a, b) => a - b);
       while (q.length && q[0] <= this.time) {
         q.shift();
@@ -1207,7 +1232,7 @@
       const per = total / count, step = n / count, spread = w.r * 0.7;
       for (let k = 0; k < count; k++) {
         const i = Math.floor(k * step);
-        this.addFood(w.sx[i] + rand(-spread, spread), w.sy[i] + rand(-spread, spread), per * rand(0.7, 1.3), w.stripeColor(i), rand(45, 60));
+        this.addFood(w.sx[i] + rand(this.rng, -spread, spread), w.sy[i] + rand(this.rng, -spread, spread), per * rand(this.rng, 0.7, 1.3), w.stripeColor(i), rand(this.rng, 45, 60));
       }
       // Remember where the remains lie (5 points along the body) for scavenging bots.
       for (let k = 0; k < 5; k++) {

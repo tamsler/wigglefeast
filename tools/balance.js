@@ -4,6 +4,9 @@
 // #78), how big bots get and how long a tick takes.
 // Usage: node tools/balance.js [--minutes 8] [--runs 3] [--bots 30] [--diff easy,normal,hard,expert]
 //                              [--profile novice,careful,skilled] [--set SHED_RATE=0.01,easy.bigShare=0.1]
+//                              [--seed 12345]
+// --seed replays runs exactly (#100): run r of every row uses seed + r. Without it a random
+// seed is picked and printed, so any report can be rerun. Only ms/tick differs between replays.
 // --set tries values without editing engine.js: CFG keys by name, DIFFICULTY keys as
 // <difficulty>.<key> (ranges as lo:hi, e.g. hard.skill=0.6:1), tactic shares as
 // <difficulty>.tactics.<tactic> (e.g. expert.tactics.coil=0).
@@ -20,6 +23,7 @@ const MINUTES = Number(args.minutes || 8);
 const RUNS = Number(args.runs || 3);
 const BOTS = Number(args.bots || 30);
 const DIFFS = args.diff ? args.diff.split(',') : DIFFICULTIES;
+const SEED = args.seed !== undefined ? Number(args.seed) >>> 0 : Math.floor(Math.random() * 4294967296);
 for (const kv of (args.set || '').split(',').filter(Boolean)) {
   const [key, val] = kv.split('=');
   const num = val.includes(':') ? val.split(':').map(Number) : Number(val);
@@ -58,9 +62,9 @@ function cause(e) {
 }
 const tally = (counts) => Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ') || 'none';
 
-function run(diff, profileName) {
+function run(diff, profileName, seed) {
   const prof = PROFILES[profileName];
-  const g = new Game({ botCount: BOTS, difficulty: diff });
+  const g = new Game({ botCount: BOTS, difficulty: diff }, null, { seed });
   const initial = g.worms.map((w) => w.mass);
   const ai = { skill: prof.skill, aggro: prof.aggro, interval: 0.32 - 0.22 * prof.skill, wx: 0, wy: 0, prey: null, huntUntil: 0 };
   let thinkT = 0, bornAt = 0, respawnAt = 0;
@@ -121,12 +125,12 @@ function run(diff, profileName) {
 const f0 = (v) => (Number.isFinite(v) ? Math.round(v).toString() : '-');
 const f2 = (v) => (Number.isFinite(v) ? v.toFixed(2) : '-');
 
-console.log(`${BOTS} bots, ${MINUTES} min x ${RUNS} runs per row${args.set ? ', ' + args.set : ''}\n`);
+console.log(`${BOTS} bots, ${MINUTES} min x ${RUNS} runs per row, seed ${SEED}${args.set ? ', ' + args.set : ''}\n`);
 for (const diff of DIFFS) {
   for (const pn of PROFILE_NAMES) {
     const all = { initial: [], lives: [], botDeaths: {}, top: [], share: [], big: [], lead: [], hunting: [], ms: [] };
     for (let r = 0; r < RUNS; r++) {
-      const o = run(diff, pn);
+      const o = run(diff, pn, (SEED + r) >>> 0);
       all.initial.push(...o.initial);
       all.lives.push(...o.lives);
       for (const [k, n] of Object.entries(o.botDeaths)) all.botDeaths[k] = (all.botDeaths[k] || 0) + n;
