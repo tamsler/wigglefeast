@@ -191,7 +191,7 @@ test('a world loaded from a valid save keeps producing valid saves (#31)', () =>
 });
 
 test('worms loaded without nextId never share an id with new worms (#31)', () => {
-  // Ids are global to the engine, so aim just ahead of the next one it would hand out.
+  // Ids are per world, so aim just ahead of the next one a fresh world would hand out.
   const upcoming = new Game({ botCount: 5 }).spawnBot(false).id + 1;
   const snap = fixture().world;
   snap.worms[0].id = upcoming + 3;
@@ -303,18 +303,13 @@ test('simultaneous deaths: the player run is recorded after all kills of the tic
 });
 
 test('food and power-ups refill at the same pace at any update rate (#48)', () => {
-  // Seeded random numbers, so the comparison doesn't depend on luck.
-  const seeded = (seed) => () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  // A fixed seed, so the comparison doesn't depend on luck.
   const refill = (hz) => {
-    const random = Math.random;
-    Math.random = seeded(42);
-    try {
-      const game = new Game({ botCount: 5 });
-      Object.assign(game, { worms: [], respawnQueue: [], food: [], powerups: [], naturalFood: 0, foodTarget: 1e6, powerupTarget: 1e6 });
-      game.settings.botCount = 0;
-      for (let i = 0; i < hz * 60; i++) game.update(1 / hz); // one simulated minute
-      return { food: game.food.length, powerups: game.powerups.length };
-    } finally { Math.random = random; }
+    const game = new Game({ botCount: 5 }, null, { seed: 42 });
+    Object.assign(game, { worms: [], respawnQueue: [], food: [], powerups: [], naturalFood: 0, foodTarget: 1e6, powerupTarget: 1e6 });
+    game.settings.botCount = 0;
+    for (let i = 0; i < hz * 60; i++) game.update(1 / hz); // one simulated minute
+    return { food: game.food.length, powerups: game.powerups.length };
   };
   const r60 = refill(60), r120 = refill(120), r30 = refill(30);
   // Natural food has a fixed budget: exactly 600 per simulated second at every rate.
@@ -1011,4 +1006,25 @@ test('readers evade worms they are wary of from farther away (#83)', () => {
   assert.notEqual(run(100, () => {}), 'evade', 'an unknown worm at that distance is ignored');
   assert.equal(run(100, (s) => memo(s, 'Other', 1, 0)), 'evade', 'a seen killer is evaded from farther');
   assert.equal(run(1000, (s) => memo(s, 'Other', 0, 1)), 'evade', 'a bigger culprit is kept away from');
+});
+
+test('a world replays exactly from its seed, and the seed is not saved (#100)', () => {
+  const run = (seed) => {
+    const g = new Game({ botCount: 12, difficulty: 'expert' }, null, { seed });
+    g.spawnPlayer('You', 0);
+    for (let i = 0; i < 60 * 20; i++) g.update(1 / 60); // 20 simulated seconds: bots think, fight, die and respawn
+    const snap = g.toJSON();
+    delete snap.savedAt;
+    return JSON.stringify(snap);
+  };
+  const a = run(1234);
+  assert.equal(run(1234), a, 'same seed, same world');
+  assert.notEqual(run(1235), a, 'another seed, another world');
+  // Worlds in one process don't disturb each other: interleaving two keeps both on their seed.
+  const g1 = new Game({ botCount: 8 }, null, { seed: 7 }), g2 = new Game({ botCount: 8 }, null, { seed: 7 });
+  new Game({ botCount: 8 }); // an unseeded world in between
+  for (let i = 0; i < 600; i++) { g1.update(1 / 60); g2.update(1 / 60); }
+  const strip = (g) => { const s = g.toJSON(); delete s.savedAt; return JSON.stringify(s); };
+  assert.equal(strip(g1), strip(g2));
+  assert.ok(!('seed' in new Game({ botCount: 5 }, null, { seed: 9 }).toJSON()));
 });
