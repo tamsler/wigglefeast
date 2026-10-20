@@ -466,14 +466,14 @@
   const HEAD_ON = 0.85; // a head-on collision is a safe win against worms under this share of own mass
 
   // headMass: the first 3 segments of worms lighter than this don't count (a head-on win).
-  // other: a second worm to ignore besides self.
-  function hitAt(g, self, px, py, rad, headMass = 0, other = null) {
+  // other: a second worm to ignore besides self; otherSegs: only its first otherSegs segments.
+  function hitAt(g, self, px, py, rad, headMass = 0, other = null, otherSegs = Infinity) {
     const lim = g.R - rad;
     if (px * px + py * py > lim * lim) return true;
     const gw = g.gridWorms;
     return g.segGrid.query(px, py, rad + g.maxR, (oi, si) => {
       const o = gw[oi];
-      if (o === self || o === other || o.dead) return false;
+      if (o === self || (o === other && si < otherSegs) || o.dead) return false;
       if (si < 3 && o.mass < headMass) return false;
       const dx = o.sx[si] - px, dy = o.sy[si] - py, rr = rad + o.r;
       return dx * dx + dy * dy < rr * rr;
@@ -791,7 +791,7 @@
     if (evade) {
       const ER = (250 + 150 * skill) * sense;
       const multi = sharp && sharp.escape > 0;
-      let ex = 0, ey = 0, nearD = Infinity;
+      let ex = 0, ey = 0, nearD = Infinity, nearAway = 0;
       const mine = EVADE_T.map((t) => predictHead(w, t));
       for (const { o, d } of heads) {
         if (d > ER * 2) break;
@@ -816,8 +816,10 @@
         if (multi) {
           const k = 1 / Math.max(d, 1);
           ex += Math.cos(away) * k; ey += Math.sin(away) * k;
-          nearD = Math.min(nearD, d);
+          if (d < nearD) { nearD = d; nearAway = away; }
           if (!threatPath) threatPath = [];
+          // t = -1: a cutter's coming path blocks whenever we would get there (ghostHit's
+          // timing filter never skips it), unlike anticipation's ghosts.
           for (const t of EVADE_T) { const p = predictHead(o, t); threatPath.push(p.x, p.y, -1, o.r); }
           continue;
         }
@@ -830,7 +832,8 @@
         break;
       }
       if (threatPath) {
-        goal = Math.atan2(ey, ex);
+        // Escapes that nearly cancel out give no direction: get away from the nearest cutter.
+        goal = Math.hypot(ex, ey) * nearD < 0.25 ? nearAway : Math.atan2(ey, ex);
         goalW = 3;
         mode = 'evade';
         headMass = 0;
@@ -859,10 +862,13 @@
     const N = 2 * Math.round((4 + 6 * skill) * (sharp ? sharp.headings : 1)) + 1;
     const spread = Math.PI * (0.6 + 0.35 * skill);
     const rad = r + 4 + 6 * skill;
-    // Going head-on, a sharp bot ignores the target's body: meeting the head ends the fight
-    // first, and it re-plans the moment the target swerves (#110).
+    // Going head-on, a sharp bot ignores the target's body beyond its head (meeting the head
+    // ends the fight first) and the stretch right behind the head it is bound to brush. Any
+    // other part of the target, such as a loop across the way, still counts (#110).
     const pass = sharp ? ignore : null;
-    const blocked = (px, py, t, speed) => hitAt(g, w, px, py, rad, headMass, pass)
+    const past = pass ? Math.hypot(pass.sx[0] - hx, pass.sy[0] - hy) : Infinity;
+    const nearSegs = pass ? Math.ceil((2 * (rad + pass.r)) / spacingFor(pass.r)) : 0;
+    const blocked = (px, py, t, speed) => hitAt(g, w, px, py, rad, headMass, pass, t > past ? Infinity : nearSegs)
       || (ghost && ghostHit(ghost, px, py, rad, t / speed)) || (threatPath && ghostHit(threatPath, px, py, rad, 0));
     const dense = sharp && sharp.dense > 0 ? [] : null; // [angle, score, danger] per candidate
     let bestA = w.angle, bestS = -Infinity, bestD = 0;

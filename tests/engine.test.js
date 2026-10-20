@@ -1146,7 +1146,10 @@ test('expert bots steer clear of two cutters at once (#110)', () => {
   assert.ok(!meets(a, bot.targetAngle) && !meets(b, bot.targetAngle), `heading ${bot.targetAngle.toFixed(2)} clears both`);
 });
 
-test('sharpness changes nothing on the other levels (#110)', () => {
+test('sharpness comes only from a level\'s own settings (#110)', () => {
+  // Byte-identical easy/normal/hard runs against the previous engine are checked with seeded
+  // balance reports (see the #110 PR); here: a level without a sharp block gets no sharpness,
+  // and the same block given to hard does change how its bots play.
   const run = () => {
     const g = new Game({ botCount: 12, difficulty: 'hard' }, null, { seed: 77 });
     g.spawnPlayer('You', 0);
@@ -1155,8 +1158,23 @@ test('sharpness changes nothing on the other levels (#110)', () => {
     delete snap.savedAt;
     return JSON.stringify(snap);
   };
-  const withSharpness = run();
-  const saved = DIFFICULTY.expert.sharp;
-  delete DIFFICULTY.expert.sharp;
-  try { assert.equal(run(), withSharpness); } finally { DIFFICULTY.expert.sharp = saved; }
+  const plain = run();
+  DIFFICULTY.hard.sharp = DIFFICULTY.expert.sharp;
+  try { assert.notEqual(run(), plain, 'a sharp block changes hard bots'); } finally { delete DIFFICULTY.hard.sharp; }
+  assert.equal(run(), plain, 'and without one they play as before');
+});
+
+test('a sharp bot going head-on still avoids a loop of its target\'s body across the way (#110)', () => {
+  const { game, worms: [bot, other] } = scene('expert', [
+    { name: 'Bot', mass: 400, x: 0, y: 0, angle: 0, ai: {} },
+    { name: 'Other', mass: 100, x: 180, y: 10, angle: Math.PI },
+  ]);
+  // The tail end of the target's body crosses the line between the two heads at x = 100.
+  const n = other.sx.length, from = n - 24;
+  for (let i = from; i < n; i++) { other.sx[i] = 100; other.sy[i] = -90 + (i - from) * 7.5; }
+  other.updateBounds();
+  game.rebuildSegGrid();
+  botThink(bot, game);
+  assert.equal(bot.ai.mode, 'headOn');
+  assert.ok(Math.abs(bot.targetAngle) > 0.2, `does not drive through the loop (${bot.targetAngle.toFixed(2)})`);
 });
