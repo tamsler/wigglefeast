@@ -2,7 +2,7 @@
 
 ## 1. Baseline
 
-- [ ] 1.1 Save seeded baseline reports before touching the engine: `node tools/balance.js --minutes 2 --runs 12 --seed 100 --bots 30 --diff easy,normal,hard,expert --profile careful` (and `--seed 200`). Verify the files exist and note per-level careful survival, top-bot size and bot deaths per minute.
+- [x] 1.1 Save seeded baseline reports before touching the engine: `node tools/balance.js --minutes 2 --runs 12 --seed 100 --bots 30 --diff easy,normal,hard,expert --profile careful` (and `--seed 200`). Verify the files exist and note per-level careful survival, top-bot size and bot deaths per minute.
 
 ## 2. Cheaper boost
 
@@ -11,7 +11,7 @@
 
 ## 3. Measure and ship
 
-- [ ] 3.1 Re-run the 1.1 reports on the same seeds. Verify with a before/after table (careful survival, top-bot and >1000 counts, bot deaths per minute) for the PR.
+- [x] 3.1 Re-run the 1.1 reports on the same seeds. Verify with a before/after table (careful survival, top-bot and >1000 counts, bot deaths per minute) for the PR.
 - [ ] 3.2 Open the PR (`Closes #125`) with the table, run the `pr-reviewer` agent, address its findings, and merge once checks pass.
 
 ## Workflow follow-up
