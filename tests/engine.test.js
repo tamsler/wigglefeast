@@ -485,7 +485,7 @@ test('worms track how they turn, and predictions follow the turning, not the ste
   assert.ok(Math.abs(q.x - s.speed) < 1e-9 && Math.abs(q.y) < 1e-9);
 });
 
-test('the game remembers recent deaths for a few seconds, without saving them (#78)', () => {
+test('the game remembers remains while their food lasts, without saving them (#78, #122)', () => {
   const g = new Game({ botCount: 5, difficulty: 'expert' });
   const victim = g.worms[0];
   g.kill(victim, null);
@@ -496,8 +496,29 @@ test('the game remembers recent deaths for a few seconds, without saving them (#
   const snap = clone(g);
   assert.ok(!('recentDeaths' in snap));
   assert.doesNotThrow(() => validateSnapshot(snap));
-  for (let i = 0; i < 6.2 * 60; i++) g.update(1 / 60);
-  assert.equal(mine().length, 0, 'forgotten after 6 seconds');
+});
+
+test('remains count while their food lies there, by what is left of it (#122)', () => {
+  // A lone big worm dies; nothing else is around to eat its remains.
+  const { game, worms: [big] } = scene('expert', [{ name: 'Big', mass: 2000, x: 0, y: 0, angle: 0 }], 30);
+  game.kill(big, null);
+  const dropped = Math.max(10, 2000 * 0.8);
+  const total = () => game.recentDeaths.reduce((a, d) => a + d.value, 0);
+  const run = (secs) => { for (let i = 0; i < secs * 60; i++) game.update(1 / 60); };
+  run(20);
+  // Remains outlast the first seconds: 20 s on, all five points still count, worth about what was
+  // dropped (neighbouring points may share a pellet at their edges).
+  assert.equal(game.recentDeaths.length, 5, 'still remembered after 20 s');
+  assert.ok(total() > 0.9 * dropped && total() < 1.5 * dropped, `worth what was dropped: ${total().toFixed(0)} of ${dropped}`);
+  // Remains eaten up: others eat most of the food; the remains are worth only what is left...
+  const pellets = game.food.filter((f) => !f.natural && !f.dead);
+  pellets.slice(0, Math.floor(pellets.length * 0.8)).forEach((f) => { f.dead = true; });
+  run(0.5);
+  assert.ok(total() < 0.5 * dropped, `worth what is left: ${total().toFixed(0)} of ${dropped}`);
+  // ...and are forgotten once almost nothing is left.
+  game.food.forEach((f) => { if (!f.natural) f.dead = true; });
+  run(0.5);
+  assert.equal(game.recentDeaths.length, 0, 'forgotten once eaten up');
 });
 
 // A hand-built scene for bot tests: no food or power-ups, each worm laid out straight
@@ -1240,4 +1261,85 @@ test('a third bot holding a grudge leaves a ganged-up worm alone, even as the ne
     s.game.rebuildSegGrid();
   };
   assert.equal(pickPrey({ mass: 300 }, { mass: 300 }, boxed, crowd, { read: 1, trap: 1 }).prey, 'Far', 'trap pick');
+});
+
+// --- A meal before a fight (#122) ----------------------------------------------
+// A hunter at the origin after a small worm; a big worm (mass 3000) lies off to the side, its head
+// at (-200, 0) and its body stretching away along -x, nearer the hunter than the prey.
+const BIG_AWAY = { name: 'Big', mass: 3000, x: -200, y: 0, angle: 0 };
+const SMALL_AWAY = { name: 'Small', mass: 30, x: -200, y: 0, angle: 0 };
+function huntBeside(shares, dead, hunter = { mass: 400, x: 0, y: 0, angle: 0 }, prey = { mass: 100, x: 300, y: 0, angle: Math.PI / 2 }) {
+  return withTactics('expert', shares, () => {
+    const s = hunt('expert', hunter, prey, dead ? [dead] : [], 30);
+    if (dead) s.game.kill(s.worms[2], null);
+    s.game.rebuildFoodGrid();
+    botThink(s.worms[0], s.game);
+    return s.worms[0];
+  });
+}
+
+test('a scavenging hunter drops the hunt for a much bigger meal nearby, not for a few leftovers (#122)', () => {
+  const scav = ONLY('scavenge');
+  const plain = huntBeside(scav, null);
+  assert.equal(plain.ai.mode, 'cut', 'hunts with no remains around');
+  // Hunting next to a big meal.
+  const fed = huntBeside(scav, BIG_AWAY);
+  assert.equal(fed.ai.prey, null, 'drops the hunt');
+  assert.equal(fed.ai.mode, 'scavenge', 'heads for the remains');
+  assert.ok(Math.cos(fed.targetAngle - Math.PI) > Math.cos(0.6), `toward the remains (${fed.targetAngle.toFixed(2)})`);
+  // A few leftovers: a small worm's remains are worth less than the kill.
+  const crumbs = huntBeside(scav, SMALL_AWAY);
+  assert.ok(crumbs.ai.prey, 'keeps the hunt');
+  assert.equal(crumbs.ai.mode, 'cut');
+  // Bots that don't scavenge keep hunting next to the big meal, as before.
+  const blind = huntBeside(ONLY(null), BIG_AWAY);
+  assert.ok(blind.ai.prey, 'a bot without the tactic keeps hunting');
+  assert.equal(blind.ai.mode, 'cut');
+});
+
+test('a scavenging coiler leaves its coil for a much bigger meal nearby (#122)', () => {
+  const shares = { ...ONLY('scavenge'), coil: 1 };
+  const coiler = { mass: 3000, x: 600, y: 200, angle: 0 }, prey = { mass: 100, x: 600, y: 0, angle: 0 };
+  assert.equal(huntBeside(shares, null, coiler, prey).ai.mode, 'coil', 'coils with no remains around');
+  // A big worm's body along y = 450, nearer the coiler than the prey.
+  const h = huntBeside(shares, { name: 'Big', mass: 3000, x: 1000, y: 450, angle: 0 }, coiler, prey);
+  assert.equal(h.ai.prey, null, 'drops the coil');
+  assert.equal(h.ai.mode, 'scavenge');
+});
+
+test('a scavenging bot free to pick prey goes for a big meal instead of starting a hunt (#122)', () => {
+  const picks = (dead) => withTactics('expert', ONLY('scavenge'), () => {
+    const worms = [
+      { name: 'Hunter', mass: 400, x: 0, y: 0, angle: 0, ai: { aggro: 1 } },
+      { name: 'Prey', mass: 100, x: 250, y: 0, angle: Math.PI / 2 },
+    ];
+    if (dead) worms.push(dead);
+    const s = scene('expert', worms, 30);
+    if (dead) s.game.kill(s.worms[2], null);
+    s.game.rebuildFoodGrid();
+    const [h] = s.worms;
+    for (let i = 0; i < 300 && !h.ai.prey; i++) botThink(h, s.game);
+    return h;
+  });
+  assert.equal(picks(null).ai.prey && picks(null).ai.prey.name, 'Prey', 'hunts with no remains around');
+  const h = picks(BIG_AWAY);
+  assert.equal(h.ai.prey, null, 'starts no hunt');
+  assert.equal(h.ai.mode, 'scavenge');
+});
+
+test('weighing meals against hunts leaves easy worlds unchanged (#122)', () => {
+  // Easy bots don't scavenge, so how much a hunt is worth against a meal can't matter there.
+  const world = (odds) => {
+    const saved = CFG.HUNT_ODDS;
+    CFG.HUNT_ODDS = odds;
+    try {
+      const g = new Game({ botCount: 30, difficulty: 'easy' }, null, { seed: 4242 });
+      g.spawnPlayer('P', 0);
+      for (let i = 0; i < 20 * 60; i++) g.update(1 / 60);
+      const j = clone(g);
+      delete j.savedAt;
+      return JSON.stringify(j);
+    } finally { CFG.HUNT_ODDS = saved; }
+  };
+  assert.equal(world(0), world(1e9));
 });
