@@ -8,7 +8,7 @@
 
 ## 2. Ship
 
-- [ ] 2.1 Open the PR (`Closes #126`), run the `pr-reviewer` agent, address its findings, and merge once checks pass.
+- [x] 2.1 Open the PR (`Closes #126`), run the `pr-reviewer` agent, address its findings, and merge once checks pass.
 
 ## Workflow follow-up
 
