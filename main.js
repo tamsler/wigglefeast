@@ -1207,9 +1207,12 @@
   }
 
   // part: 'all'; 'body' (everything but the eyes and boost arrows); 'head' (the first few
-  // segments, eyes and arrows). The player is drawn body first, then everyone else, then its head
-  // on top, so a body the player can run into is never hidden under the player's own (#102).
+  // segments, eyes and arrows). Worms are drawn lighter first, so a heavier body lies over a lighter
+  // one and a worm wrapping a smaller one is on top of it (#116). The player's body takes its place
+  // in that order, and its head is drawn last, on top of everything (#102).
   const HEAD_SEGS = 4; // segments drawn again in the head pass: about 1.7 r, enough to cover the head
+  const drawOrder = []; // reused every frame
+  const byMass = (a, b) => a.mass - b.mass;
   // Is another worm's body (one that could be hit, so not shielded) over this worm's head?
   function headCovered(w) {
     const hx = w.sx[0], hy = w.sy[0], gw = game.gridWorms;
@@ -1399,12 +1402,16 @@
       ctx.drawImage(pwSprites[p.type], p.x - D / 2, p.y - D / 2 + Math.sin(t * 2 + p.ph) * 4, D, D);
     }
 
-    // Worms (player on top)
+    // Worms: lighter under heavier (#116), the player's head on top (#102). The sort is stable,
+    // so worms of equal mass keep their usual order.
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     const player = game.player;
-    if (player) drawWorm(player, t, view, 'body');
-    for (const w of game.worms) if (w !== player) drawWorm(w, t, view);
+    drawOrder.length = 0;
+    for (const w of game.worms) drawOrder.push(w);
+    drawOrder.sort(byMass);
+    for (const w of drawOrder) drawWorm(w, t, view, w === player ? 'body' : 'all');
+    drawOrder.length = 0;
     if (player) drawWorm(player, t, view, 'head');
 
     // Names
