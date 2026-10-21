@@ -205,7 +205,8 @@ test('worms loaded without nextId never share an id with new worms (#31)', () =>
 test('power-ups slide toward a passing head, from much farther with the magnet (#35)', () => {
   // A lone shielded worm drives straight along +x past a power-up beside its path.
   // No refill (#105): a power-up spawned at random, rarely a magnet on the worm's path,
-  // would change the result. Seeds 1818 and 3436 failed that way.
+  // would change the result. Fixed seeds keep the run repeatable; 1818 and 3436 are two
+  // where the refill did drop a magnet in the way, so they fail if the refill comes back.
   const pass = (offset, magnet, seed) => {
     const game = new Game({ botCount: 5 }, null, { seed });
     game.worms = []; game.food = []; game.powerups = [];
