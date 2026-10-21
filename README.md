@@ -34,7 +34,7 @@ Head-on collisions are won by the bigger worm. The red ring is the arena edge. B
 - **Score and rank** (bottom left), and the **leaderboard** (top right): the top 10, plus your own place if you're not in it.
 - **Power-up badges** sit next to the minimap; a badge's ring drains as time runs out, and it blinks in the last 3 seconds.
 - **Minimap** (top left): a density map that shades where other worms are crowded across the whole arena, without marking any single worm. You're the red-orange dot.
-- **Names:** ⚔ and a count show a worm's kills in the last minute, and a bot that's coming after you for cutting it off has its name in red-orange.
+- **Names:** ⚔ and a count show how many worms a worm has killed, and a bot that's coming after you for cutting it off has its name in red-orange.
 - **Messages** pop up for your kills, your power-ups, and when the #1 worm is taken down. After you die, the camera follows the worm that was on top until you play again (or until that worm dies).
 
 ## Menu

@@ -358,13 +358,6 @@
       this.updateBounds();
     }
 
-    // Kills in the last 60 seconds (#83), for the name tag. killTimes is in time order and not saved.
-    recentKills(now) {
-      const k = this.killTimes || (this.killTimes = []);
-      while (k.length && now - k[0] > 60) k.shift();
-      return k.length;
-    }
-
     get x() { return this.sx[0]; }
     get y() { return this.sy[0]; }
     get multiplier() { return this.pw.x5 > 0 ? 5 : this.pw.x2 > 0 ? 2 : 1; }
@@ -1362,9 +1355,7 @@
         this.recentDeaths.push({ x: w.sx[i], y: w.sy[i], reach, mass: total / 5, value: total / 5, time: this.time });
       }
       if (killer) {
-        killer.kills++;
-        killer.recentKills(this.time); // drops kills older than a minute
-        killer.killTimes.push(this.time); // for name tags (#83); not saved
+        killer.kills++; // shown on its name tag (#126)
         // Bots that read other worms remember a kill they saw, and a grudge if it was right next to them.
         const vx = w.sx[0], vy = w.sy[0], level = this.settings.difficulty;
         for (const b of this.worms) {

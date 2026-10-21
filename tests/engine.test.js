@@ -929,7 +929,20 @@ test('impressions and grudges are not saved (#83)', () => {
   assert.doesNotThrow(() => validateSnapshot(snap));
   const loaded = new Game(null, snap);
   for (const w of loaded.worms) if (w.ai) { assert.ok(!w.ai.seen); assert.ok(!w.ai.retaliating); }
-  for (const w of loaded.worms) assert.equal(w.recentKills(loaded.time), 0, 'name tags start empty');
+});
+
+test('kill counts, shown on name tags, survive a save and load; new bots start at none (#126)', () => {
+  const g = new Game({ botCount: 10, difficulty: 'normal' }, null, { seed: 5 });
+  g.worms.forEach((w, i) => { w.kills = i; });
+  const loaded = new Game(null, clone(g));
+  assert.deepEqual(loaded.worms.map((w) => w.kills), g.worms.map((w) => w.kills), 'same kills after loading');
+  // Tag fades: a bot with kills dies, and its replacement starts with none.
+  const victim = loaded.worms.find((w) => w.ai && w.kills > 0);
+  loaded.kill(victim, null);
+  for (let i = 0; i < 4 * 60; i++) loaded.update(1 / 60);
+  const fresh = loaded.worms.filter((w) => w.ai && w.born > 0);
+  assert.ok(fresh.length > 0, 'a replacement spawned');
+  for (const w of fresh) assert.ok(w.kills <= 1, `a new bot starts with no kills (${w.name}: ${w.kills})`);
 });
 
 // Prey choice for a reading bot with only `read` on: a near and a far candidate.
