@@ -912,8 +912,8 @@ test('impressions and grudges are not saved (#83)', () => {
 });
 
 // Prey choice for a reading bot with only `read` on: a near and a far candidate.
-function pickPrey(near, far, setup, extra = []) {
-  return withTactics('expert', ONLY('read'), () => {
+function pickPrey(near, far, setup, extra = [], shares = ONLY('read')) {
+  return withTactics('expert', shares, () => {
     const s = scene('expert', [
       { name: 'Reader', mass: 400, x: 0, y: 0, angle: 0, ai: { aggro: 1 } },
       { name: 'Near', x: 250, y: 0, angle: Math.PI / 2, ...near },
@@ -1183,4 +1183,61 @@ test('a sharp bot going head-on still avoids a loop of its target\'s body across
   botThink(bot, game);
   assert.equal(bot.ai.mode, 'headOn');
   assert.ok(Math.abs(bot.targetAngle) > 0.2, `does not drive through the loop (${bot.targetAngle.toFixed(2)})`);
+});
+
+test('a sharp bot boxed in by a loop of body takes the way out, not a heading it never checked closely (#118)', () => {
+  // The bot heads for food along +x inside a loop of a big worm's body, open only around +90°.
+  // The loop lies between the sparse look-ahead points, so only the close check sees it, and the
+  // headings toward the food all fail it: more than the four the close check used to try.
+  const { game, worms: [bot, loop] } = withTactics('expert', ONLY(null), () => scene('expert', withFood([
+    { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
+    { name: 'Loop', mass: 1000, x: 0, y: 3000, angle: 0 },
+  ], [{ x: 1000, y: 0 }])));
+  const L = 320 * DIFFICULTY.expert.sharp.look + 3 * bot.r, R = 0.485 * L;
+  loop.sx = []; loop.sy = [];
+  for (let k = 0; k < 320; k++) {
+    const a = (2 * Math.PI * k) / 320;
+    if (Math.abs(a - Math.PI / 2) < 0.75) continue;
+    loop.sx.push(R * Math.cos(a)); loop.sy.push(R * Math.sin(a));
+  }
+  loop.updateBounds();
+  game.rebuildSegGrid();
+  withTactics('expert', ONLY(null), () => botThink(bot, game));
+  // How close the chosen ray, out to the look-ahead, comes to the loop; a head dies within 0.78 (r + r').
+  const c = Math.cos(bot.targetAngle), s = Math.sin(bot.targetAngle);
+  let clearance = Infinity;
+  for (let i = 0; i < loop.sx.length; i++) {
+    const t = Math.max(0, Math.min(L, loop.sx[i] * c + loop.sy[i] * s));
+    clearance = Math.min(clearance, Math.hypot(loop.sx[i] - c * t, loop.sy[i] - s * t));
+  }
+  const lethal = 0.78 * (bot.r + loop.r);
+  assert.ok(clearance > lethal, `heading ${bot.targetAngle.toFixed(2)} passes ${clearance.toFixed(1)} from the loop (lethal: ${lethal.toFixed(1)})`);
+});
+
+test('a third bot holding a grudge leaves a ganged-up worm alone, even as the nearest or only prey (#119)', () => {
+  // Two other bots already retaliate against `name`, and the reader holds a grudge against it.
+  const ganged = (name) => (s) => {
+    memo(s, name, 0, 2);
+    const culprit = s.worms.find((w) => w.name === name);
+    for (const o of s.worms.filter((w) => w.name.startsWith('Other'))) o.ai.retaliating = culprit;
+  };
+  const crowd = [1, 2].map((i) => ({ name: 'Other' + i, mass: 400, x: -900, y: 900 * i, angle: 0, ai: {} }));
+  // Nearest: hunts the other worm instead.
+  assert.equal(pickPrey({ mass: 300 }, { mass: 300 }, ganged('Near'), crowd).prey, 'Far', 'nearest');
+  // Only candidate (the other worm out of hunting range): hunts nothing.
+  assert.equal(pickPrey({ mass: 300 }, { mass: 300, y: 3000 }, ganged('Near'), crowd).prey, null, 'only candidate');
+  // Easiest for a trapping bot: the culprit is boxed in, yet it hunts the other worm.
+  const boxed = (s) => {
+    ganged('Near')(s);
+    const near = s.worms.find((w) => w.name === 'Near');
+    s.worms.push(...[-1, 1].map((side) => {
+      const wall = new Worm({ name: 'Wall', skin: SKINS[0], mass: 2000, x: 250 + side * 60, y: 200, angle: -Math.PI / 2, worldR: s.game.R });
+      for (let i = 0; i < wall.sx.length; i++) { wall.sx[i] = near.sx[0] + side * 60; wall.sy[i] = near.sy[0] + 200 - i * 8; }
+      wall.updateBounds();
+      return wall;
+    }));
+    s.game.worms = s.worms;
+    s.game.rebuildSegGrid();
+  };
+  assert.equal(pickPrey({ mass: 300 }, { mass: 300 }, boxed, crowd, { read: 1, trap: 1 }).prey, 'Far', 'trap pick');
 });

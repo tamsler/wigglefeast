@@ -567,6 +567,12 @@
   }
   const wariness = (ai, o, now) => { const m = recall(ai, o.id, now); return m ? m.kills + m.grudge : 0; };
   const endHunt = (ai) => { ai.prey = null; ai.coilDir = 0; ai.retaliating = null; };
+  // Other living bots already retaliating against worm o.
+  function retaliators(g, w, o) {
+    let n = 0;
+    for (const b of g.worms) if (b !== w && !b.dead && b.ai && b.ai.retaliating === o) n++;
+    return n;
+  }
 
   function botThink(w, g) {
     const ai = w.ai, skill = ai.skill, r = w.r;
@@ -693,6 +699,9 @@
           // A reader leaves alone a worm it saw kill, unless that worm is much smaller.
           const m = read ? recall(ai, o.id, g.time) : null;
           if (m && m.kills >= SEEN_MIN && o.mass > w.mass * 0.5) continue;
+          // No gang-ups: a worm it holds a grudge against, with two other bots already
+          // retaliating, isn't prey at all, not even as the nearest or easiest (#119).
+          if (m && m.grudge >= SEEN_MIN && retaliators(g, w, o) >= 2) continue;
           cands.push({ o, d2, grudge: m ? m.grudge : 0 });
         }
       }
@@ -700,15 +709,10 @@
         cands.sort((a, b) => a.d2 - b.d2);
         let tgt = cands[0].o, grudgeTgt = null;
         if (read) {
-          // Retaliate against the worm it holds the biggest grudge against, unless two other
-          // bots are already doing so (no gang-ups).
+          // Retaliate against the worm it holds the biggest grudge against (ganged-up ones are
+          // already left out above).
           let bg = SEEN_MIN;
-          for (const c of cands) {
-            if (c.grudge < bg) continue;
-            let others = 0;
-            for (const b of g.worms) if (b !== w && !b.dead && b.ai && b.ai.retaliating === c.o) others++;
-            if (others < 2) { bg = c.grudge; grudgeTgt = c.o; }
-          }
+          for (const c of cands) if (c.grudge >= bg) { bg = c.grudge; grudgeTgt = c.o; }
         }
         if (grudgeTgt) tgt = grudgeTgt;
         else if (knows('trap')) {
@@ -885,10 +889,12 @@
       if (score > bestS) { bestS = score; bestA = a; bestD = danger; }
     }
     // Sharp bots check the best clear headings closely, at most 2·rad apart along the whole
-    // look-ahead, so a thin body between the sparse points can't slip through (#110).
+    // look-ahead, so a thin body between the sparse points can't slip through (#110). They keep
+    // going, best first, until one is clear all the way, and a heading never checked closely can't
+    // win: boxed in by a loop of body, the way out may be far down the list (#118).
     if (dense && bestD === 0) {
       const step = 2 * rad;
-      for (let tries = 0; tries < 4; tries++) {
+      for (;;) {
         let bi = -1;
         for (let i = 0; i < dense.length; i++) if (!dense[i][3] && dense[i][2] === 0 && (bi < 0 || dense[i][1] > dense[bi][1])) bi = i;
         if (bi < 0) break;
@@ -902,7 +908,7 @@
         if (e[2] === 0) break; // clear all the way
       }
       bestS = -Infinity;
-      for (const e of dense) if (e[1] > bestS) { bestS = e[1]; bestA = e[0]; bestD = e[2]; }
+      for (const e of dense) if ((e[3] || e[2] > 0) && e[1] > bestS) { bestS = e[1]; bestA = e[0]; bestD = e[2]; }
     }
     w.targetAngle = bestA;
     w.wantBoost = boost && bestD === 0;

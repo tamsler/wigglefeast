@@ -1,7 +1,7 @@
 /* Wigglefeast service worker: offline play and versioned releases.
    Bump VERSION for every release that changes a shipped file (a PR check enforces this).
    Never reuse a version; roll back by publishing the old code under a higher version. */
-const VERSION = '1.18.1';
+const VERSION = '1.18.2';
 const CACHE = `wigglefeast-${VERSION}`;
 const FILES = [
   'index.html',
