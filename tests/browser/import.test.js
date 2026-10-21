@@ -40,10 +40,15 @@ test('save import and stored data', async (t) => {
     fs.mkdirSync(dl);
     await page.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
     await page.click('#exportSave');
-    let file;
-    for (let i = 0; i < 100 && !file; i++) { await sleep(100); file = fs.readdirSync(dl).find((f) => f.endsWith('.json')); }
+    // Chrome can show the file before it has finished writing it (#105): wait until it parses.
+    let file, save;
+    for (let i = 0; i < 100 && !save; i++) {
+      await sleep(100);
+      file = fs.readdirSync(dl).find((f) => f.endsWith('.json'));
+      try { save = file && JSON.parse(fs.readFileSync(path.join(dl, file), 'utf8')); } catch { /* still writing */ }
+    }
     assert.ok(file, 'export produced a file');
-    const save = JSON.parse(fs.readFileSync(path.join(dl, file), 'utf8'));
+    assert.ok(save, 'export finished writing a complete save');
     assert.equal(save.app, 'wigglefeast');
     assert.equal(save.profile.recent.length, 1);
     assert.ok(save.world);
@@ -86,7 +91,9 @@ test('save import and stored data', async (t) => {
   });
 
   await t.test('a save without a world is rejected and changes nothing (#29)', async () => {
-    const worldBefore = await page.eval(`localStorage.getItem('wormarena.world')`);
+    // The world behind the menu keeps running and autosaves every 10 s, so its stored copy can
+    // change mid-test (#105). Check instead that this game is still the one running and saved.
+    await page.eval(`window.__game.__beforeImport = true`);
     for (const world of [undefined, null]) {
       const d = clone(fixture);
       d.profile.totals.best = 987654321;
@@ -95,7 +102,8 @@ test('save import and stored data', async (t) => {
       assert.ok(dialogs.some((m) => /Nothing was changed/.test(m)), JSON.stringify(dialogs));
       assert.ok(!dialogs.some((m) => /Replace your current/.test(m)), 'did not ask to confirm');
       assert.equal(await storedProfile(), before);
-      assert.equal(await page.eval(`localStorage.getItem('wormarena.world')`), worldBefore);
+      assert.equal(await page.eval(`window.__game.__beforeImport`), true, 'world not replaced');
+      assert.equal(await page.eval(`localStorage.getItem('wormarena.world') !== null`), true, 'stored world kept');
     }
   });
 

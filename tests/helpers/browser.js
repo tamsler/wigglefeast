@@ -43,6 +43,12 @@ const HOOK = `(() => {
 })();`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Chrome's helper processes can still write to the profile just after Chrome exits, so
+// deleting it can hit ENOTEMPTY (#105). Retry, and never fail a test over a leftover temp folder.
+function removeProfile(dir) {
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* left in the temp folder */ }
+}
 const REPO = path.resolve(__dirname, '..', '..');
 const gameUrl = () => 'file://' + path.join(REPO, 'index.html');
 
@@ -82,7 +88,7 @@ async function launch({ width = 1280, height = 800, mobile = false, profile } = 
     const force = setTimeout(() => proc.kill('SIGKILL'), 5000);
     await new Promise((r) => (proc.exitCode !== null || proc.signalCode !== null ? r() : proc.once('exit', r)));
     clearTimeout(force);
-    if (ownProfile) fs.rmSync(userDataDir, { recursive: true, force: true });
+    if (ownProfile) removeProfile(userDataDir);
   };
   return page;
 }
@@ -245,4 +251,4 @@ class Page {
   }
 }
 
-module.exports = { launch, gameUrl, sleep, REPO };
+module.exports = { launch, gameUrl, sleep, removeProfile, REPO };
