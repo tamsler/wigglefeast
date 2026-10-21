@@ -32,9 +32,9 @@ jobs:
           echo "run=$run" >> "$GITHUB_OUTPUT"
           if [ "$run" = true ]; then echo "Code changed: running the tests."; else echo "Docs and specs only: skipping the tests."; fi
 
-  # The test files, split into parallel shards balanced by duration (tests/shard.js, #112).
+  # The test files, split into five parallel shards balanced by duration (tests/shard.js, #112, #132).
   shard:
-    name: Tests ${{ matrix.shard }}/3
+    name: Tests ${{ matrix.shard }}/5
     needs: changes
     if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-26.04
@@ -42,14 +42,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Engine and browser tests (headless Chrome)
-        run: node tests/shard.js ${{ matrix.shard }}/3
+        run: node tests/shard.js ${{ matrix.shard }}/5
 
   # The required "Tests" check: passes when every shard passed, or when the change needed no tests.
   tests:
