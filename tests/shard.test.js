@@ -6,7 +6,7 @@ const { testFiles, shards } = require('./shard.js');
 test('every test file runs in exactly one CI shard (#112)', () => {
   const files = testFiles();
   assert.ok(files.includes('tests/engine.test.js') && files.includes('tests/browser/tabs.test.js') && files.includes('tests/shard.test.js'));
-  for (const n of [1, 2, 3, 4]) {
+  for (const n of [1, 2, 3, 4, 5, 6]) {
     const all = shards(n).flat();
     assert.deepEqual(all.slice().sort(), files, `${n} shards`);
   }
