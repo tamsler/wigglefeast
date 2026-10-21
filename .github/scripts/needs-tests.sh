@@ -9,7 +9,8 @@ if ! changed=$(git diff --name-only "$base"...HEAD 2>/dev/null) || [ -z "$change
   echo true
   exit 0
 fi
-# Docs and specs: Markdown anywhere, OpenSpec, Claude settings, the licence and .gitignore.
+# Docs and specs: top-level Markdown, OpenSpec, Claude settings, the licence and .gitignore.
+# Markdown elsewhere (say, a fixture under tests/) counts as code.
 # Everything else (game files, tests, tools, workflows and these scripts) runs the tests.
-code=$(echo "$changed" | grep -vE '(\.md$|^openspec/|^\.claude/|^LICENSE$|^\.gitignore$)' || true)
+code=$(echo "$changed" | grep -vE '(^[^/]+\.md$|^openspec/|^\.claude/|^LICENSE$|^\.gitignore$)' || true)
 if [ -n "$code" ]; then echo true; else echo false; fi

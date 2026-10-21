@@ -42,6 +42,7 @@ test('needs-tests.sh runs the tests unless a change only touches docs and specs'
   assert.equal(change('.github/workflows/tests.yml'), 'true', 'workflow');
   assert.equal(change('.github/scripts/needs-tests.sh'), 'true', 'CI scripts');
   assert.equal(change('icons/icon-192.png'), 'true', 'icons ship with the game');
+  assert.equal(change('tests/fixtures/notes.md'), 'true', 'Markdown outside the docs folders');
   // When in doubt, run them: no changes, or a base that doesn't exist.
   git('checkout', '-q', 'pr'); git('reset', '-q', '--hard', 'main');
   assert.equal(needs(), 'true', 'nothing changed');
