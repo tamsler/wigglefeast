@@ -21,7 +21,9 @@
     // SHED_ABOVE per second. Late and gentle, so a worm that keeps winning can grow massive (#82).
     SHED_ABOVE: 10000,
     SHED_RATE: 0.002,
-    REMAINS_TIME: 6, // seconds scavenging bots remember where a worm died (#78)
+    REMAINS_TIME: 60, // longest scavenging bots remember remains: as long as a remains pellet lives (#78, #122)
+    REMAINS_REFRESH: 0.25, // seconds between re-counting what is left of each worm's remains (#122)
+    HUNT_ODDS: 0.5, // a hunt is worth this share of what the kill drops, against a meal of remains (#122)
     // Food / power-up density per unit of world area (tuned for a 3600 radius world).
     FOOD_DENSITY: 2600 / (Math.PI * 3600 * 3600),
     POWERUP_DENSITY: 26 / (Math.PI * 3600 * 3600),
@@ -567,6 +569,9 @@
   }
   const wariness = (ai, o, now) => { const m = recall(ai, o.id, now); return m ? m.kills + m.grudge : 0; };
   const endHunt = (ai) => { ai.prey = null; ai.coilDir = 0; ai.retaliating = null; };
+  // What hunting worm o, its head d away, is worth against a meal of remains (score value / (d + 200)):
+  // what the kill drops, discounted for hunts that fail (#122).
+  const huntScore = (o, d) => (CFG.HUNT_ODDS * Math.max(10, 0.8 * o.mass)) / (d + 200);
   // Other living bots already retaliating against worm o.
   function retaliators(g, w, o) {
     let n = 0;
@@ -645,28 +650,34 @@
       if (heads.length > maxHeads) heads.length = maxHeads;
     }
 
-    // Scavenging: the remains of a worm that just died nearby, if they beat the best food and
-    // no other head is closer to them: racing others into the remains got scavengers killed.
+    // Scavenging: the remains of a worm that died nearby, if they beat the best food and no other
+    // head is closer to them: racing others into the remains got scavengers killed. The best such
+    // meal is also weighed against hunting below: a meal before a fight (#122).
+    let meal = 0, mealA = 0, mealBoost = false; // meal: score of the best uncontested remains
     if (knows('scavenge') && g.recentDeaths.length) {
       const SR = FR + 400;
-      let bs = best, sx = 0, sy = 0, sm = 0, sd = 0;
+      let sx = 0, sy = 0, sm = 0, sd = 0;
       for (const rem of g.recentDeaths) {
         const dx = rem.x - hx, dy = rem.y - hy, d = Math.sqrt(dx * dx + dy * dy);
         if (d > SR || rem.x * rem.x + rem.y * rem.y > edge2) continue;
-        const sc = rem.mass / (d + 200);
-        if (sc <= bs) continue;
+        const sc = rem.value / (d + 200); // what is left of it (#122)
+        if (sc <= meal) continue;
         let contested = false;
         for (const o of g.worms) {
           if (o !== w && !o.dead && Math.hypot(o.sx[0] - rem.x, o.sy[0] - rem.y) < d) { contested = true; break; }
         }
         if (contested) continue;
-        if (sc > bs) { bs = sc; sx = rem.x; sy = rem.y; sm = rem.mass * 5; sd = d; }
+        meal = sc; sx = rem.x; sy = rem.y; sm = rem.value * 5; sd = d;
       }
-      if (bs > best) {
-        goal = Math.atan2(sy - hy, sx - hx);
+      if (meal > 0) {
+        mealA = Math.atan2(sy - hy, sx - hx);
+        mealBoost = sm > 300 && sd < 500 && w.mass > 60;
+      }
+      if (meal > best) {
+        goal = mealA;
         goalW = 1.3;
         mode = 'scavenge';
-        if (sm > 300 && sd < 500 && w.mass > 60) boost = true;
+        if (mealBoost) boost = true;
       }
     }
 
@@ -696,6 +707,7 @@
         if (o === w || o.dead || o.shield > 0) continue;
         const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d2 = dx * dx + dy * dy;
         if (d2 < td && o.mass < w.mass * diff.preyRatio) {
+          if (meal > 0 && huntScore(o, Math.sqrt(d2)) <= meal) continue; // a meal before a fight (#122)
           // A reader leaves alone a worm it saw kill, unless that worm is much smaller.
           const m = read ? recall(ai, o.id, g.time) : null;
           if (m && m.kills >= SEEN_MIN && o.mass > w.mass * 0.5) continue;
@@ -733,7 +745,12 @@
       const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d = Math.sqrt(dx * dx + dy * dy);
       const R0 = Math.max(120, 4 * o.r + 2 * r);
       if (d > 900) endHunt(ai);
-      else if (knows('coil') && o.mass <= w.mass * 0.5 && lengthFor(w.mass) >= TAU * R0 * 1.3 && d < (ai.coilDir ? 2.5 * R0 : 350)) {
+      else if (meal > huntScore(o, d)) {
+        // A meal before a fight: drop the hunt, coil included, for better remains (#122). A head-on
+        // set above still comes first.
+        endHunt(ai);
+        if (mode !== 'headOn') { goal = mealA; goalW = 1.3; mode = 'scavenge'; boost = mealBoost; }
+      } else if (knows('coil') && o.mass <= w.mass * 0.5 && lengthFor(w.mass) >= TAU * R0 * 1.3 && d < (ai.coilDir ? 2.5 * R0 : 350)) {
         // Coil: circle the prey's head at a shrinking radius; our own body is the trap.
         if (!ai.coilDir) {
           ai.coilDir = Math.cos(w.angle) * dy - Math.sin(w.angle) * dx >= 0 ? 1 : -1; // turn toward the prey's side
@@ -957,7 +974,8 @@
       this.foodBudget = 0; // natural food owed by the refill rate
       this.listeners = {};
       this.leaderboard = [];
-      this.recentDeaths = []; // { x, y, mass, time } along each body that died in the last few seconds (#78); not saved
+      this.recentDeaths = []; // { x, y, reach, mass, value, time } along each body that died, while its food lasts (#78, #122); not saved
+      this.remainsAt = 0; // when to re-count the remains next
 
       if (snapshot) this.load(snapshot);
       else {
@@ -1174,9 +1192,6 @@
       if (this.worms.some((w) => w.dead)) this.worms = this.worms.filter((w) => !w.dead);
 
       this.cleanFood(dt);
-      if (this.recentDeaths.length && this.time - this.recentDeaths[0].time > CFG.REMAINS_TIME) {
-        this.recentDeaths = this.recentDeaths.filter((d) => this.time - d.time <= CFG.REMAINS_TIME);
-      }
       if (this.naturalFood < this.foodTarget) {
         this.foodBudget += CFG.FOOD_REFILL_RATE * dt; // reset below once the food is back at its target
         for (; this.foodBudget >= 1 && this.naturalFood < this.foodTarget; this.foodBudget--) this.spawnNaturalFood();
@@ -1194,7 +1209,27 @@
       }
 
       this.rebuildFoodGrid();
+      if (this.recentDeaths.length && this.time >= this.remainsAt) this.refreshRemains();
       if (this.tick % 10 === 0) this.updateLeaderboard();
+    }
+
+    // Re-counts what is left of each remembered remains (dropped food near it, not natural food)
+    // and forgets remains that are eaten up or older than any of their food (#122).
+    refreshRemains() {
+      this.remainsAt = this.time + CFG.REMAINS_REFRESH;
+      const food = this.food;
+      this.recentDeaths = this.recentDeaths.filter((d) => {
+        if (this.time - d.time > CFG.REMAINS_TIME) return false;
+        let v = 0;
+        const r2 = d.reach * d.reach;
+        this.foodGrid.query(d.x, d.y, d.reach, (i) => {
+          const f = food[i];
+          if (!f.dead && !f.natural && (f.x - d.x) ** 2 + (f.y - d.y) ** 2 <= r2) v += f.v;
+          return false;
+        });
+        d.value = v;
+        return v >= Math.max(2, 0.1 * d.mass);
+      });
     }
 
     rebuildSegGrid() {
@@ -1316,10 +1351,13 @@
         const i = Math.floor(k * step);
         this.addFood(w.sx[i] + rand(this.rng, -spread, spread), w.sy[i] + rand(this.rng, -spread, spread), per * rand(this.rng, 0.7, 1.3), w.stripeColor(i), rand(this.rng, 45, 60));
       }
-      // Remember where the remains lie (5 points along the body) for scavenging bots.
+      // Remember where the remains lie (5 points along the body) for scavenging bots. Each point
+      // covers its fifth of the body (reach); value is what is left of its food, re-counted as
+      // others eat it (#122).
+      const reach = Math.max(40, (n / 10) * spacingFor(w.r) + w.r);
       for (let k = 0; k < 5; k++) {
         const i = Math.floor(((k + 0.5) * n) / 5);
-        this.recentDeaths.push({ x: w.sx[i], y: w.sy[i], mass: total / 5, time: this.time });
+        this.recentDeaths.push({ x: w.sx[i], y: w.sy[i], reach, mass: total / 5, value: total / 5, time: this.time });
       }
       if (killer) {
         killer.kills++;
