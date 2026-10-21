@@ -1109,7 +1109,10 @@ test('expert bots re-plan more often than hard bots of the same skill; the saved
   const loaded = new Game(null, snap, { seed: 3 });
   const bots = loaded.worms.filter((w) => w.ai);
   const n = replans(loaded, bots, 5);
-  for (const b of bots) {
+  // A bot that dies stops re-planning, so only bots alive throughout count (#125 changed who dies).
+  const alive = bots.filter((b) => !b.dead);
+  assert.ok(alive.length >= 5, `enough bots lived through the 5 s (${alive.length})`);
+  for (const b of alive) {
     const base = 5 / (b.ai.interval * 1.2); // fewest re-plans at the base rate
     assert.ok(n.get(b) > base * 1.25, `${b.name}: ${n.get(b)} re-plans in 5 s, base rate gives at least ${Math.round(base)}`);
   }
@@ -1342,4 +1345,21 @@ test('weighing meals against hunts leaves easy worlds unchanged (#122)', () => {
     } finally { CFG.HUNT_ODDS = saved; }
   };
   assert.equal(world(0), world(1e9));
+});
+
+test('boosting costs (1.5 + 0.5% of mass) a second, and 60% of it drops as food (#125)', () => {
+  let dropped = 0;
+  const g = { rng: Math.random, addFood(x, y, v) { dropped += v; } };
+  const w = new Worm({ name: 'B', skin: SKINS[0], mass: 3000, x: 0, y: 0, angle: 0, worldR: 5000 });
+  w.wantBoost = true;
+  for (let i = 0; i < 60; i++) w.update(1 / 60, g);
+  const lost = 3000 - w.mass;
+  assert.ok(w.boosting, 'boosting');
+  assert.ok(Math.abs(lost - 16.5) < 0.1, `loses about 16.5 a second at mass 3000 (lost ${lost.toFixed(2)})`);
+  assert.ok(Math.abs(dropped + w.dropAcc - 0.6 * lost) < 1e-6, `drops 60% of it (${(dropped + w.dropAcc).toFixed(2)})`);
+  // Small worms pay the base: 1.5 + 0.1 a second at mass 20.
+  const s = new Worm({ name: 'S', skin: SKINS[0], mass: 20, x: 0, y: 0, angle: 0, worldR: 5000 });
+  s.wantBoost = true;
+  for (let i = 0; i < 60; i++) s.update(1 / 60, g);
+  assert.ok(Math.abs(20 - s.mass - 1.6) < 0.01, `about 1.6 a second at mass 20 (lost ${(20 - s.mass).toFixed(3)})`);
 });

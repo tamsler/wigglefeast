@@ -6,8 +6,8 @@
 
 ## 2. Cheaper boost
 
-- [ ] 2.1 Add `CFG.BOOST_COST_BASE = 1.5` and `CFG.BOOST_COST_SHARE = 0.005`, and use them for the drain in `Worm.update`; the 60% dropped share stays. Verify with an engine test (*Boost cost*): a mass-3,000 worm boosting for 1 s loses about 16.5 and accumulates about 9.9 to drop, and `node tools/balance.js --minutes 0.1 --runs 1 --set BOOST_COST_SHARE=0.01` runs.
-- [ ] 2.2 Update the README controls line if it states a cost, bump `VERSION` in `sw.js` (minor), and run `node --test "tests/**/*.test.js"`. Verify that all tests pass.
+- [x] 2.1 Add `CFG.BOOST_COST_BASE = 1.5` and `CFG.BOOST_COST_SHARE = 0.005`, and use them for the drain in `Worm.update`; the 60% dropped share stays. Verify with an engine test (*Boost cost*): a mass-3,000 worm boosting for 1 s loses about 16.5 and accumulates about 9.9 to drop, and `node tools/balance.js --minutes 0.1 --runs 1 --set BOOST_COST_SHARE=0.01` runs.
+- [x] 2.2 Update the README controls line if it states a cost, bump `VERSION` in `sw.js` (minor), and run `node --test "tests/**/*.test.js"`. Verify that all tests pass.
 
 ## 3. Measure and ship
 
