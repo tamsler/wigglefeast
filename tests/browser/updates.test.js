@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { launch, gameUrl, sleep } = require('../helpers/browser');
+const { launch, gameUrl, sleep, removeProfile } = require('../helpers/browser');
 const { serve } = require('../helpers/server');
 
 const SW = fs.readFileSync(path.join(__dirname, '..', '..', 'sw.js'), 'utf8');
@@ -21,7 +21,7 @@ const versionLabel = (page) => page.eval(`document.getElementById('version').tex
 test('offline play and release updates', async (t) => {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'wigglefeast-updates-'));
   let page, server;
-  t.after(async () => { if (page) await page.close(); if (server) await server.close(); fs.rmSync(profile, { recursive: true, force: true }); });
+  t.after(async () => { if (page) await page.close(); if (server) await server.close(); removeProfile(profile); });
   server = await serve();
   page = await launch({ profile });
 
