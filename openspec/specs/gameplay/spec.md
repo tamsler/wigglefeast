@@ -136,3 +136,18 @@ The magnet field SHALL be drawn beneath food, power-ups and worms, SHALL be fain
 #### Scenario: Nothing hidden
 - **WHEN** food or another worm lies inside a magnet field
 - **THEN** it is drawn on top of the field
+
+### Requirement: Draw order
+Where worms' bodies overlap, a heavier worm's body SHALL be drawn over a lighter one's, the player's included, so a worm wrapping a smaller one is on top of it. Worms of equal mass SHALL keep a steady order. The player's head SHALL be drawn on top of every body.
+
+#### Scenario: Wrapped by a bigger worm
+- **WHEN** a worm circles a smaller worm and their bodies overlap
+- **THEN** the circling worm's body is drawn over the smaller worm's
+
+#### Scenario: Player beside smaller and bigger bots
+- **WHEN** the player's body overlaps a lighter bot's body and a heavier bot's body
+- **THEN** the player's body is drawn over the lighter bot's and under the heavier bot's
+
+#### Scenario: Player's head
+- **WHEN** a heavier worm's body lies across the player's head
+- **THEN** the player's head is drawn on top of it

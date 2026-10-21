@@ -1,5 +1,5 @@
-// What the player can run into is never hidden under the player's own body (#102):
-// the player's body is drawn below other worms, its head on top.
+// Draw order: heavier bodies over lighter ones, so a worm wrapping a smaller one is on top of
+// it (#116), and the player's head on top of everything (#102).
 // Run with `node --test "tests/**/*.test.js"`.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -15,9 +15,10 @@ test('draw order around the player', async (t) => {
   await page.press('KeyP');
   await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'the game to pause');
 
-  // The player (Lava: reds and yellow) lies straight, head on the right. One Emerald bot (green
-  // and blue) lies along under the player's body, its head clear of it; another lies across the
-  // player's head.
+  // The player (Lava: reds and yellow, mass 1000) lies straight, head on the right. Emerald bots
+  // (green and blue) lie along the player's body, one lighter and one heavier, and a heavier one
+  // lies across the player's head. Away from the player, a heavy Emerald bot crosses a light Lava
+  // bot listed after it, as when one bot wraps another (#116).
   const at = await page.eval(`(() => {
     const g = window.__game, p = window.__player, { SKINS, radiusFor, Worm } = window.WormEngine;
     const lava = SKINS.find((s) => s.name === 'Lava'), emerald = SKINS.find((s) => s.name === 'Emerald');
@@ -37,12 +38,16 @@ test('draw order around the player', async (t) => {
       return out;
     };
     lay(p, 1000, lava, line(px, py, px - 700, py, radiusFor(1000) * 0.42)); // no shield: drawn fully opaque (paused, so safe)
-    const [under, across] = g.worms.filter((w) => w.ai).slice(0, 2);
-    lay(under, 300, emerald, line(px - 120, py, px - 600, py, radiusFor(300) * 0.42));
-    lay(across, 300, emerald, line(px, py - 250, px, py + 250, radiusFor(300) * 0.42));
-    g.worms = [p, under, across]; g.food = []; g.powerups = []; g.rebuildFoodGrid();
+    const [lighter, heavier, across, wrapper, wrapped] = g.worms.filter((w) => w.ai).slice(0, 5);
+    lay(lighter, 300, emerald, line(px - 120, py, px - 330, py, radiusFor(300) * 0.42));
+    lay(heavier, 3000, emerald, line(px - 420, py, px - 650, py, radiusFor(3000) * 0.42));
+    lay(across, 3000, emerald, line(px, py - 250, px, py + 250, radiusFor(3000) * 0.42));
+    lay(wrapper, 2000, emerald, line(px - 400, py - 380, px - 400, py - 180, radiusFor(2000) * 0.42));
+    lay(wrapped, 400, lava, line(px - 520, py - 280, px - 280, py - 280, radiusFor(400) * 0.42));
+    // Heaviest first, the reverse of the draw order (a list order alone used to decide it).
+    g.worms = [heavier, across, wrapper, p, wrapped, lighter]; g.food = []; g.powerups = []; g.rebuildFoodGrid();
     g.rebuildSegGrid(); g.maxR = Math.max(...g.worms.map((w) => w.r)); // as a game tick would before drawing
-    return { under: [px - 360, py], head: [px, py] };
+    return { lighter: [px - 220, py], heavier: [px - 540, py], head: [px, py], wrap: [px - 400, py - 280] };
   })()`);
   await page.frames(5);
   // A world point's pixel, through the transform the game leaves on the canvas.
@@ -52,14 +57,27 @@ test('draw order around the player', async (t) => {
     return [d[0], d[1], d[2]];
   })()`);
 
-  await t.test("a body lying under the player's body is visible", async () => {
-    const [r, g, b] = await pixel(at.under);
-    assert.ok(r < 120 && Math.max(g, b) > 120, `bot colour (green/blue), got rgb(${r}, ${g}, ${b})`);
+  const isBot = ([r, g, b]) => r < 120 && Math.max(g, b) > 120; // Emerald: green/blue
+  const isLava = ([r, g]) => r > 150 && g < 120; // reds
+
+  await t.test("a lighter bot's body lies under the player's (#116)", async () => {
+    const c = await pixel(at.lighter);
+    assert.ok(isLava(c), `player colour (red), got rgb(${c})`);
   });
 
-  await t.test("the player's head stays on top of a body lying across it", async () => {
-    const [r, g, b] = await pixel(at.head);
-    assert.ok(r > 150 && g < 120, `player colour (red), got rgb(${r}, ${g}, ${b})`);
+  await t.test("a heavier bot's body lies over the player's (#102, #116)", async () => {
+    const c = await pixel(at.heavier);
+    assert.ok(isBot(c), `bot colour (green/blue), got rgb(${c})`);
+  });
+
+  await t.test('a worm wrapping a lighter one is drawn on top of it (#116)', async () => {
+    const c = await pixel(at.wrap);
+    assert.ok(isBot(c), `wrapper colour (green/blue), got rgb(${c})`);
+  });
+
+  await t.test("the player's head stays on top of a heavier body lying across it", async () => {
+    const c = await pixel(at.head);
+    assert.ok(isLava(c), `player colour (red), got rgb(${c})`);
   });
 
   // Review of #104: an earlier version left a dark seam across the player's body just behind the
