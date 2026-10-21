@@ -27,7 +27,7 @@
 
 - [x] 4.1 Play Expert on desktop for a few minutes; verify that bots don't look twitchy, are visibly harder to cut off, and the frame rate holds; ask the owner for a playtest
 - [x] 4.2 Update the README difficulty paragraph (what makes Expert sharper, and its bigger worms), bump `VERSION` in `sw.js` (minor), and run `node --test "tests/**/*.test.js"`; verify that all tests pass
-- [ ] 4.3 Open the PR (`Closes #110`) with the baseline and final tables, run the `pr-reviewer` agent, address its findings, and merge once checks pass
+- [x] 4.3 Open the PR (`Closes #110`) with the baseline and final tables, run the `pr-reviewer` agent, address its findings, and merge once checks pass
 
 ## Workflow follow-up
 
