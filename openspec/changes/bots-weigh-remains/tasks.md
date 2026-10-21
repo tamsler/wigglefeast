@@ -26,7 +26,7 @@
 ## 5. Release
 
 - [x] 5.1 Update the README difficulty paragraph (bots that scavenge put a big meal before a fight), bump `VERSION` in `sw.js` (minor), and run `node --test "tests/**/*.test.js"`. Verify that all tests pass.
-- [ ] 5.2 Open the PR (`Closes #122`) with the before/after table, run the `pr-reviewer` agent, address its findings, and merge once checks pass.
+- [x] 5.2 Open the PR (`Closes #122`) with the before/after table, run the `pr-reviewer` agent, address its findings, and merge once checks pass.
 
 ## Workflow follow-up
 
