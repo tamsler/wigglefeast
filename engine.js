@@ -5,6 +5,8 @@
   const CFG = {
     BASE_SPEED: 230,
     BOOST_MULT: 2.1,
+    BOOST_COST_BASE: 1.5, // boosting costs BASE + SHARE of mass per second; 60% of it drops as food (#125)
+    BOOST_COST_SHARE: 0.005,
     START_MASS: 15,
     MIN_BOOST_MASS: 12,
     CELL: 96,
@@ -389,7 +391,7 @@
         if (pw.speed > 0) this.boosting = true;
         else if (this.mass > CFG.MIN_BOOST_MASS) {
           this.boosting = true;
-          const drain = (3 + this.mass * 0.01) * dt;
+          const drain = (CFG.BOOST_COST_BASE + this.mass * CFG.BOOST_COST_SHARE) * dt;
           this.mass -= drain;
           this.dropAcc += drain * 0.6;
         }
