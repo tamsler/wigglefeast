@@ -115,7 +115,7 @@ CI splits the files into three parallel shards balanced by duration: `node tests
 - `tests/release.test.js` checks the release rules: versions only go up and are never reused.
 - `tests/fixtures/save-v1.json` is a real save in the current format; it must keep loading.
 
-The **Tests** workflow runs the suite on every PR.
+The **Tests** workflow runs the suite on every PR that touches code. A PR that only changes docs and specs (Markdown, `openspec/`, `.claude/`, `LICENSE`, `.gitignore`) skips the shards, and the required **Tests** check still passes (`.github/scripts/needs-tests.sh`). Pushes to `main` always run everything.
 
 ## Planning
 
