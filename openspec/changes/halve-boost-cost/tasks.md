@@ -12,7 +12,7 @@
 ## 3. Measure and ship
 
 - [x] 3.1 Re-run the 1.1 reports on the same seeds. Verify with a before/after table (careful survival, top-bot and >1000 counts, bot deaths per minute) for the PR.
-- [ ] 3.2 Open the PR (`Closes #125`) with the table, run the `pr-reviewer` agent, address its findings, and merge once checks pass.
+- [x] 3.2 Open the PR (`Closes #125`) with the table, run the `pr-reviewer` agent, address its findings, and merge once checks pass.
 
 ## Workflow follow-up
 
