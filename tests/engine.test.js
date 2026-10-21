@@ -939,10 +939,10 @@ test('kill counts, shown on name tags, survive a save and load; new bots start a
   // Tag fades: a bot with kills dies, and its replacement starts with none.
   const victim = loaded.worms.find((w) => w.ai && w.kills > 0);
   loaded.kill(victim, null);
-  for (let i = 0; i < 4 * 60; i++) loaded.update(1 / 60);
-  const fresh = loaded.worms.filter((w) => w.ai && w.born > 0);
-  assert.ok(fresh.length > 0, 'a replacement spawned');
-  for (const w of fresh) assert.ok(w.kills <= 1, `a new bot starts with no kills (${w.name}: ${w.kills})`);
+  const fresh = () => loaded.worms.filter((w) => w.ai && w.born > 0);
+  for (let i = 0; i < 4 * 60 && !fresh().length; i++) loaded.update(1 / 60);
+  assert.ok(fresh().length > 0, 'a replacement spawned');
+  for (const w of fresh()) assert.equal(w.kills, 0, `a new bot starts with no kills (${w.name})`);
 });
 
 // Prey choice for a reading bot with only `read` on: a near and a far candidate.
