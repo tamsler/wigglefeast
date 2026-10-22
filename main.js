@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const { Game, CFG, SKINS, SAVE_APP_IDS, DIFFICULTIES, MIN_BOTS, MAX_BOTS, validateSnapshot, TAU, freshHabits, validHabits } = window.WormEngine;
+  const { Game, CFG, SKINS, SAVE_APP_IDS, DIFFICULTIES, MIN_BOTS, MAX_BOTS, validateSnapshot, TAU, freshHabits, validHabits, knowsTactic } = window.WormEngine;
   const $ = (id) => document.getElementById(id);
 
   const canvas = $('game');
@@ -739,6 +739,7 @@
 
   function newGame(snapshot) {
     game = snapshot ? new Game(null, snapshot, { habits }) : new Game({ botCount: settings.botCount, difficulty: settings.difficulty }, null, { habits });
+    learningSeen.clear(); // learning cues belong to the old world's bots
     game.on('death', onDeath);
     game.on('powerup', onPowerup);
     spectate = game.leaderboard[0] || null;
@@ -1206,9 +1207,39 @@
     }
     boostArrowsDrawn++;
   }
+  // Learning cue (#138): a small brain beside the head of an Expert bot while the game watches how
+  // the player escapes its cut-off (#135), pulsing, then fading out. Drawing only: kept by page time.
+  const LEARN_FADE = 0.5; // seconds the brain takes to fade once the watching ends
+  const learningSeen = new Map(); // bot -> page time it was last seen being watched
+  const learningAlpha = new Map(); // bot id -> alpha drawn in the last frame, for the tests
+  function drawLearningCues(t, z, view) {
+    learningAlpha.clear();
+    const e = game.encounter;
+    if (e && !e.bot.dead && knowsTactic(e.bot, game.settings.difficulty, 'learn')) learningSeen.set(e.bot, t);
+    if (!learningSeen.size) return;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const [w, at] of learningSeen) {
+      const age = t - at;
+      if (w.dead || age > LEARN_FADE) { learningSeen.delete(w); continue; }
+      const x = w.sx[0], y = w.sy[0];
+      if (x < view.x0 || x > view.x1 || y < view.y0 || y > view.y1) continue;
+      const watching = e && e.bot === w;
+      const alpha = watching ? 0.875 + 0.125 * Math.sin(t * TAU * 3) : Math.max(0, 1 - age / LEARN_FADE); // pulse 0.75-1
+      const size = Math.max(22 / z, w.r * 1.1);
+      ctx.globalAlpha = alpha;
+      ctx.font = `${size}px system-ui, sans-serif`;
+      ctx.fillText('\u{1F9E0}', x + w.r + size * 0.6, y - w.r * 0.6); // just right of the head, upright
+      learningAlpha.set(w.id, alpha);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // Read-only hook for the browser tests; nothing in the game uses it.
   window.wigglefeastDebug = {
     boostArrows: () => boostArrowsDrawn,
+    learningCues: () => learningAlpha.size, // #138
+    learningCue: (id) => learningAlpha.get(id) || 0,
     theme: () => activeTheme, // #64
     itemSprites: () => itemSprites.size,
     foodItem: (f) => (activeTheme === 'classic' ? 'dot' : FOOD_THEMES[activeTheme][itemIndex(f)].name),
@@ -1448,6 +1479,7 @@
       ctx.strokeText(label, x, ty);
       ctx.fillText(label, x, ty);
     }
+    drawLearningCues(t, z, view);
   }
 
   // Minimap density (#80, #91): how much of each part of the arena other worms' bodies cover,

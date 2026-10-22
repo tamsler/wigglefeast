@@ -17,6 +17,7 @@ const SECONDS = {
   'tests/browser/massive.test.js': 11,
   'tests/browser/updates.test.js': 8,
   'tests/browser/habits.test.js': 4,
+  'tests/browser/learning-cue.test.js': 3,
   'tests/browser/import.test.js': 5,
   'tests/browser/themes.test.js': 4,
   'tests/browser/boost.test.js': 3,

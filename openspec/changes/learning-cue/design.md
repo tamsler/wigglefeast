@@ -27,7 +27,7 @@ See proposal.md for why. What exists today:
 
 ### 2. Where and how it looks
 - 🧠 emoji, drawn with `fillText` in the names pass, so it's on top of bodies like the names are.
-- Placed just beside the head, on the side away from its heading, at about the head's height: `head + normal × (r + size)`. The size scales with zoom like the names (`18 / z` px, at least the worm's radius), so it stays readable at every size.
+- Placed just right of the head and a little above it, in screen terms (`x + r + 0.6·size`, `y − 0.6·r`), so it stays upright instead of swinging round with the heading. The size scales with zoom like the names (`22 / z` px, at least 1.1 × the worm's radius), so it stays readable at every size.
 - A soft pulse (alpha 0.75–1, about 3 Hz) while watching, then the fade.
 - Not part of the name label, so the ⚔ tag and the red-orange retaliation colour stay as they are.
 
