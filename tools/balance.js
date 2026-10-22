@@ -51,14 +51,14 @@ const pct = (arr, p) => {
 const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : NaN);
 
 // What killed a worm: the wall, the stand-in player, the killer's tactic (cut, pin, flank,
-// trap, coil, headOn) when it was after this victim, or 'body' when it just was in the way.
+// trap, learn, coil, headOn) when it was after this victim, or 'body' when it just was in the way.
 function cause(e) {
   const k = e.killer;
   if (!k) return 'wall';
   if (!k.ai) return 'player';
   if (k.ai.mode === 'headOn') return 'headOn';
   if (k.ai.prey !== e.victim) return 'body';
-  return ['cut', 'pin', 'flank', 'trap', 'coil'].includes(k.ai.mode) ? k.ai.mode : 'hunt'; // hunting it, doing something else this moment
+  return ['cut', 'pin', 'flank', 'trap', 'learn', 'coil'].includes(k.ai.mode) ? k.ai.mode : 'hunt'; // hunting it, doing something else this moment
 }
 const tally = (counts) => Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ') || 'none';
 
@@ -81,7 +81,7 @@ function run(diff, profileName, seed) {
   const samples = []; // every 5 s: top bot mass, its share of all worm mass, bots above 1000
   let leader = null, leaderSince = 0, longestLead = 0, hunters = 0, hunterSamples = 0;
   const ticks = MINUTES * 60 * 60;
-  let tickNs = 0n;
+  let tickNs = 0n, watched = 0, lastEnc = null;
   for (let i = 0; i < ticks; i++) {
     const p = g.player;
     if (p) {
@@ -105,6 +105,8 @@ function run(diff, profileName, seed) {
     const t0 = process.hrtime.bigint();
     g.update(DT);
     tickNs += process.hrtime.bigint() - t0;
+    if (g.encounter && g.encounter !== lastEnc) watched++; // cut-offs on the stand-in that started (#135), recorded or not
+    lastEnc = g.encounter;
     if (i % 60 === 59 && g.player) {
       hunterSamples++;
       for (const w of g.worms) if (w.ai && w.ai.prey === g.player) hunters++;
@@ -119,7 +121,7 @@ function run(diff, profileName, seed) {
     }
   }
   if (g.player) lives.push({ secs: g.time - bornAt, peak: g.player.peak, by: 'alive', killerMass: 0 });
-  return { initial, lives, botDeaths, samples, longestLead, hunting: hunters / Math.max(1, hunterSamples), msPerTick: Number(tickNs) / 1e6 / ticks };
+  return { initial, lives, botDeaths, samples, longestLead, hunting: hunters / Math.max(1, hunterSamples), msPerTick: Number(tickNs) / 1e6 / ticks, habits: g.habits, watched };
 }
 
 const f0 = (v) => (Number.isFinite(v) ? Math.round(v).toString() : '-');
@@ -128,7 +130,7 @@ const f2 = (v) => (Number.isFinite(v) ? v.toFixed(2) : '-');
 console.log(`${BOTS} bots, ${MINUTES} min x ${RUNS} runs per row, seed ${SEED}${args.set ? ', ' + args.set : ''}\n`);
 for (const diff of DIFFS) {
   for (const pn of PROFILE_NAMES) {
-    const all = { initial: [], lives: [], botDeaths: {}, top: [], share: [], big: [], lead: [], hunting: [], ms: [] };
+    const all = { initial: [], lives: [], botDeaths: {}, top: [], share: [], big: [], lead: [], hunting: [], ms: [], habits: {}, watched: 0 };
     for (let r = 0; r < RUNS; r++) {
       const o = run(diff, pn, (SEED + r) >>> 0);
       all.initial.push(...o.initial);
@@ -138,6 +140,8 @@ for (const diff of DIFFS) {
       for (const s of o.samples) { all.top.push(s.top); all.share.push(s.share); all.big.push(s.big); }
       all.lead.push(o.longestLead);
       all.hunting.push(o.hunting);
+      for (const k of ['away', 'toward', 'straight', 'boost', 'still']) all.habits[k] = (all.habits[k] || 0) + o.habits[k];
+      all.watched += o.watched;
     }
     const dead = all.lives.filter((l) => l.by !== 'alive');
     const secs = all.lives.map((l) => l.secs);
@@ -152,6 +156,9 @@ for (const diff of DIFFS) {
     console.log(`  player lives: ${all.lives.length} (${dead.length} deaths, ${f2(dead.length / aliveMin)} per minute alive), survival median ${f0(pct(secs, 0.5))}s, p25 ${f0(pct(secs, 0.25))}s, p75 ${f0(pct(secs, 0.75))}s, peak median ${f0(pct(all.lives.map((l) => l.peak), 0.5))}`);
     console.log(`  player killed by: ${tally(playerBy)} (tactics ${f0((100 * tactic(playerBy)) / Math.max(1, dead.length))}%); killer > 500 mass ${bigKill}; bots hunting it at a time ${f2(mean(all.hunting))}`);
     console.log(`  bot deaths/min: ${f2(botTotal / (RUNS * MINUTES))} (tactics ${f0((100 * tactic(all.botDeaths)) / Math.max(1, botTotal))}%: ${tally(all.botDeaths)})`);
+    // The stand-in's record at the end of each run (#135), summed: its habit, as bots learned it.
+    const H = all.habits, sides = H.away + H.toward + H.straight, share = (v, n) => f0((100 * v) / Math.max(1e-9, n));
+    console.log(`  stand-in habits: ${all.watched} cut-offs started; end record away ${share(H.away, sides)}%, toward ${share(H.toward, sides)}%, straight ${share(H.straight, sides)}%, boost ${share(H.boost, H.boost + H.still)}%`);
     console.log(`  top bot: median ${f0(pct(all.top, 0.5))}, max ${f0(Math.max(...all.top))}, share of all mass median ${f2(pct(all.share, 0.5))}, bots > 1000 avg ${f2(mean(all.big))}, longest #1 streak ${f0(Math.max(...all.lead))}s; ${f2(mean(all.ms))} ms/tick`);
   }
 }
