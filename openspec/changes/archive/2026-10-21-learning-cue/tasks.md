@@ -12,7 +12,7 @@
 ## 2. Release
 
 - [x] 2.1 Add a sentence to the README's Expert learning paragraph (a small brain shows by a bot's head while it watches how you escape), bump `VERSION` in `sw.js` (minor), and run `node --test "tests/**/*.test.js"`. Verify that all tests pass.
-- [ ] 2.2 Open the PR (`Closes #138`), run the `pr-reviewer` agent, address its findings, and merge once checks pass.
+- [x] 2.2 Open the PR (`Closes #138`), run the `pr-reviewer` agent, address its findings, and merge once checks pass.
 
 ## Workflow follow-up
 
