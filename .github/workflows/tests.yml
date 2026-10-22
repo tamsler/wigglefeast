@@ -44,19 +44,17 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5]
     steps:
+      # On a fresh runner Chrome's files (about 440 MB) come off a cold disk: the first launch took
+      # 8-10 s, against 0.3-0.5 s once they had been read (#134). Read them in the background, in
+      # parallel, while the job checks out and sets up Node.
+      - name: Warm up Chrome (in the background)
+        run: |
+          D=$(dirname "$(readlink -f "$(command -v google-chrome)")")
+          nohup sh -c "find '$D' -type f -print0 | xargs -0 -P 8 cat > /dev/null" > /dev/null 2>&1 &
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - name: Chrome cold start (diagnostic, #134)
-        run: |
-          C=$(readlink -f "$(command -v google-chrome)"); D=$(dirname "$C"); echo "chrome: $C ($(du -sh "$D" | cut -f1))"
-          echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS-<unset>}"
-          t() { local s=$(date +%s%N); "$@" > /dev/null 2>&1; echo "$(( ($(date +%s%N) - s) / 1000000 )) ms: $*" | cut -c1-120; }
-          t find "$D" -type f -exec cat {} +
-          t google-chrome --headless=new --disable-gpu --no-sandbox --dump-dom about:blank
-          t google-chrome --headless=new --disable-gpu --no-sandbox --dump-dom about:blank
-          t fc-list
       - name: Engine and browser tests (headless Chrome)
         env:
           CHROME_TIMING: 1 # log where each Chrome launch spends its time (#134)
