@@ -1500,11 +1500,11 @@ test('the record leaves easy, normal and hard worlds exactly as they were (#135)
     return JSON.stringify(s);
   };
   const strong = () => habits({ away: 12, boost: 12 });
-  // Seeds until one has a cut-off on the player, so the comparison covers recording (#141 changed
-  // which seeds do); every seed tried must give identical worlds.
+  // Seeds until one has a cut-off on the player, so the comparison covers recording (#141 and #143
+  // changed which seeds do); every seed tried must give identical worlds.
   for (const diff of ['easy', 'normal', 'hard']) {
     let recorded = false;
-    for (const seed of [99, 1, 2, 3, 4]) {
+    for (const seed of [99, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
       const rec = strong();
       assert.equal(world(diff, rec, seed), world(diff, freshHabits(), seed), `${diff}, seed ${seed}`);
       if ((recorded = JSON.stringify(rec) !== JSON.stringify(strong()))) break;
@@ -1668,4 +1668,215 @@ test('a scavenger that has reached spread-out remains eats them instead of circl
   const left = game.food.filter((f) => !f.dead && !f.natural).reduce((s, f) => s + f.v, 0);
   assert.ok(left <= total * 0.25, `ate the remains (${Math.round(left)} of ${total} left)`);
   assert.equal(boosting, 0, `no boosting for the remains once there (${(boosting / 60).toFixed(1)} s)`);
+});
+
+// --- Special food (#143) ---------------------------------------------------------------
+const { SPECIALS } = globalThis.WormEngine;
+// A world with nothing in it but special food, so nothing gets eaten and nobody respawns.
+function emptyWorld(seed, botCount = 30) {
+  const game = new Game({ botCount }, null, { seed });
+  Object.assign(game, { worms: [], respawnQueue: [], food: [], powerups: [], naturalFood: 0, foodTarget: 0, powerupTarget: 0, player: null });
+  game.settings.botCount = 0;
+  game.rebuildFoodGrid();
+  return game;
+}
+
+test('special food: about 5 in a 30-bot world, scaled to the arena (#143)', () => {
+  assert.deepEqual(Object.fromEntries(Object.entries(SPECIALS).map(([k, s]) => [k, s.value])), { nova: 25, nebula: 50, plasma: 100 });
+  const small = new Game({ botCount: 30 }), big = new Game({ botCount: 150 });
+  assert.equal(small.specialTarget, 5);
+  assert.ok(big.specialTarget >= 27 && big.specialTarget <= 29, `150 bots: ${big.specialTarget}`);
+  const density = (g) => g.specialTarget / (Math.PI * g.R * g.R);
+  assert.ok(Math.abs(density(big) / density(small) - 1) < 0.05, 'same density');
+  assert.equal(small.specials.length, 0, 'a new world starts without special food');
+});
+
+test('special food spawns inside the arena, never above the target, and vanishes after 20 s (#143)', () => {
+  const game = emptyWorld(7);
+  let most = 0;
+  for (let i = 0; i < 60 * 60; i++) {
+    game.update(1 / 60);
+    most = Math.max(most, game.specials.length);
+    for (const p of game.specials) assert.ok(Math.hypot(p.x, p.y) <= game.R * 0.9 + 1e-6, 'inside the arena');
+  }
+  assert.ok(most <= 5, `never more than 5 (saw ${most})`);
+  assert.ok(game.specials.length >= 3 && game.specials.length <= 5, `${game.specials.length} after a minute`);
+  assert.ok(game.specials.every((p) => p.life > 0 && p.life <= CFG.SPECIAL_LIFE));
+
+  // One nobody eats is gone 20 seconds after it appeared, and the arena refills within seconds.
+  const lone = emptyWorld(8);
+  lone.specialTarget = 0;
+  lone.spawnSpecial();
+  const p = lone.specials[0];
+  for (let i = 0; i < 19.9 * 60; i++) lone.update(1 / 60);
+  assert.ok(lone.specials.includes(p), 'still there just before 20 s');
+  for (let i = 0; i < 0.2 * 60; i++) lone.update(1 / 60);
+  assert.ok(!lone.specials.includes(p), 'gone after 20 s');
+
+  const refill = emptyWorld(9);
+  for (let i = 0; i < 30 * 60; i++) refill.update(1 / 60);
+  const before = refill.specials.length;
+  assert.ok(before >= 4, `filled up (${before})`);
+  refill.specials.shift();
+  let waited = 0;
+  while (refill.specials.length < before && waited < 30) { refill.update(1 / 60); waited += 1 / 60; }
+  assert.ok(waited < 15, `refilled after ${waited.toFixed(1)} s`);
+});
+
+test('special food kinds follow the 60/30/10 split (#143)', () => {
+  const game = emptyWorld(11);
+  const n = 20000, count = { nova: 0, nebula: 0, plasma: 0 };
+  for (let i = 0; i < n; i++) game.spawnSpecial();
+  for (const p of game.specials) count[p.kind]++;
+  assert.ok(Math.abs(count.nova / n - 0.6) < 0.02, `nova ${count.nova}`);
+  assert.ok(Math.abs(count.nebula / n - 0.3) < 0.02, `nebula ${count.nebula}`);
+  assert.ok(Math.abs(count.plasma / n - 0.1) < 0.02, `plasma ${count.plasma}`);
+});
+
+test('special food spawns at the same pace at any update rate (#143, #48)', () => {
+  // A target of 50 spawns 3 a second, far from full within 5 seconds, and none expire yet.
+  const pace = (hz) => {
+    let total = 0;
+    for (let s = 0; s < 40; s++) {
+      const game = emptyWorld(100 + s);
+      game.specialTarget = 50;
+      for (let i = 0; i < hz * 5; i++) game.update(1 / hz);
+      total += game.specials.length;
+    }
+    return total / 40;
+  };
+  for (const hz of [30, 60, 120]) {
+    const p = pace(hz);
+    assert.ok(p > 12.5 && p < 17.5, `${hz} updates/s: ${p.toFixed(1)} in 5 s, expected about 15`);
+  }
+});
+
+function eatingScene(kind, opts = {}) {
+  const game = emptyWorld(5);
+  game.specialTarget = 0;
+  const w = new Worm({ name: 'Eater', skin: SKINS[0], mass: 100, x: 0, y: 0, angle: 0, worldR: game.R, isPlayer: true, shield: 1e9 });
+  Object.assign(w.pw, opts.pw || {});
+  game.worms = [w];
+  game.player = w;
+  const p = { x: opts.x ?? 60, y: opts.y ?? 0, kind, life: CFG.SPECIAL_LIFE, ph: 0, dead: false };
+  game.specials = [p];
+  game.rebuildSegGrid();
+  const events = [];
+  game.on('special', (e) => events.push(e));
+  return { game, w, p, events };
+}
+
+test('eating special food gives its value, without x2/x5, and fires one event (#143)', () => {
+  for (const [kind, value] of [['nova', 25], ['nebula', 50], ['plasma', 100]]) {
+    const { game, w, p, events } = eatingScene(kind);
+    const m0 = w.mass, e0 = w.eaten;
+    for (let i = 0; i < 30; i++) game.update(1 / 60);
+    assert.ok(p.dead && !game.specials.includes(p), `${kind} eaten`);
+    assert.ok(Math.abs(w.mass - m0 - value) < 0.5, `${kind}: +${(w.mass - m0).toFixed(2)}, expected +${value}`);
+    assert.equal(w.eaten, e0 + 1);
+    assert.equal(events.length, 1);
+    assert.deepEqual({ worm: events[0].worm, kind: events[0].kind, value: events[0].value }, { worm: w, kind, value });
+  }
+  const { game, w } = eatingScene('plasma', { pw: { x5: 10 } });
+  const m0 = w.mass;
+  for (let i = 0; i < 30; i++) game.update(1 / 60);
+  assert.ok(Math.abs(w.mass - m0 - 100) < 0.5, `x5 doesn't apply: +${(w.mass - m0).toFixed(2)}`);
+});
+
+test('the magnet pulls special food in from far away (#143)', () => {
+  const pass = (magnet) => {
+    const { game, p } = eatingScene('nebula', { x: 150, y: 200, pw: { magnet: magnet ? 10 : 0 } });
+    for (let i = 0; i < 50; i++) game.update(1 / 60);
+    return { eaten: p.dead, moved: p.x !== 150 || p.y !== 200 };
+  };
+  assert.equal(pass(true).eaten, true);
+  assert.deepEqual(pass(false), { eaten: false, moved: false });
+});
+
+test('bots go for special food over nearby regular food (#143)', () => {
+  const { game, worms: [bot] } = scene('normal', withFood([
+    { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
+  ], [{ x: 150, y: 0 }, { x: 160, y: 10 }, { x: 160, y: -10 }]));
+  game.specials = [{ x: 0, y: 250, kind: 'plasma', life: 10, ph: 0, dead: false }];
+  botThink(bot, game);
+  assert.equal(bot.ai.mode, 'food');
+  // Sampled headings land near, not exactly on, the straight line (pi/2) to the sphere.
+  assert.ok(bot.targetAngle > 0.9 && bot.targetAngle < 2.2, `heads for the sphere (${bot.targetAngle.toFixed(2)})`);
+  // Without it, the same bot goes for the food ahead.
+  game.specials = [];
+  botThink(bot, game);
+  assert.ok(Math.abs(bot.targetAngle) < 0.3, `heads for the food (${bot.targetAngle.toFixed(2)})`);
+});
+
+test('special food is saved with the world; saves without it load; bad ones are rejected (#143)', () => {
+  const snap = fixture().world;
+  assert.equal(snap.specials, undefined, 'the fixture predates special food');
+  assert.equal(new Game(null, snap).specials.length, 0);
+
+  snap.specials = [{ x: 120, y: -340, kind: 'nebula', life: 12, ph: 1.5 }];
+  assert.doesNotThrow(() => validateSnapshot(snap));
+  const g = new Game(null, snap);
+  const again = clone(g);
+  assert.doesNotThrow(() => validateSnapshot(again));
+  assert.deepEqual(again.specials, [{ x: 120, y: -340, kind: 'nebula', life: 12, ph: 1.5 }]);
+  // It disappears about 12 seconds later, if nobody eats it.
+  const d = g.specials[0];
+  Object.assign(g, { worms: [], player: null, respawnQueue: [], specialTarget: 0 });
+  const bots = g.settings.botCount;
+  g.settings.botCount = 0;
+  for (let i = 0; i < 11.9 * 60; i++) g.update(1 / 60);
+  assert.ok(g.specials.includes(d), 'still there at 11.9 s');
+  for (let i = 0; i < 0.2 * 60; i++) g.update(1 / 60);
+  assert.ok(!g.specials.includes(d), 'gone at 12.1 s');
+
+  // An item about to vanish still saves as valid.
+  g.settings.botCount = bots;
+  g.specials = [{ x: 0, y: 0, kind: 'nova', life: 0.01, ph: 0, dead: false }];
+  assert.doesNotThrow(() => validateSnapshot(clone(g)));
+
+  // A longer life than SPECIAL_LIFE (say, saved before the constant was tuned down) loads, clamped.
+  const long = fixture().world;
+  long.specials = [{ x: 0, y: 0, kind: 'plasma', life: 45, ph: 0 }];
+  assert.doesNotThrow(() => validateSnapshot(long));
+  assert.equal(new Game(null, long).specials[0].life, CFG.SPECIAL_LIFE);
+
+  const bad = (specials) => { const s = fixture().world; s.specials = specials; return () => validateSnapshot(s); };
+  const ok = { x: 0, y: 0, kind: 'nova', life: 5, ph: 0 };
+  assert.doesNotThrow(bad([ok]));
+  assert.doesNotThrow(bad([]));
+  for (const [why, specials] of [
+    ['not an array', { 0: ok }],
+    ['unknown kind', [{ ...ok, kind: 'ruby' }]],
+    ['prototype key', [{ ...ok, kind: '__proto__' }]],
+    ['prototype key', [{ ...ok, kind: 'toString' }]],
+    ['too many', Array.from({ length: 201 }, () => ok)],
+    ['life 0', [{ ...ok, life: 0 }]],
+    ['life absurdly long', [{ ...ok, life: 1e7 }]],
+    ['life NaN', [{ ...ok, life: NaN }]],
+    ['far outside', [{ ...ok, x: 1e9 }]],
+    ['phase', [{ ...ok, ph: 'a' }]],
+    ['not an object', [null]],
+  ]) assert.throws(bad(specials), /special food/, why);
+});
+
+test('a world with special food keeps producing valid saves and replays from its seed (#143, #31, #100)', () => {
+  const run = (seed) => {
+    const g = new Game({ botCount: 10, difficulty: 'hard' }, null, { seed });
+    g.spawnPlayer('Tester', 0);
+    let eaten = 0;
+    g.on('special', () => eaten++);
+    for (let i = 0; i < 90 * 60; i++) {
+      if (!g.player) g.spawnPlayer('Tester', 0);
+      g.update(1 / 60);
+      if (i % 600 === 0) {
+        const s = clone(g);
+        assert.doesNotThrow(() => validateSnapshot(s));
+        assert.doesNotThrow(() => validateSnapshot(clone(new Game(null, s))));
+      }
+    }
+    return { eaten, specials: clone(g.specials), mass: g.worms.map((w) => w.mass) };
+  };
+  const a = run(321), b = run(321);
+  assert.deepEqual(a, b, 'replays exactly');
+  assert.ok(a.eaten > 0, 'worms ate some special food');
 });

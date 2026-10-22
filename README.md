@@ -29,6 +29,8 @@ Head-on collisions are won by the bigger worm. The red ring is the arena edge. B
 
 **Power-ups:** 🧲 magnet (blue and red waves ripple forward from the worm's head as far as it pulls food) · x2 / x5 food multiplier (arena food only, not what worms drop) · ⚡ free boost + speed · 🔭 zoom out · 🌀 tight turns (16s each).
 
+**Special food:** nova crystals (+25), nebula diamonds (+50) and plasma spheres (+100) turn up at random, about 5 at a time in a 30-bot arena (more in bigger ones). Most are crystals; plasma spheres are the rarest (about 1 in 10). Each lasts 20 seconds, blinks for its last 4 and then vanishes if nobody has eaten it. They look the same in every food theme, the magnet pulls them in like food, and x2 / x5 don't apply to them. Bots go for them too.
+
 ## On screen
 
 - **Score and rank** (bottom left), and the **leaderboard** (top right): the top 10, plus your own place if you're not in it.
@@ -62,7 +64,7 @@ Difficulty and growth numbers live at the top of `engine.js` (`CFG`, `DIFFICULTY
 
 Everything is saved automatically in the browser's `localStorage`, so there's nothing to do by hand:
 
-- **The world** (every worm, food, power-ups, your current run) is saved every 10 seconds, whenever the tab is hidden, and when the tab is closed or reloaded. When you reopen the game you land on a paused "Welcome back" screen and can resume your run (with a 2-second shield) or end it.
+- **The world** (every worm, food, special food, power-ups, your current run) is saved every 10 seconds, whenever the tab is hidden, and when the tab is closed or reloaded. When you reopen the game you land on a paused "Welcome back" screen and can resume your run (with a 2-second shield) or end it.
 - **Stats** (lifetime totals, best score per difficulty, top 10 runs, last 50 games) are saved whenever a run ends. Open them from **Stats & high scores** in the menu.
 - **Your habits** (how you escape a cut-off, which Expert bots learn from) are saved with the world. They stay on the device: exports don't include them, imports leave them alone, and **Reset stats** clears them.
 - **One window at a time:** if the game is open in two tabs or windows (say, the installed app and a browser tab), only one plays and saves. The other shows *"Wigglefeast is open in another window"*; **Play here** asks the active one to save, then continues there with the same run and stats, so neither copy can overwrite the other.

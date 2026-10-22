@@ -22,6 +22,7 @@ const SECONDS = {
   'tests/browser/import.test.js': 5,
   'tests/browser/themes.test.js': 5,
   'tests/browser/learning-cue.test.js': 5,
+  'tests/browser/specials.test.js': 5,
   'tests/browser/difficulty.test.js': 3,
   'tests/browser/decorations.test.js': 3,
   'tests/browser/input.test.js': 3,

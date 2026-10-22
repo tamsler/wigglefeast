@@ -522,6 +522,90 @@
   const resolveTheme = () => (settings.theme === 'auto' ? window.WormEngine.seasonalTheme(new Date()) : settings.theme);
   let activeTheme = 'classic';
 
+  // Special food (#143): its own look in every theme, drawn in code once per kind into a sprite
+  // with a soft halo. look: what the test hook reports, so tests can tell the looks apart.
+  const SPECIAL_INFO = {
+    nova: { label: 'Nova crystal', icon: '💠', look: 'crystal', glow: '#4cf2ff', draw(g, s) {
+      const P = (pts) => { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x * s, y * s) : g.moveTo(x * s, y * s))); g.closePath(); };
+      const top = [0.5, 0.04], bot = [0.5, 0.96];
+      P([top, [0.8, 0.3], [0.8, 0.7], bot, [0.2, 0.7], [0.2, 0.3]]);
+      g.fillStyle = '#2fd8f0'; g.fill();
+      P([top, [0.2, 0.3], [0.2, 0.7], bot, [0.4, 0.7], [0.4, 0.3]]);
+      g.fillStyle = '#b4fcff'; g.fill();
+      P([top, [0.8, 0.3], [0.8, 0.7], bot, [0.6, 0.7], [0.6, 0.3]]);
+      g.fillStyle = '#128fb0'; g.fill();
+      P([top, [0.8, 0.3], [0.8, 0.7], bot, [0.2, 0.7], [0.2, 0.3]]);
+      g.lineWidth = s * 0.045; g.strokeStyle = INK; g.stroke();
+      g.beginPath(); g.moveTo(0.4 * s, 0.3 * s); g.lineTo(0.4 * s, 0.7 * s); g.moveTo(0.6 * s, 0.3 * s); g.lineTo(0.6 * s, 0.7 * s);
+      g.lineWidth = s * 0.02; g.strokeStyle = 'rgba(26,16,36,0.6)'; g.stroke();
+      shine(g, s * 0.31, s * 0.36, s * 0.05);
+    } },
+    nebula: { label: 'Nebula diamond', icon: '💎', look: 'diamond', glow: '#d66bff', draw(g, s) {
+      const L = 0.08, R = 0.92, G = 0.4, T = 0.16, tl = 0.3, tr = 0.7, tip = [0.5, 0.92];
+      const tri = (a, b, c, fill) => { g.beginPath(); g.moveTo(a[0] * s, a[1] * s); g.lineTo(b[0] * s, b[1] * s); g.lineTo(c[0] * s, c[1] * s); g.closePath(); g.fillStyle = fill; g.fill(); };
+      // Pavilion: alternating facets down to the tip.
+      const girdle = [[L, G], [0.29, G], [0.5, G], [0.71, G], [R, G]];
+      const pav = ['#8a2fd6', '#e68cff', '#b54ff0', '#f1b3ff'];
+      for (let i = 0; i < 4; i++) tri(girdle[i], girdle[i + 1], tip, pav[i]);
+      // Crown: table and side facets.
+      g.beginPath(); g.moveTo(tl * s, T * s); g.lineTo(tr * s, T * s); g.lineTo(0.71 * s, G * s); g.lineTo(0.29 * s, G * s); g.closePath();
+      g.fillStyle = '#f6d2ff'; g.fill();
+      tri([tl, T], [L, G], [0.29, G], '#c45cff');
+      tri([tr, T], [R, G], [0.71, G], '#9b3be0');
+      g.beginPath(); g.moveTo(tl * s, T * s); g.lineTo(tr * s, T * s); g.lineTo(R * s, G * s); g.lineTo(tip[0] * s, tip[1] * s); g.lineTo(L * s, G * s); g.closePath();
+      g.lineWidth = s * 0.045; g.strokeStyle = INK; g.stroke();
+      g.beginPath(); g.moveTo(L * s, G * s); g.lineTo(R * s, G * s);
+      for (const x of [0.29, 0.5, 0.71]) { g.moveTo(x * s, G * s); g.lineTo(tip[0] * s, tip[1] * s); }
+      g.lineWidth = s * 0.02; g.strokeStyle = 'rgba(26,16,36,0.6)'; g.stroke();
+      shine(g, s * 0.42, s * 0.25, s * 0.05);
+    } },
+    plasma: { label: 'Plasma sphere', icon: '🔮', look: 'orb', glow: '#7df9ff', draw(g, s) {
+      const c = s * 0.5, r = s * 0.4;
+      const grad = g.createRadialGradient(c - r * 0.25, c - r * 0.25, r * 0.05, c, c, r);
+      grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.3, '#8ff7ff'); grad.addColorStop(0.75, '#2f63ff'); grad.addColorStop(1, '#1b1a6b');
+      g.beginPath(); g.arc(c, c, r, 0, TAU); g.fillStyle = grad; g.fill();
+      g.lineWidth = s * 0.045; g.strokeStyle = INK; g.stroke();
+      // Electric core: forked bolts out from the middle.
+      g.lineCap = 'round';
+      for (const [w, col] of [[s * 0.07, 'rgba(184,248,255,0.55)'], [s * 0.028, '#ffffff']]) {
+        g.beginPath();
+        for (const a of [0.3, 2.3, 4.3]) {
+          g.moveTo(c, c);
+          g.lineTo(c + Math.cos(a + 0.4) * r * 0.35, c + Math.sin(a + 0.4) * r * 0.35);
+          g.lineTo(c + Math.cos(a - 0.2) * r * 0.6, c + Math.sin(a - 0.2) * r * 0.6);
+          g.lineTo(c + Math.cos(a + 0.25) * r * 0.86, c + Math.sin(a + 0.25) * r * 0.86);
+        }
+        g.lineWidth = w; g.strokeStyle = col; g.stroke();
+      }
+      g.beginPath(); g.arc(c, c, r * 0.14, 0, TAU); g.fillStyle = '#ffffff'; g.fill();
+    } },
+  };
+  const specialSprites = new Map(); // kind -> canvas, made once
+  function specialSprite(kind) {
+    let c = specialSprites.get(kind);
+    if (c) return c;
+    const info = SPECIAL_INFO[kind];
+    c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const halo = g.createRadialGradient(64, 64, 18, 64, 64, 64);
+    halo.addColorStop(0, hexAlpha(info.glow, 0.6));
+    halo.addColorStop(1, hexAlpha(info.glow, 0));
+    g.fillStyle = halo;
+    g.fillRect(0, 0, 128, 128);
+    g.translate(16, 16);
+    g.lineJoin = 'round';
+    info.draw(g, 96);
+    specialSprites.set(kind, c);
+    return c;
+  }
+  // Fully shown until the last SPECIAL_BLINK seconds, then blinking at 5 Hz, fading out in the last half second.
+  function specialAlpha(life, t) {
+    if (life > CFG.SPECIAL_BLINK) return 1;
+    return (Math.sin(t * TAU * 5) > 0 ? 1 : 0.3) * Math.min(1, life / 0.5);
+  }
+  const specialsDrawn = []; // looks drawn in the last frame, for the test hook
+
   const pwSprites = {};
   for (const type in POWERUP_INFO) {
     const info = POWERUP_INFO[type];
@@ -742,6 +826,7 @@
     learningSeen.clear(); // learning cues belong to the old world's bots
     game.on('death', onDeath);
     game.on('powerup', onPowerup);
+    game.on('special', onSpecial);
     spectate = game.leaderboard[0] || null;
     if (spectate) { cam.x = spectate.x; cam.y = spectate.y; }
   }
@@ -764,6 +849,10 @@
 
   function onPowerup({ worm, type }) {
     if (worm === game.player) feed(`${POWERUP_INFO[type].icon} ${POWERUP_INFO[type].label}!`, 'info');
+  }
+
+  function onSpecial({ worm, kind, value }) {
+    if (worm === game.player) feed(`${SPECIAL_INFO[kind].icon} ${SPECIAL_INFO[kind].label} +${value}`, 'good');
   }
 
   function startPlaying() {
@@ -1243,6 +1332,9 @@
     theme: () => activeTheme, // #64
     itemSprites: () => itemSprites.size,
     foodItem: (f) => (activeTheme === 'classic' ? 'dot' : FOOD_THEMES[activeTheme][itemIndex(f)].name),
+    specialSprites: () => specialSprites.size, // #143
+    specialLook: (kind) => SPECIAL_INFO[kind].look,
+    specialsDrawn: () => specialsDrawn.slice(),
   };
 
   function tracePath(sx, sy, from, to) {
@@ -1439,6 +1531,31 @@
         ctx.globalAlpha = a;
         ctx.drawImage(itemSprite(activeTheme, itemIndex(f)), f.x - D / 2, f.y - D / 2, D, D);
       }
+    }
+    ctx.globalAlpha = 1;
+
+    // Special food (#143): the same in every theme, with a twinkling sparkle; blinks before it vanishes.
+    specialsDrawn.length = 0;
+    for (const p of game.specials) {
+      if (p.dead || p.x < view.x0 - 70 || p.x > view.x1 + 70 || p.y < view.y0 - 70 || p.y > view.y1 + 70) continue;
+      const D = 130 * (1 + 0.08 * Math.sin(t * 3 + p.ph));
+      ctx.globalAlpha = specialAlpha(p.life, t);
+      ctx.drawImage(specialSprite(p.kind), p.x - D / 2, p.y - D / 2, D, D);
+      const tw = 0.5 + 0.5 * Math.sin(t * 5 + p.ph * 3), S = D * 0.13 * tw, a = t * 1.5 + p.ph;
+      if (S > 1) {
+        const sx = p.x + D * 0.24, sy = p.y - D * 0.24;
+        ctx.beginPath();
+        for (const k of [0, 1]) {
+          const c = Math.cos(a + k * Math.PI / 2) * S, s = Math.sin(a + k * Math.PI / 2) * S;
+          ctx.moveTo(sx - c, sy - s);
+          ctx.lineTo(sx + c, sy + s);
+        }
+        ctx.lineWidth = D * 0.025;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+      }
+      specialsDrawn.push(SPECIAL_INFO[p.kind].look);
     }
     ctx.globalAlpha = 1;
 

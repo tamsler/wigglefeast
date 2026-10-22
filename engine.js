@@ -37,6 +37,12 @@
     // Food / power-up density per unit of world area (tuned for a 3600 radius world).
     FOOD_DENSITY: 2600 / (Math.PI * 3600 * 3600),
     POWERUP_DENSITY: 26 / (Math.PI * 3600 * 3600),
+    // Special food (#143): rare, high-value items that vanish if nobody eats them.
+    SPECIAL_DENSITY: 5 / (Math.PI * 3600 * 3600), // all kinds together: 5 in a 30-bot world
+    SPECIAL_SPAWN_RATE: 0.06, // spawns per second per item of the target, so big arenas fill as fast
+    SPECIAL_LIFE: 20,
+    SPECIAL_BLINK: 4, // seconds of blinking before one vanishes
+    SPECIAL_R: 16, // pickup radius
   };
 
   const TAU = Math.PI * 2;
@@ -143,6 +149,15 @@
   const SAVE_APP_IDS = ['wigglefeast', 'worm-arena'];
 
   const POWERUP_WEIGHTS = { magnet: 30, x2: 22, x5: 5, speed: 20, zoom: 14, turn: 14 };
+
+  // Special food kinds (#143): value in mass and spawn weight. Only append.
+  const SPECIALS = {
+    nova: { value: 25, weight: 60 },
+    nebula: { value: 50, weight: 30 },
+    plasma: { value: 100, weight: 10 },
+  };
+  const SPECIAL_WEIGHTS = Object.fromEntries(Object.entries(SPECIALS).map(([k, s]) => [k, s.weight]));
+  const MAX_SPECIALS = 200; // save limit; a 150-bot world holds about 28
 
   // Bot tactics (#78). Their order is part of each bot's identity (see knowsTactic):
   // only ever append.
@@ -291,6 +306,11 @@
     }
     if (!Array.isArray(snap.powerups) || snap.powerups.length > 500 ||
       !snap.powerups.every((p) => isObj(p) && has(POWERUP_WEIGHTS, p.type) && coord(p.x) && coord(p.y) && inRange(p.ph, -1e6, 1e6))) fail('power-ups');
+    // Optional: saves from before special food (#143) have none. Life isn't capped by SPECIAL_LIFE
+    // here: load() clamps it, so tuning that constant down never rejects an existing save.
+    if (snap.specials !== undefined && (!Array.isArray(snap.specials) || snap.specials.length > MAX_SPECIALS ||
+      !snap.specials.every((p) => isObj(p) && has(SPECIALS, p.kind) && coord(p.x) && coord(p.y) &&
+        fin(p.life) && p.life > 0 && p.life <= 1e6 && inRange(p.ph, -1e6, 1e6)))) fail('special food');
     if (snap.respawnQueue !== undefined && !(finArr(snap.respawnQueue, 500) && snap.respawnQueue.every((t) => inRange(t, 0, 2 * MAX_TIME)))) fail('respawn queue');
   }
 
@@ -649,6 +669,15 @@
       if (s > best) { best = s; bx = f.x; by = f.y; bv = f.v; bd = d; }
       return false;
     });
+    // Special food (#143) is scored like food of its value.
+    for (const p of g.specials) {
+      if (p.dead) continue;
+      const dx = p.x - hx, dy = p.y - hy, d2 = dx * dx + dy * dy;
+      if (d2 > FR * FR || p.x * p.x + p.y * p.y > edge2) continue;
+      const d = Math.sqrt(d2) + 1, v = SPECIALS[p.kind].value;
+      const s = (v * (1.3 + 0.7 * ((dx * ca + dy * sa) / d))) / (d + 40);
+      if (s > best) { best = s; bx = p.x; by = p.y; bv = v; bd = d; }
+    }
     if (best > 0) {
       goal = Math.atan2(by - hy, bx - hx);
       goalW = 1;
@@ -1014,10 +1043,12 @@
       const area = Math.PI * this.R * this.R;
       this.foodTarget = Math.round(area * CFG.FOOD_DENSITY);
       this.powerupTarget = Math.max(6, Math.round(area * CFG.POWERUP_DENSITY));
+      this.specialTarget = Math.max(2, Math.round(area * CFG.SPECIAL_DENSITY));
 
       this.worms = [];
       this.food = [];
       this.powerups = [];
+      this.specials = []; // { x, y, kind, life, ph, dead } (#143)
       this.player = null;
       this.lastPlayer = null;
       this.time = 0;
@@ -1099,6 +1130,8 @@
         palette,
         food,
         powerups: this.powerups.filter((p) => !p.dead).map((p) => ({ x: Math.round(p.x), y: Math.round(p.y), type: p.type, ph: r2(p.ph) })),
+        // Life never rounds down to 0, so the save stays valid (#46).
+        specials: this.specials.filter((p) => !p.dead && p.life > 0).map((p) => ({ x: Math.round(p.x), y: Math.round(p.y), kind: p.kind, life: Math.max(0.1, r1(p.life)), ph: r2(p.ph) })),
         respawnQueue: this.respawnQueue.map(r2),
       };
     }
@@ -1128,6 +1161,7 @@
         if (natural) this.naturalFood++;
       }
       for (const p of snap.powerups) this.powerups.push({ x: p.x, y: p.y, type: p.type, ph: p.ph, dead: false });
+      for (const p of snap.specials || []) this.specials.push({ x: p.x, y: p.y, kind: p.kind, life: Math.min(p.life, CFG.SPECIAL_LIFE), ph: p.ph, dead: false });
       this.respawnQueue = (snap.respawnQueue || []).slice();
     }
 
@@ -1150,6 +1184,11 @@
     spawnPowerup() {
       const p = randomInCircle(this.rng, this.R * 0.92);
       this.powerups.push({ x: p.x, y: p.y, type: weighted(this.rng, POWERUP_WEIGHTS), ph: rand(this.rng, 0, TAU), dead: false });
+    }
+
+    spawnSpecial() {
+      const p = randomInCircle(this.rng, this.R * 0.9);
+      this.specials.push({ x: p.x, y: p.y, kind: weighted(this.rng, SPECIAL_WEIGHTS), life: CFG.SPECIAL_LIFE, ph: rand(this.rng, 0, TAU), dead: false });
     }
 
     findSpawnPoint(clearance) {
@@ -1248,6 +1287,7 @@
 
       this.rebuildSegGrid();
       this.eatFood(dt);
+      this.eatSpecials(dt);
       this.pickPowerups(dt);
       this.checkCollisions();
       if (this.worms.some((w) => w.dead)) this.worms = this.worms.filter((w) => !w.dead);
@@ -1259,6 +1299,8 @@
         for (; this.foodBudget >= 1 && this.naturalFood < this.foodTarget; this.foodBudget--) this.spawnNaturalFood();
       } else this.foodBudget = 0;
       if (this.powerups.length < this.powerupTarget && this.rng() < 1 - Math.exp(-CFG.POWERUP_SPAWN_RATE * dt)) this.spawnPowerup();
+      this.cleanSpecials(dt);
+      if (this.specials.length < this.specialTarget && this.rng() < 1 - Math.exp(-CFG.SPECIAL_SPAWN_RATE * this.specialTarget * dt)) this.spawnSpecial();
 
       let bots = 0;
       for (const w of this.worms) if (w.ai) bots++;
@@ -1369,6 +1411,46 @@
           return false;
         });
       }
+    }
+
+    // Special food (#143) is eaten like food, pulled in from the same reach, but its value
+    // isn't multiplied by x2/x5. Few items, so no grid.
+    eatSpecials(dt) {
+      const sp = this.specials;
+      if (!sp.length) return;
+      for (const w of this.worms) {
+        if (w.dead) continue;
+        const hx = w.sx[0], hy = w.sy[0], r = w.r;
+        const A = r * 2.2 + 24 + (w.pw.magnet > 0 ? CFG.MAGNET_REACH : 0);
+        for (const p of sp) {
+          if (p.dead) continue;
+          const dx = hx - p.x, dy = hy - p.y;
+          if (dx > A || dx < -A || dy > A || dy < -A) continue;
+          const d2 = dx * dx + dy * dy;
+          if (d2 > A * A) continue;
+          const d = Math.sqrt(d2);
+          if (d < r * 0.9 + CFG.SPECIAL_R * 0.4) {
+            p.dead = true;
+            const value = SPECIALS[p.kind].value;
+            w.mass = Math.min(MAX_MASS, w.mass + value);
+            w.eaten++;
+            this.emit('special', { worm: w, kind: p.kind, value });
+          } else {
+            const step = Math.min(d, (700 + 900 * (1 - d / A)) * dt);
+            p.x += (dx / d) * step;
+            p.y += (dy / d) * step;
+          }
+        }
+      }
+    }
+
+    cleanSpecials(dt) {
+      let any = false;
+      for (const p of this.specials) {
+        p.life -= dt;
+        if (p.dead || p.life <= 0) any = true;
+      }
+      if (any) this.specials = this.specials.filter((p) => !p.dead && p.life > 0);
     }
 
     // Like food, a power-up slides toward the nearest head within reach (much farther
@@ -1500,7 +1582,7 @@
   }
 
   root.WormEngine = {
-    CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, MIN_BOTS, MAX_BOTS, arenaRadius, DIFFICULTY, DIFFICULTIES, TACTICS, validateSnapshot, seasonalTheme,
+    CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, MIN_BOTS, MAX_BOTS, arenaRadius, DIFFICULTY, DIFFICULTIES, TACTICS, SPECIALS, validateSnapshot, seasonalTheme,
     freshHabits, validHabits, recordHabit, habitBias, habitBoost,
     Game, Worm, botThink, knowsTactic, predictHead, radiusFor, lengthFor, angleDiff, TAU,
   };
