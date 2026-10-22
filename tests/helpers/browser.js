@@ -61,7 +61,9 @@ async function launch({ width = 1280, height = 800, mobile = false, profile } = 
     `--window-size=${width},${height}`, '--no-first-run', '--no-default-browser-check'];
   if (process.env.CI) args.push('--no-sandbox', '--disable-dev-shm-usage');
   args.push('about:blank');
+  const t0 = Date.now(), lines = []; // CHROME_TIMING=1: where a launch spends its time (#134)
   const proc = spawn(chrome, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  proc.stderr.on('data', (d) => { for (const l of String(d).split('\n')) if (l.trim()) lines.push(`+${Date.now() - t0}ms ${l.slice(0, 200)}`); });
 
   const wsUrl = await new Promise((resolve, reject) => {
     let out = '';
@@ -79,8 +81,14 @@ async function launch({ width = 1280, height = 800, mobile = false, profile } = 
     try { target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page'); } catch { /* not ready */ }
     if (!target) await sleep(100);
   }
+  const tTarget = Date.now() - t0;
   const page = await attach(target.webSocketDebuggerUrl, { width, height, mobile });
   page.port = port;
+  if (process.env.CHROME_TIMING) {
+    page.timing = { launched: Date.now() - t0, lines };
+    process.stderr.write(`[chrome] launch ${page.timing.launched}ms (page target at ${tTarget}ms)\n`);
+    if (page.timing.launched > 2000) process.stderr.write(lines.map((l) => `[chrome]   ${l}\n`).join(''));
+  }
   page.close = async () => {
     try { page.ws.close(); } catch { /* already closed */ }
     proc.kill();
@@ -152,9 +160,11 @@ class Page {
   }
 
   async goto(url) {
+    const t = Date.now();
     const loaded = new Promise((r) => this.loadWaiters.push(r));
     await this.send('Page.navigate', { url });
     await loaded;
+    if (this.timing) process.stderr.write(`[chrome] goto ${Date.now() - t}ms\n`);
     await sleep(300);
   }
 
@@ -245,9 +255,11 @@ class Page {
 
   // Starts a run from the main menu and waits for the player to exist.
   async startRun(name = 'Tester') {
+    const t = Date.now();
     await this.eval(`document.getElementById('name').value = ${JSON.stringify(name)}`);
     await this.click('#play');
     await this.waitFor(`window.__player && !window.__player.dead && document.getElementById('paused').classList.contains('hidden')`, 'run to start');
+    if (this.timing) process.stderr.write(`[chrome] startRun ${Date.now() - t}ms\n`);
   }
 }
 
