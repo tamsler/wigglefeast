@@ -30,7 +30,7 @@
 
 - [x] 5.1 Re-run the 1.1 reports, plus expert with `--set expert.tactics.learn=0`, on the same seeds. Verify with a table for the PR: expert careful survival with learning on and off, `learn` kills, and the stand-in's record split. Easy, normal and hard must match 1.1 apart from ms/tick.
 - [x] 5.2 Update the README difficulty paragraph (Expert bots learn how you escape a cut-off, across games; *Reset stats* forgets it), bump `VERSION` in `sw.js` (minor), and run `node --test "tests/**/*.test.js"`. Verify that all tests pass.
-- [ ] 5.3 Open the PR (`Closes #135`) with the table, run the `pr-reviewer` agent, address its findings, and merge once checks pass.
+- [x] 5.3 Open the PR (`Closes #135`) with the table, run the `pr-reviewer` agent, address its findings, and merge once checks pass.
 
 ## Workflow follow-up
 
