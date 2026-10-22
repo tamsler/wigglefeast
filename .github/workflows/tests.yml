@@ -44,14 +44,11 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5]
     steps:
-      # On a fresh runner Chrome's files (about 440 MB) come off a cold disk: the first launch took
-      # 8-10 s, against 0.3-0.5 s once they had been read (#134). Read them in the background, in
-      # parallel, while the job checks out and sets up Node.
-      - name: Warm up Chrome (in the background)
-        run: |
-          D=$(dirname "$(readlink -f "$(command -v google-chrome)")")
-          nohup sh -c "find '$D' -type f -print0 | xargs -0 -P 8 cat > /dev/null" > /dev/null 2>&1 &
       - uses: actions/checkout@v7
+      # A fresh runner reads Chrome's files off a cold disk, which made the first launch take 8-10 s
+      # (#134). Read them in the background while Node is set up and the non-browser tests run.
+      - name: Warm up Chrome (in the background)
+        run: nohup .github/scripts/warm-chrome.sh > /dev/null 2>&1 &
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -59,6 +56,9 @@ jobs:
         env:
           CHROME_TIMING: 1 # log where each Chrome launch spends its time (#134)
         run: node tests/shard.js ${{ matrix.shard }}/5
+      - name: Chrome warm-up time
+        if: always()
+        run: cat "$RUNNER_TEMP/warm-chrome.txt" 2>/dev/null || echo "warm-up still running when the tests ended"
 
   # The required "Tests" check: passes when every shard passed, or when the change needed no tests.
   tests:

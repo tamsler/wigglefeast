@@ -53,7 +53,9 @@ function shards(n, files = testFiles()) {
 if (require.main === module) {
   const m = /^(\d+)\/(\d+)$/.exec(process.argv[2] || '');
   if (!m || +m[1] < 1 || +m[1] > +m[2]) { console.error('usage: node tests/shard.js <k>/<n>'); process.exit(2); }
-  const mine = shards(+m[2])[+m[1] - 1];
+  // Files that don't start Chrome go first, giving CI's background Chrome warm-up more time (#134).
+  const browser = (f) => f.startsWith('tests/browser/');
+  const mine = shards(+m[2])[+m[1] - 1].sort((a, b) => browser(a) - browser(b));
   console.log(`shard ${m[1]}/${m[2]}: ${mine.join(' ')}`);
   // One file at a time (timing checks stay honest); a test that hangs fails after 2 min,
   // and the runner exits even if a failed browser test left Chrome running.
