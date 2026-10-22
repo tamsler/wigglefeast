@@ -10,14 +10,19 @@ test('special food', async (t) => {
   t.after(() => page && page.close());
   page = await launch();
   await page.goto(gameUrl());
-  // A fresh run in a theme, with only the special food a test places (none spawning), and a
-  // shield so the player can't die.
+  // A fresh run in a theme, picked in the menu the way a player does (a reload mid-run would
+  // save the world on the way out and come back to "Welcome back"). Only the special food a test
+  // places (none spawning), and a shield so the player can't die.
   const runIn = async (theme) => {
-    const settings = { name: 'Tester', skin: 0, botCount: 5, difficulty: 'easy', theme };
-    await page.eval(`localStorage.removeItem('wormarena.world'); localStorage.setItem('wormarena.settings', ${JSON.stringify(JSON.stringify(settings))})`);
-    await page.reload();
+    if (await page.eval('!!(window.__player && !window.__player.dead)')) {
+      if (await page.eval(`document.getElementById('paused').classList.contains('hidden')`)) await page.press('KeyP');
+      await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'pause');
+      await page.click('#endRun');
+      await page.waitFor(`!document.getElementById('menu').classList.contains('hidden')`, 'menu');
+    }
+    await page.click(`#themes button[data-theme="${theme}"]`);
     await page.startRun();
-    await page.eval(`window.__player.shield = 1e5; Object.assign(window.__game, { specials: [], specialTarget: 0 })`);
+    await page.eval(`window.__player.shield = 1e5; Object.assign(window.__game, { specials: [], specialTarget: 0 }); 0`);
   };
   const place = (kind, dx, dy, life = 15) => page.eval(`window.__game.specials.push({ x: window.__player.x + ${dx}, y: window.__player.y + ${dy}, kind: '${kind}', life: ${life}, ph: 0, dead: false })`);
 
