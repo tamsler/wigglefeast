@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const { Game, CFG, SKINS, SAVE_APP_IDS, DIFFICULTIES, MIN_BOTS, MAX_BOTS, validateSnapshot, TAU } = window.WormEngine;
+  const { Game, CFG, SKINS, SAVE_APP_IDS, DIFFICULTIES, MIN_BOTS, MAX_BOTS, validateSnapshot, TAU, freshHabits, validHabits } = window.WormEngine;
   const $ = (id) => document.getElementById(id);
 
   const canvas = $('game');
@@ -160,7 +160,19 @@
   }
 
   // ---------------------------------------------------------------------------
+  // The player's habits (#135): how they escape a bot cutting them off, which expert bots learn
+  // from. Kept between games, separate from the world and the stats, never exported; Reset stats
+  // forgets it. Every game shares this one object, which the engine updates in place.
+  function loadHabits() {
+    const h = store.get('habits', null), out = freshHabits();
+    if (validHabits(h)) for (const k in out) out[k] = h[k]; // checked fields only; damaged: start fresh
+    return out;
+  }
+  const habits = loadHabits();
+
+  // ---------------------------------------------------------------------------
   // World persistence: autosave every 10s, when the tab is hidden, and on close.
+  // The habits are saved with the world.
   const WORLD_KEY = 'wormarena.world';
   function saveWorld() {
     if (!game || !isActive()) return;
@@ -169,6 +181,7 @@
     } catch {
       try { localStorage.removeItem(WORLD_KEY); } catch { /* storage unavailable */ }
     }
+    store.set('habits', habits);
   }
   function loadWorld() {
     try {
@@ -239,6 +252,7 @@
     claimSession();
     $('standby').classList.add('hidden');
     profile = loadProfile();
+    Object.assign(habits, loadHabits()); // the other window saved what its bots learned
     loadSettings(); // the other window may have changed name, skin or world settings
     $('name').value = settings.name;
     $('botCount').value = settings.botCount;
@@ -724,7 +738,7 @@
   let spectate = null;
 
   function newGame(snapshot) {
-    game = snapshot ? new Game(null, snapshot) : new Game({ botCount: settings.botCount, difficulty: settings.difficulty });
+    game = snapshot ? new Game(null, snapshot, { habits }) : new Game({ botCount: settings.botCount, difficulty: settings.difficulty }, null, { habits });
     game.on('death', onDeath);
     game.on('powerup', onPowerup);
     spectate = game.leaderboard[0] || null;
@@ -995,6 +1009,8 @@
     if (!confirm('Reset all stats and high scores? This cannot be undone (export a save first if you want a backup).') || !isActive()) return;
     profile = emptyProfile();
     saveProfile();
+    Object.assign(habits, freshHabits()); // the bots forget the player's habits too (#135)
+    store.set('habits', habits);
     showStats();
   });
 

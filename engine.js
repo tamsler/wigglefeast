@@ -26,6 +26,14 @@
     REMAINS_TIME: 60, // longest scavenging bots remember remains: as long as a remains pellet lives (#78, #122)
     REMAINS_REFRESH: 0.25, // seconds between re-counting what is left of each worm's remains (#122)
     HUNT_ODDS: 0.5, // a hunt is worth this share of what the kill drops, against a meal of remains (#122)
+    // Learning the player's habits (#135): how they escape a bot cutting them off.
+    HABIT_DECAY: 0.92, // per encounter, every count keeps this share: a half-life of about 8 encounters
+    HABIT_RANGE: 300, // a cut-off counts when the cutter's head is this close, ahead of the player
+    HABIT_WINDOW: 0.6, // seconds of the player's movement that make up the outcome
+    HABIT_GAP: 1, // at least this many seconds between the starts of two encounters
+    HABIT_STRAIGHT: 0.15, // a net turn under this (radians) is keeping straight
+    HABIT_EVIDENCE: 6, // confidence n / (n + this): half-confident after this many encounters
+    HABIT_MAX: 0.75, // the most a habit can move the aim, as a share of a full sideways shift
     // Food / power-up density per unit of world area (tuned for a 3600 radius world).
     FOOD_DENSITY: 2600 / (Math.PI * 3600 * 3600),
     POWERUP_DENSITY: 26 / (Math.PI * 3600 * 3600),
@@ -138,7 +146,7 @@
 
   // Bot tactics (#78). Their order is part of each bot's identity (see knowsTactic):
   // only ever append.
-  const TACTICS = ['predict', 'anticipate', 'evade', 'headOn', 'scavenge', 'trap', 'pin', 'coil', 'flank', 'read'];
+  const TACTICS = ['predict', 'anticipate', 'evade', 'headOn', 'scavenge', 'trap', 'pin', 'coil', 'flank', 'read', 'learn'];
   const tactics = (shares) => Object.fromEntries(TACTICS.map((k) => [k, shares[k] || 0]));
 
   // Per difficulty (#16). skill: look-ahead, reaction time and steering precision.
@@ -192,6 +200,34 @@
   // keep their size); above that the area grows in proportion, so each bot keeps the same room.
   const arenaRadius = (bots) => (bots <= 60 ? 1800 + 60 * bots : 5400 * Math.sqrt(bots / 60));
   const MAX_TIME = 1e9; // seconds of world time; keeps the save rounding (x100) finite
+
+  // The record of the player's habits (#135): decayed counts of how they escaped a bot cutting
+  // them off. side: turned away from the cutter, toward it, or kept straight. boost: boosted or
+  // not. It belongs to the player, not to a world: main.js keeps it between games, outside the
+  // world save and the export.
+  const HABIT_KEYS = ['away', 'toward', 'straight', 'boost', 'still'];
+  const freshHabits = () => ({ v: 1, away: 0, toward: 0, straight: 0, boost: 0, still: 0 });
+  // Stored records are untrusted: every count must be a finite number from 0 to 1e6.
+  const validHabits = (h) => h !== null && typeof h === 'object' && !Array.isArray(h) && h.v === 1 &&
+    HABIT_KEYS.every((k) => typeof h[k] === 'number' && Number.isFinite(h[k]) && h[k] >= 0 && h[k] <= 1e6);
+  // One encounter: older ones fade, then the outcome counts 1.
+  function recordHabit(h, side, boosted) {
+    for (const k of HABIT_KEYS) h[k] *= CFG.HABIT_DECAY;
+    h[side] += 1;
+    h[boosted ? 'boost' : 'still'] += 1;
+  }
+  // How much to trust a split seen over n encounters: grows with evidence, never above HABIT_MAX.
+  const habitConf = (n) => Math.min(CFG.HABIT_MAX, n / (n + CFG.HABIT_EVIDENCE));
+  // From -HABIT_MAX (always turns toward the cutter) to HABIT_MAX (always turns away); 0 without evidence.
+  function habitBias(h) {
+    const n = h.away + h.toward;
+    return n > 0 ? (habitConf(n) * (h.away - h.toward)) / n : 0;
+  }
+  // How likely the player is to boost out of a cut-off, from 0 to HABIT_MAX.
+  function habitBoost(h) {
+    const n = h.boost + h.still;
+    return n > 0 ? (habitConf(n) * h.boost) / n : 0;
+  }
 
   // ---------------------------------------------------------------------------
   // Save files are untrusted input (they can be imported from anywhere), so check
@@ -477,9 +513,9 @@
     });
   }
 
-  // Where a worm's head will be after t seconds if it keeps its speed and observed turning.
-  function predictHead(o, t) {
-    const v = o.speed, a = o.angle, x = o.sx[0], y = o.sy[0];
+  // Where a worm's head will be after t seconds if it keeps its speed (or speed v) and observed turning.
+  function predictHead(o, t, v = o.speed) {
+    const a = o.angle, x = o.sx[0], y = o.sy[0];
     const turn = clamp(o.turnRate * t, -Math.PI, Math.PI);
     if (Math.abs(turn) < 1e-3) return { x: x + Math.cos(a) * v * t, y: y + Math.sin(a) * v * t, a };
     const k = (v * t) / turn; // radius of the arc
@@ -502,17 +538,18 @@
   }
 
   // The point to cross in front of a prey. Without prediction: ahead along its heading, by
-  // more the farther it is. With prediction: where its curving path meets ours.
-  function cutPoint(w, o, predict) {
+  // more the farther it is. With prediction: where its curving path meets ours. fast: how much
+  // faster than now the prey is expected to go (1: as fast as now).
+  function cutPoint(w, o, predict, fast = 1) {
     const hx = w.sx[0], hy = w.sy[0], lead = w.r * 2 + o.r * 2;
     if (!predict) {
-      const l = lead + Math.hypot(o.sx[0] - hx, o.sy[0] - hy) * 0.6;
+      const l = lead + Math.hypot(o.sx[0] - hx, o.sy[0] - hy) * 0.6 * fast;
       return { x: o.sx[0] + Math.cos(o.angle) * l, y: o.sy[0] + Math.sin(o.angle) * l, a: o.angle };
     }
     const sp = Math.max(w.speed, CFG.BASE_SPEED);
     let t = Math.hypot(o.sx[0] - hx, o.sy[0] - hy) / sp, p = null;
     for (let i = 0; i < 3; i++) {
-      p = predictHead(o, Math.min(t, 2));
+      p = predictHead(o, Math.min(t, 2), o.speed * fast);
       t = Math.hypot(p.x - hx, p.y - hy) / sp;
     }
     return { x: p.x + Math.cos(p.a) * lead, y: p.y + Math.sin(p.a) * lead, a: p.a };
@@ -563,6 +600,7 @@
     return m;
   }
   const wariness = (ai, o, now) => { const m = recall(ai, o.id, now); return m ? m.kills + m.grudge : 0; };
+  const CUT_MODES = ['cut', 'trap', 'flank', 'pin', 'learn']; // moving in ahead of the prey
   const endHunt = (ai) => { ai.prey = null; ai.coilDir = 0; ai.retaliating = null; };
   // What hunting worm o, its head d away, is worth against a meal of remains (score value / (d + 200)):
   // what the kill drops, discounted for hunts that fail (#122).
@@ -763,7 +801,12 @@
         if (w.mass > 150) boost = true;
       } else {
         ai.coilDir = 0;
-        let p = cutPoint(w, o, knows('predict'));
+        // Learning (#135): against the player, use the record of how they escape a cut-off. Without
+        // evidence bias and pBoost are 0, and the cut is exactly the one without learning.
+        const learn = o.isPlayer && knows('learn');
+        const bias = learn ? habitBias(g.habits) : 0;
+        const pBoost = learn && !o.boosting ? habitBoost(g.habits) : 0;
+        let p = cutPoint(w, o, knows('predict'), 1 + pBoost * (CFG.BOOST_MULT - 1));
         const nx = -Math.sin(p.a), ny = Math.cos(p.a); // the prey's +1 side
         const shift = (k, m) => { p = { x: p.x + nx * k, y: p.y + ny * k, a: p.a }; mode = m; };
         mode = 'cut';
@@ -784,7 +827,11 @@
           p = { x: p.x - (p.x / pr) * 3 * o.r, y: p.y - (p.y / pr) * 3 * o.r, a: p.a };
           mode = 'pin';
         } else if (flankSide) shift(flankSide * 4 * o.r, 'flank');
-        else if (knows('trap')) {
+        else if (Math.abs(bias) >= 0.1) {
+          // Aim at the side the player usually escapes to: away from us (-s) when bias > 0.
+          const s = Math.cos(o.angle) * (hy - o.sy[0]) - Math.sin(o.angle) * (hx - o.sx[0]) >= 0 ? 1 : -1;
+          shift(-s * bias * 4 * o.r, 'learn');
+        } else if (knows('trap')) {
           // Close the side with more room, so the prey's only way out is the blocked one.
           const up = freedom(g, o, w, 1), down = freedom(g, o, w, -1);
           if (Math.abs(up - down) >= 0.25) shift((up > down ? 1 : -1) * 4 * o.r, 'trap');
@@ -971,6 +1018,10 @@
       this.leaderboard = [];
       this.recentDeaths = []; // { x, y, reach, mass, value, time } along each body that died, while its food lasts (#78, #122); not saved
       this.remainsAt = 0; // when to re-count the remains next
+      // The player's habits (#135), owned by the caller and updated in place; not part of the world.
+      this.habits = opts.habits || freshHabits();
+      this.encounter = null; // the cut-off being watched; not saved
+      this.encounterNext = 0; // earliest start of the next encounter
 
       if (snapshot) this.load(snapshot);
       else {
@@ -1185,6 +1236,7 @@
       this.pickPowerups(dt);
       this.checkCollisions();
       if (this.worms.some((w) => w.dead)) this.worms = this.worms.filter((w) => !w.dead);
+      this.observeHabits();
 
       this.cleanFood(dt);
       if (this.naturalFood < this.foodTarget) {
@@ -1206,6 +1258,36 @@
       this.rebuildFoodGrid();
       if (this.recentDeaths.length && this.time >= this.remainsAt) this.refreshRemains();
       if (this.tick % 10 === 0) this.updateLeaderboard();
+    }
+
+    // Watches a bot cutting the player off and records how the player escaped (#135). It reads
+    // only what anyone can see (heading, boost arrows), never the player's steering input, and
+    // draws no random numbers, so every world plays out exactly as it would without it.
+    observeHabits() {
+      const p = this.player, e = this.encounter;
+      if (e) {
+        if (p !== e.player || p.dead || p.shield > 0 || e.bot.dead) { this.encounter = null; return; } // no outcome
+        e.turn += angleDiff(e.lastA, p.angle);
+        e.lastA = p.angle;
+        if (p.boosting) e.boosted = true;
+        if (this.time - e.start < CFG.HABIT_WINDOW - 1e-9) return;
+        const side = Math.abs(e.turn) < CFG.HABIT_STRAIGHT ? 'straight' : Math.sign(e.turn) === e.side ? 'toward' : 'away';
+        recordHabit(this.habits, side, e.boosted);
+        this.encounter = null;
+        return;
+      }
+      if (!p || p.shield > 0 || this.time < this.encounterNext) return;
+      const ca = Math.cos(p.angle), sa = Math.sin(p.angle), px = p.sx[0], py = p.sy[0], R = CFG.HABIT_RANGE;
+      for (const b of this.worms) {
+        if (!b.ai || b.ai.prey !== p || !CUT_MODES.includes(b.ai.mode)) continue;
+        const dx = b.sx[0] - px, dy = b.sy[0] - py;
+        if (dx * dx + dy * dy > R * R || dx * ca + dy * sa <= 0) continue; // too far, or not ahead
+        // side: +1 when the cutter is on the player's +1 side (heading + 90 degrees), where a
+        // positive turn goes.
+        this.encounter = { player: p, bot: b, side: ca * dy - sa * dx >= 0 ? 1 : -1, start: this.time, lastA: p.angle, turn: 0, boosted: false };
+        this.encounterNext = this.time + CFG.HABIT_GAP;
+        return;
+      }
     }
 
     // Re-counts what is left of each remembered remains (dropped food near it, not natural food)
@@ -1404,6 +1486,7 @@
 
   root.WormEngine = {
     CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, MIN_BOTS, MAX_BOTS, arenaRadius, DIFFICULTY, DIFFICULTIES, TACTICS, validateSnapshot, seasonalTheme,
+    freshHabits, validHabits, recordHabit, habitBias, habitBoost,
     Game, Worm, botThink, knowsTactic, predictHead, radiusFor, lengthFor, angleDiff, TAU,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

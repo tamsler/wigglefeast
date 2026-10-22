@@ -50,6 +50,8 @@ The arena grows with the bot count: up to 60 bots its radius is 1800 + 60 per bo
 
 **Difficulty:** Easy bots steer clumsily and rarely hunt. On harder levels bots see further, react faster and use more tactics: they predict where a turning worm is going, avoid heads about to cross their path, get out of the way of a cut-off, go head-on at smaller worms, and go for remains nobody else is closer to. They put a meal before a fight: they drop a chase, even a coil, when remains nearby are worth more than the kill. On Hard some also trap worms between other bodies, pin them against the wall, or circle them. On **Expert** every bot does all of that, and two bots hunting the same worm cut in from opposite sides. Expert bots are also sharper than any Hard bot: they re-plan more often, look farther and check their path closely, weigh more ways out, notice cutters from farther away and steer clear of several at once. A third of them start large, up to mass 5,000.
 
+Expert bots also **learn how you escape a cut-off**, across games: whether you usually turn away from the bot, turn toward it or keep straight, and whether you boost. A bot cutting you off then aims where you usually go and leads farther if you usually boost. They only watch what anyone could see (your worm's turns and boost), the effect grows slowly with evidence and is capped, and recent escapes count most, so changing your style beats them again within a few cut-offs. **Reset stats** makes them forget.
+
 Bots that read other worms (some on Normal, half on Hard, all on Expert) keep their distance from a worm they just saw kill, and hold a grudge against one that tried to cut them off: they come after it if they can (never more than two at once), or keep away if it's too big. That includes you: cut a bot off and it may come after you for a while.
 
 Bots only use what you could see on screen, never your steering input, and treat you like any other worm.
@@ -62,10 +64,11 @@ Everything is saved automatically in the browser's `localStorage`, so there's no
 
 - **The world** (every worm, food, power-ups, your current run) is saved every 10 seconds, whenever the tab is hidden, and when the tab is closed or reloaded. When you reopen the game you land on a paused "Welcome back" screen and can resume your run (with a 2-second shield) or end it.
 - **Stats** (lifetime totals, best score per difficulty, top 10 runs, last 50 games) are saved whenever a run ends. Open them from **Stats & high scores** in the menu.
+- **Your habits** (how you escape a cut-off, which Expert bots learn from) are saved with the world. They stay on the device: exports don't include them, imports leave them alone, and **Reset stats** clears them.
 - **One window at a time:** if the game is open in two tabs or windows (say, the installed app and a browser tab), only one plays and saves. The other shows *"Wigglefeast is open in another window"*; **Play here** asks the active one to save, then continues there with the same run and stats, so neither copy can overwrite the other.
 - **Export / Import** on the stats screen writes everything to a `.json` file and loads it back. Use it as a backup or to move to another browser/computer. Clearing your browser's site data erases the in-browser save.
 
-Storage keys: `wormarena.world`, `wormarena.profile`, `wormarena.settings` (the prefix predates the rename and is kept so existing saves load).
+Storage keys: `wormarena.world`, `wormarena.profile`, `wormarena.settings`, `wormarena.habits` (the prefix predates the rename and is kept so existing saves load).
 
 ## Files
 
