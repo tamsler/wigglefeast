@@ -50,11 +50,15 @@ Each finished run (death or quit) SHALL be recorded with date, name, final and p
 - **THEN** it loads with all its runs and bests, and the Expert best shows 0
 
 ### Requirement: Export, import and reset
-The stats screen SHALL export the profile and world to a JSON file, import such a file after confirmation (replacing profile and world), and reset stats after confirmation. Files with app id 'wigglefeast' or 'worm-arena' SHALL be accepted; anything else SHALL be rejected with a message.
+The stats screen SHALL export the profile and world to a JSON file, import such a file after confirmation (replacing profile and world), and reset stats after confirmation. Files with app id 'wigglefeast' or 'worm-arena' SHALL be accepted; anything else SHALL be rejected with a message. Exported files SHALL NOT include the record of the player's habits, and importing SHALL leave it unchanged. Resetting stats SHALL also clear that record.
 
 #### Scenario: Importing a non-save file
 - **WHEN** the player imports a JSON file that is not a Wigglefeast save
 - **THEN** nothing changes and an error message is shown
+
+#### Scenario: Reset forgets habits
+- **WHEN** the player resets their stats
+- **THEN** the record of their habits is empty afterwards
 
 ### Requirement: Backward compatibility
 Saved data SHALL keep loading across releases: localStorage keys keep the 'wormarena.' prefix, and world snapshots carry a format version (currently 1).
@@ -81,3 +85,14 @@ When the game is open in several tabs or windows of the same browser, only one o
 #### Scenario: The game is reloaded
 - **WHEN** the only open window is reloaded
 - **THEN** it becomes active again straight away, without showing the panel
+
+### Requirement: Player habits are remembered
+The record of the player's habits SHALL be stored on the device, separately from the world and the stats, and SHALL carry over to every new or restored world. It SHALL be saved whenever the world is saved, and only by the window that owns the session. A missing or damaged record SHALL start empty without stopping the game.
+
+#### Scenario: Habits carry over
+- **WHEN** the player plays a game, closes the page and starts a new game later
+- **THEN** the bots in the new game use the same record of the player's habits
+
+#### Scenario: Damaged record
+- **WHEN** the stored record of the player's habits is not valid
+- **THEN** the game starts normally with an empty record
