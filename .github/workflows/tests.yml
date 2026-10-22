@@ -53,8 +53,6 @@ jobs:
         with:
           node-version: 24
       - name: Engine and browser tests (headless Chrome)
-        env:
-          CHROME_TIMING: 1 # log where each Chrome launch spends its time (#134)
         run: node tests/shard.js ${{ matrix.shard }}/5
       - name: Chrome warm-up time
         if: always()

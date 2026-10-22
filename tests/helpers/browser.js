@@ -61,7 +61,8 @@ async function launch({ width = 1280, height = 800, mobile = false, profile } = 
     `--window-size=${width},${height}`, '--no-first-run', '--no-default-browser-check'];
   if (process.env.CI) args.push('--no-sandbox', '--disable-dev-shm-usage');
   args.push('about:blank');
-  const t0 = Date.now(), lines = []; // CHROME_TIMING=1: where a launch spends its time (#134)
+  // Where a launch spends its time (#134): always logged when it is slow, every launch with CHROME_TIMING=1.
+  const t0 = Date.now(), lines = [];
   const proc = spawn(chrome, args, { stdio: ['ignore', 'ignore', 'pipe'] });
   proc.stderr.on('data', (d) => { for (const l of String(d).split('\n')) if (l.trim()) lines.push(`+${Date.now() - t0}ms ${l.slice(0, 200)}`); });
 
@@ -84,11 +85,12 @@ async function launch({ width = 1280, height = 800, mobile = false, profile } = 
   const tTarget = Date.now() - t0;
   const page = await attach(target.webSocketDebuggerUrl, { width, height, mobile });
   page.port = port;
-  if (process.env.CHROME_TIMING) {
-    page.timing = { launched: Date.now() - t0, lines };
-    process.stderr.write(`[chrome] launch ${page.timing.launched}ms (page target at ${tTarget}ms)\n`);
-    if (page.timing.launched > 2000) process.stderr.write(lines.map((l) => `[chrome]   ${l}\n`).join(''));
+  const launched = Date.now() - t0;
+  if (process.env.CHROME_TIMING || launched > 5000) {
+    process.stderr.write(`[chrome] launch ${launched}ms (page target at ${tTarget}ms)\n`);
+    if (launched > 2000) process.stderr.write(lines.map((l) => `[chrome]   ${l}\n`).join(''));
   }
+  if (process.env.CHROME_TIMING) page.timing = { launched };
   page.close = async () => {
     try { page.ws.close(); } catch { /* already closed */ }
     proc.kill();

@@ -1,32 +1,45 @@
 #!/usr/bin/env node
 // Runs one CI shard of the test files (#112): node tests/shard.js 2/5 [extra node --test flags]
 // Files are spread over the shards by their usual duration, longest first onto the least
-// loaded shard. A file missing from SECONDS counts as 2 s, so a new test file always runs.
+// loaded shard. A file missing from SECONDS counts as 3 s, so a new test file always runs.
 // Not a test file itself (no .test.js), so `node --test "tests/**/*.test.js"` skips it.
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-// Rough seconds per file, run alone. Only the balance depends on these, never which files run.
+// Seconds per file on CI (mean of 4 runs with Chrome warmed up, #134). Only the balance depends on
+// these, never which files run. Remeasure when a file's tests change a lot.
 const SECONDS = {
-  'tests/browser/layout.test.js': 29,
-  'tests/browser/tabs.test.js': 28,
-  'tests/engine.test.js': 23,
-  'tests/browser/bots.test.js': 12,
-  'tests/browser/massive.test.js': 11,
+  'tests/engine.test.js': 41,
+  'tests/browser/layout.test.js': 37,
+  'tests/browser/tabs.test.js': 29,
+  'tests/browser/bots.test.js': 13,
+  'tests/browser/massive.test.js': 10,
   'tests/browser/updates.test.js': 8,
-  'tests/browser/habits.test.js': 4,
-  'tests/browser/learning-cue.test.js': 3,
+  'tests/browser/boost.test.js': 5,
+  'tests/browser/habits.test.js': 5,
   'tests/browser/import.test.js': 5,
-  'tests/browser/themes.test.js': 4,
-  'tests/browser/boost.test.js': 3,
+  'tests/browser/themes.test.js': 5,
+  'tests/browser/learning-cue.test.js': 5,
+  'tests/browser/difficulty.test.js': 3,
+  'tests/browser/decorations.test.js': 3,
   'tests/browser/input.test.js': 3,
+  'tests/browser/keyboard.test.js': 3,
+  'tests/browser/draw-order.test.js': 3,
   'tests/browser/powerups.test.js': 3,
   'tests/browser/skins.test.js': 3,
   'tests/browser/touch.test.js': 3,
+  'tests/browser/minimap.test.js': 2,
+  'tests/browser/tags.test.js': 2,
+  'tests/browser/magnet.test.js': 2,
+  'tests/browser/brand.test.js': 1,
+  'tests/ci.test.js': 0.5,
+  'tests/release.test.js': 0.5,
+  'tests/shard.test.js': 0.5,
+  'tests/helpers.test.js': 0.5,
 };
-const DEFAULT_SECONDS = 2; // the rest take 0.3–2.6 s (measured for #132)
+const DEFAULT_SECONDS = 3; // a new file not measured yet
 
 function testFiles(dir = path.join(ROOT, 'tests')) {
   const out = [];
@@ -53,9 +66,7 @@ function shards(n, files = testFiles()) {
 if (require.main === module) {
   const m = /^(\d+)\/(\d+)$/.exec(process.argv[2] || '');
   if (!m || +m[1] < 1 || +m[1] > +m[2]) { console.error('usage: node tests/shard.js <k>/<n>'); process.exit(2); }
-  // Files that don't start Chrome go first, giving CI's background Chrome warm-up more time (#134).
-  const browser = (f) => f.startsWith('tests/browser/');
-  const mine = shards(+m[2])[+m[1] - 1].sort((a, b) => browser(a) - browser(b));
+  const mine = shards(+m[2])[+m[1] - 1];
   console.log(`shard ${m[1]}/${m[2]}: ${mine.join(' ')}`);
   // One file at a time (timing checks stay honest); a test that hangs fails after 2 min,
   // and the runner exits even if a failed browser test left Chrome running.
