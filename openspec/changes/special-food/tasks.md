@@ -19,7 +19,7 @@
 ## 2. Engine: bots and saving
 
 - [x] 2.1 Score special items in bot `think` alongside food (same formula, within `FR` and the edge margin). Verify with an engine test that a bot with a plasma sphere and a cluster of regular food both within its range heads for the sphere. Then run the bot simulation health checks in `tests/engine.test.js` and `tests/browser/bots.test.js`, and check time per tick in a 150-bot world with `node tools/balance.js` stays about the same.
-- [x] 2.2 Save special items as an optional `specials` array in `toJSON`, validate it in `validateSnapshot` (array of at most 200 items, `kind` an own key of `SPECIALS`, coordinates in bounds, `life` in `(0, SPECIAL_LIFE]`, finite phase), and load it in `load()` with `snap.specials || []`. Verify with engine tests that:
+- [x] 2.2 Save special items as an optional `specials` array in `toJSON`, validate it in `validateSnapshot` (array of at most 200 items, `kind` an own key of `SPECIALS`, coordinates in bounds, `life` in `(0, 1e6]`, finite phase), and load it in `load()` with `snap.specials || []`, clamping life to `SPECIAL_LIFE`. Verify with engine tests that:
   - A save with a nebula diamond at 12 seconds round-trips with the same kind, position and remaining life.
   - `tests/fixtures/save-v1.json` and a save without `specials` load with none.
   - Saves with an unknown kind (including `__proto__`), an oversize array, or out-of-range life are rejected.

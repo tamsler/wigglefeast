@@ -75,7 +75,7 @@ Each entry is `{ x, y, kind, life, ph, dead }`.
   - an array of at most 200 items
   - `kind` an own key of `SPECIALS` (via `has()`, safe from prototype keys)
   - coordinates within bounds
-  - `life` in `(0, SPECIAL_LIFE]`
+  - `life` in `(0, 1e6]`; `load()` clamps it to `SPECIAL_LIFE`, so tuning that constant down never rejects an existing save (from review)
   - `ph` in range
 - **Load:** `load()` uses `snap.specials || []`.
 

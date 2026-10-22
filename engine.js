@@ -306,10 +306,11 @@
     }
     if (!Array.isArray(snap.powerups) || snap.powerups.length > 500 ||
       !snap.powerups.every((p) => isObj(p) && has(POWERUP_WEIGHTS, p.type) && coord(p.x) && coord(p.y) && inRange(p.ph, -1e6, 1e6))) fail('power-ups');
-    // Optional: saves from before special food (#143) have none.
+    // Optional: saves from before special food (#143) have none. Life isn't capped by SPECIAL_LIFE
+    // here: load() clamps it, so tuning that constant down never rejects an existing save.
     if (snap.specials !== undefined && (!Array.isArray(snap.specials) || snap.specials.length > MAX_SPECIALS ||
       !snap.specials.every((p) => isObj(p) && has(SPECIALS, p.kind) && coord(p.x) && coord(p.y) &&
-        fin(p.life) && p.life > 0 && p.life <= CFG.SPECIAL_LIFE && inRange(p.ph, -1e6, 1e6)))) fail('special food');
+        fin(p.life) && p.life > 0 && p.life <= 1e6 && inRange(p.ph, -1e6, 1e6)))) fail('special food');
     if (snap.respawnQueue !== undefined && !(finArr(snap.respawnQueue, 500) && snap.respawnQueue.every((t) => inRange(t, 0, 2 * MAX_TIME)))) fail('respawn queue');
   }
 
@@ -1160,7 +1161,7 @@
         if (natural) this.naturalFood++;
       }
       for (const p of snap.powerups) this.powerups.push({ x: p.x, y: p.y, type: p.type, ph: p.ph, dead: false });
-      for (const p of snap.specials || []) this.specials.push({ x: p.x, y: p.y, kind: p.kind, life: p.life, ph: p.ph, dead: false });
+      for (const p of snap.specials || []) this.specials.push({ x: p.x, y: p.y, kind: p.kind, life: Math.min(p.life, CFG.SPECIAL_LIFE), ph: p.ph, dead: false });
       this.respawnQueue = (snap.respawnQueue || []).slice();
     }
 

@@ -1834,6 +1834,12 @@ test('special food is saved with the world; saves without it load; bad ones are 
   g.specials = [{ x: 0, y: 0, kind: 'nova', life: 0.01, ph: 0, dead: false }];
   assert.doesNotThrow(() => validateSnapshot(clone(g)));
 
+  // A longer life than SPECIAL_LIFE (say, saved before the constant was tuned down) loads, clamped.
+  const long = fixture().world;
+  long.specials = [{ x: 0, y: 0, kind: 'plasma', life: 45, ph: 0 }];
+  assert.doesNotThrow(() => validateSnapshot(long));
+  assert.equal(new Game(null, long).specials[0].life, CFG.SPECIAL_LIFE);
+
   const bad = (specials) => { const s = fixture().world; s.specials = specials; return () => validateSnapshot(s); };
   const ok = { x: 0, y: 0, kind: 'nova', life: 5, ph: 0 };
   assert.doesNotThrow(bad([ok]));
@@ -1845,7 +1851,7 @@ test('special food is saved with the world; saves without it load; bad ones are 
     ['prototype key', [{ ...ok, kind: 'toString' }]],
     ['too many', Array.from({ length: 201 }, () => ok)],
     ['life 0', [{ ...ok, life: 0 }]],
-    ['life too long', [{ ...ok, life: 21 }]],
+    ['life absurdly long', [{ ...ok, life: 1e7 }]],
     ['life NaN', [{ ...ok, life: NaN }]],
     ['far outside', [{ ...ok, x: 1e9 }]],
     ['phase', [{ ...ok, ph: 'a' }]],
