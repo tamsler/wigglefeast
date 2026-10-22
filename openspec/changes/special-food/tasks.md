@@ -36,13 +36,14 @@
 
 - [x] 4.1 Bump `VERSION` in `sw.js` to the next minor version (no new files, so `FILES` doesn't change). Verify `.github/scripts/check-version.sh main` passes after committing.
 - [x] 4.2 Run `node --test "tests/**/*.test.js"`. Verify every test passes, including the save fixture, the seed replay and the bot simulation health checks.
-- [ ] 4.3 Manual check in a real browser, desktop and phone:
+- [x] 4.3 Manual check in a real browser, desktop and phone:
   - Special items appear, sparkle, blink and vanish.
   - Eating one grows the worm and shows the feed message.
   - They look the same in every theme.
   - Bots go for them.
   
   Verify by noting the result in the PR.
+  - Checked by the user while playing on 2026-10-21: all good.
 
 ## Workflow follow-up
 
