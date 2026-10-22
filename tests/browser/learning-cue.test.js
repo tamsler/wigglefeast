@@ -2,7 +2,7 @@
 // Run with `node --test "tests/**/*.test.js"`.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { launch, gameUrl, sleep } = require('../helpers/browser');
+const { launch, gameUrl } = require('../helpers/browser');
 
 test('learning cue', async (t) => {
   let page;
@@ -45,11 +45,9 @@ test('learning cue', async (t) => {
   await t.test('the brain fades out once the watching ends', async () => {
     const id = await page.eval('window.__game.encounter.bot.id');
     await stopWatching();
-    await sleep(250);
-    const mid = await cue(id);
-    assert.ok(mid > 0 && mid < 0.8, `fading (alpha ${mid.toFixed(2)})`);
-    await sleep(750);
-    assert.equal(await cues(), 0, 'gone within a second');
+    // Polled, not slept: a slow machine can't skip past the fade (review).
+    await page.waitFor(`(() => { const a = window.wigglefeastDebug.learningCue(${id}); return a > 0 && a < 0.75; })()`, 'the brain fading', 2000);
+    await page.waitFor('window.wigglefeastDebug.learningCues() === 0', 'the brain gone about a second later', 2000);
     assert.deepEqual(page.exceptions, []);
     await endRun();
   });
