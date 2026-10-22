@@ -23,7 +23,7 @@ test('the player\'s habits', async (t) => {
     await page.eval(`addEventListener('pagehide', () => localStorage.setItem('${KEY}', ${JSON.stringify(raw)}))`);
     page.exceptions.length = 0;
     await page.reload();
-    await page.waitFor('window.__game', 'game');
+    await page.waitFor('!!window.__game', 'game');
     await page.frames(5);
     assert.deepEqual(page.exceptions, []);
   };
@@ -46,7 +46,7 @@ test('the player\'s habits', async (t) => {
     await page.click('#endRun');
     await page.waitFor(`JSON.parse(localStorage.getItem('${KEY}')).away === ${LEARNED.away + 1}`, 'habits saved at run end');
     await page.reload();
-    await page.waitFor('window.__game', 'game');
+    await page.waitFor('!!window.__game', 'game');
     assert.deepEqual(await inGame(), { ...LEARNED, away: LEARNED.away + 1 });
     assert.equal(await page.eval(`JSON.parse(localStorage.getItem('wormarena.world')).habits`), undefined, 'not part of the world save');
   });

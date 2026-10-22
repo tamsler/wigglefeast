@@ -105,7 +105,7 @@ function run(diff, profileName, seed) {
     const t0 = process.hrtime.bigint();
     g.update(DT);
     tickNs += process.hrtime.bigint() - t0;
-    if (g.encounter && g.encounter !== lastEnc) watched++; // cut-offs on the stand-in (#135)
+    if (g.encounter && g.encounter !== lastEnc) watched++; // cut-offs on the stand-in that started (#135), recorded or not
     lastEnc = g.encounter;
     if (i % 60 === 59 && g.player) {
       hunterSamples++;
@@ -158,7 +158,7 @@ for (const diff of DIFFS) {
     console.log(`  bot deaths/min: ${f2(botTotal / (RUNS * MINUTES))} (tactics ${f0((100 * tactic(all.botDeaths)) / Math.max(1, botTotal))}%: ${tally(all.botDeaths)})`);
     // The stand-in's record at the end of each run (#135), summed: its habit, as bots learned it.
     const H = all.habits, sides = H.away + H.toward + H.straight, share = (v, n) => f0((100 * v) / Math.max(1e-9, n));
-    console.log(`  stand-in habits: ${all.watched} cut-offs watched; end record away ${share(H.away, sides)}%, toward ${share(H.toward, sides)}%, straight ${share(H.straight, sides)}%, boost ${share(H.boost, H.boost + H.still)}%`);
+    console.log(`  stand-in habits: ${all.watched} cut-offs started; end record away ${share(H.away, sides)}%, toward ${share(H.toward, sides)}%, straight ${share(H.straight, sides)}%, boost ${share(H.boost, H.boost + H.still)}%`);
     console.log(`  top bot: median ${f0(pct(all.top, 0.5))}, max ${f0(Math.max(...all.top))}, share of all mass median ${f2(pct(all.share, 0.5))}, bots > 1000 avg ${f2(mean(all.big))}, longest #1 streak ${f0(Math.max(...all.lead))}s; ${f2(mean(all.ms))} ms/tick`);
   }
 }
