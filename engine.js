@@ -689,7 +689,7 @@
     let meal = 0, mealA = 0, mealBoost = false; // meal: score of the best uncontested remains
     if (knows('scavenge') && g.recentDeaths.length) {
       const SR = FR + 400;
-      let sx = 0, sy = 0, sm = 0, sd = 0;
+      let sx = 0, sy = 0, sm = 0, sd = 0, sreach = 0;
       for (const rem of g.recentDeaths) {
         const dx = rem.x - hx, dy = rem.y - hy, d = Math.sqrt(dx * dx + dy * dy);
         if (d > SR || rem.x * rem.x + rem.y * rem.y > edge2) continue;
@@ -700,17 +700,32 @@
           if (o !== w && !o.dead && Math.hypot(o.sx[0] - rem.x, o.sy[0] - rem.y) < d) { contested = true; break; }
         }
         if (contested) continue;
-        meal = sc; sx = rem.x; sy = rem.y; sm = rem.value * 5; sd = d;
+        meal = sc; sx = rem.x; sy = rem.y; sm = rem.value * 5; sd = d; sreach = rem.reach;
       }
       if (meal > 0) {
-        mealA = Math.atan2(sy - hy, sx - hx);
-        mealBoost = sm > 300 && sd < 500 && w.mass > 60;
+        // Arrived (#141): inside the remains, go for their food itself, scored like plain food, and
+        // don't boost. Aiming at the middle point made the bot circle it, boosting, while the food
+        // spread around it stayed uneaten.
+        let tx = sx, ty = sy;
+        if (sd < sreach) {
+          let bs = 0;
+          g.foodGrid.query(sx, sy, sreach, (i) => {
+            const f = g.food[i];
+            if (f.dead || f.natural || (f.x - sx) ** 2 + (f.y - sy) ** 2 > sreach * sreach) return false;
+            const dx = f.x - hx, dy = f.y - hy, d = Math.sqrt(dx * dx + dy * dy) + 1;
+            const s = (f.v * (1.3 + 0.7 * ((dx * ca + dy * sa) / d))) / (d + 40);
+            if (s > bs) { bs = s; tx = f.x; ty = f.y; }
+            return false;
+          });
+        }
+        mealA = Math.atan2(ty - hy, tx - hx);
+        mealBoost = sm > 300 && sd >= sreach && sd < 500 && w.mass > 60;
       }
       if (meal > best) {
         goal = mealA;
         goalW = 1.3;
         mode = 'scavenge';
-        if (mealBoost) boost = true;
+        boost = mealBoost; // its own call: a boost rolled for plain food it passed over doesn't carry over (#141)
       }
     }
 

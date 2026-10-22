@@ -1487,8 +1487,8 @@ test('nothing is recorded while the player is shielded, or when they or the cutt
 });
 
 test('the record leaves easy, normal and hard worlds exactly as they were (#135)', () => {
-  const world = (diff, record) => {
-    const g = new Game({ botCount: 30, difficulty: diff }, null, { seed: 99, habits: record }); // a seed with cut-offs on every level
+  const world = (diff, record, seed) => {
+    const g = new Game({ botCount: 30, difficulty: diff }, null, { seed, habits: record });
     g.spawnPlayer('P', 0);
     for (let i = 0; i < 20 * 60; i++) {
       if (!g.player && i % 120 === 0) g.spawnPlayer('P', 0);
@@ -1500,10 +1500,16 @@ test('the record leaves easy, normal and hard worlds exactly as they were (#135)
     return JSON.stringify(s);
   };
   const strong = () => habits({ away: 12, boost: 12 });
+  // Seeds until one has a cut-off on the player, so the comparison covers recording (#141 changed
+  // which seeds do); every seed tried must give identical worlds.
   for (const diff of ['easy', 'normal', 'hard']) {
-    const rec = strong();
-    assert.equal(world(diff, rec), world(diff, freshHabits()), diff);
-    assert.notDeepEqual(rec, strong(), `${diff}: the run recorded cut-offs`);
+    let recorded = false;
+    for (const seed of [99, 1, 2, 3, 4]) {
+      const rec = strong();
+      assert.equal(world(diff, rec, seed), world(diff, freshHabits(), seed), `${diff}, seed ${seed}`);
+      if ((recorded = JSON.stringify(rec) !== JSON.stringify(strong()))) break;
+    }
+    assert.ok(recorded, `${diff}: a run recorded cut-offs`);
   }
 });
 
@@ -1635,4 +1641,31 @@ test('the record never makes a bot pick the player as prey (#135)', () => {
     assert.equal(picks[0], picks[1], `${near.name} near`);
     assert.equal(picks[0], near.name);
   }
+});
+
+test('a scavenger that has reached spread-out remains eats them instead of circling their middle (#141)', () => {
+  // A scavenger 60 px from the middle of remains whose food lies 110-260 px around it, as a dead
+  // worm's body leaves it. Aiming at the middle point, it circled it, boosting, and ate about half
+  // in 8 s; eating the food itself, it clears most of it.
+  const { game, worms: [bot] } = withTactics('expert', ONLY('scavenge'), () => scene('expert', [{ name: 'Bot', mass: 300, x: 0, y: 0, angle: 0, ai: {} }]));
+  const C = { x: 60, y: 0 };
+  let total = 0;
+  for (let k = 0; k < 48; k++) {
+    const a = k * 2.39996, d = 110 + (k % 6) * 30;
+    game.food.push({ x: C.x + Math.cos(a) * d, y: C.y + Math.sin(a) * d, v: 5, r: 8, c: '#fff', life: 60, ph: 0, dead: false, natural: false });
+    total += 5;
+  }
+  game.recentDeaths.push({ x: C.x, y: C.y, reach: 300, mass: total, value: total, time: 0 });
+  game.rebuildFoodGrid();
+  let boosting = 0;
+  withTactics('expert', ONLY('scavenge'), () => {
+    for (let i = 0; i < 8 * 60; i++) {
+      game.update(1 / 60);
+      // Only boosting for the remains counts: with them eaten, plain food may still earn a boost (review).
+      if (bot.boosting && bot.ai.mode === 'scavenge') boosting++;
+    }
+  });
+  const left = game.food.filter((f) => !f.dead && !f.natural).reduce((s, f) => s + f.v, 0);
+  assert.ok(left <= total * 0.25, `ate the remains (${Math.round(left)} of ${total} left)`);
+  assert.equal(boosting, 0, `no boosting for the remains once there (${(boosting / 60).toFixed(1)} s)`);
 });
