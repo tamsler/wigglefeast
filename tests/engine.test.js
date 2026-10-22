@@ -1645,29 +1645,33 @@ test('the record never makes a bot pick the player as prey (#135)', () => {
 
 test('a scavenger that has reached spread-out remains eats them instead of circling their middle (#141)', () => {
   // A scavenger 60 px from the middle of remains whose food lies 110-260 px around it, as a dead
-  // worm's body leaves it. Aiming at the middle point, it circled it, boosting, and ate about half
-  // in 8 s; eating the food itself, it clears most of it.
+  // worm's body leaves it. Aiming at the middle point, it circled it, boosting, and left 105-146 of
+  // 240 in 8 s; eating the food itself, it leaves 5-80 (median 25, #146).
   const { game, worms: [bot] } = withTactics('expert', ONLY('scavenge'), () => scene('expert', [{ name: 'Bot', mass: 300, x: 0, y: 0, angle: 0, ai: {} }]));
-  const C = { x: 60, y: 0 };
+  const C = { x: 60, y: 0 }, reach = 300;
   let total = 0;
   for (let k = 0; k < 48; k++) {
     const a = k * 2.39996, d = 110 + (k % 6) * 30;
     game.food.push({ x: C.x + Math.cos(a) * d, y: C.y + Math.sin(a) * d, v: 5, r: 8, c: '#fff', life: 60, ph: 0, dead: false, natural: false });
     total += 5;
   }
-  game.recentDeaths.push({ x: C.x, y: C.y, reach: 300, mass: total, value: total, time: 0 });
+  game.recentDeaths.push({ x: C.x, y: C.y, reach, mass: total, value: total, time: 0 });
   game.rebuildFoodGrid();
+  // Nothing else to go for: respawning power-ups, special food or food could pull the bot away and
+  // leave it short of time, which isn't what this tests (#146).
+  Object.assign(game, { powerupTarget: 0, specialTarget: 0, foodTarget: 0 });
   let boosting = 0;
   withTactics('expert', ONLY('scavenge'), () => {
     for (let i = 0; i < 8 * 60; i++) {
       game.update(1 / 60);
-      // Only boosting for the remains counts: with them eaten, plain food may still earn a boost (review).
-      if (bot.boosting && bot.ai.mode === 'scavenge') boosting++;
+      // Only boosting in the remains counts. A bot may leave them for a pickup and boost back in from
+      // outside, which is fine; just past their edge is covered by the #146 test.
+      if (bot.boosting && bot.ai.mode === 'scavenge' && Math.hypot(bot.x - C.x, bot.y - C.y) < reach) boosting++;
     }
   });
   const left = game.food.filter((f) => !f.dead && !f.natural).reduce((s, f) => s + f.v, 0);
-  assert.ok(left <= total * 0.25, `ate the remains (${Math.round(left)} of ${total} left)`);
-  assert.equal(boosting, 0, `no boosting for the remains once there (${(boosting / 60).toFixed(1)} s)`);
+  assert.ok(left <= total * 0.4, `ate the remains (${Math.round(left)} of ${total} left)`);
+  assert.equal(boosting, 0, `no boosting in the remains (${(boosting / 60).toFixed(1)} s)`);
 });
 
 // --- Special food (#143) ---------------------------------------------------------------
@@ -1879,4 +1883,35 @@ test('a world with special food keeps producing valid saves and replays from its
   const a = run(321), b = run(321);
   assert.deepEqual(a, b, 'replays exactly');
   assert.ok(a.eaten > 0, 'worms ate some special food');
+});
+
+test('a scavenger that overshoots the remains\' edge doesn\'t boost back in (#146)', () => {
+  // Remains of 240 spread 110-260 px around (0, 0), reach 300. A bot that was in them and is now
+  // 30 px past the edge, heading outward after a pellet there, used to count as "not there yet",
+  // aim for the middle and boost.
+  const think = (path) => withTactics('expert', ONLY('scavenge'), () => {
+    const { game, worms: [bot] } = scene('expert', [{ name: 'Bot', mass: 300, x: path[0], y: 0, angle: 0, ai: {} }]);
+    let total = 0;
+    for (let k = 0; k < 48; k++) {
+      const a = k * 2.39996, d = 110 + (k % 6) * 30;
+      game.food.push({ x: Math.cos(a) * d, y: Math.sin(a) * d, v: 5, r: 8, c: '#fff', life: 60, ph: 0, dead: false, natural: false });
+      total += 5;
+    }
+    game.recentDeaths.push({ x: 0, y: 0, reach: 300, mass: total, value: total, time: 0 });
+    game.rebuildFoodGrid();
+    for (const x of path) { // think at each place along the way
+      const dx = x - bot.sx[0];
+      for (let i = 0; i < bot.sx.length; i++) bot.sx[i] += dx;
+      botThink(bot, game);
+    }
+    return bot;
+  });
+  const out = think([200, 330]);
+  assert.equal(out.ai.mode, 'scavenge');
+  assert.equal(out.wantBoost, false, 'no boost just past the edge, having been in');
+  assert.ok(Math.abs(angleDiff(0, out.targetAngle)) > Math.PI / 2, 'turns back toward the remains\' food');
+  // Approaching from outside is as before: at the same spot, never having been in, it boosts in for
+  // a big meal (#122), and so it does once more than 100 px past the edge.
+  assert.equal(think([330]).wantBoost, true, 'approaching: boosts in');
+  assert.equal(think([200, 420]).wantBoost, true, 'well clear of the remains: approaching again');
 });

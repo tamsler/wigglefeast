@@ -621,6 +621,7 @@
   }
   const wariness = (ai, o, now) => { const m = recall(ai, o.id, now); return m ? m.kills + m.grudge : 0; };
   const CUT_MODES = ['cut', 'trap', 'flank', 'pin', 'learn']; // moving in ahead of the prey
+  const REMAINS_MARGIN = 100; // a scavenger this far past the remains' reach is still there (#146)
   const endHunt = (ai) => { ai.prey = null; ai.coilDir = 0; ai.retaliating = null; };
   // What hunting worm o, its head d away, is worth against a meal of remains (score value / (d + 200)):
   // what the kill drops, discounted for hunts that fail (#122).
@@ -718,7 +719,7 @@
     let meal = 0, mealA = 0, mealBoost = false; // meal: score of the best uncontested remains
     if (knows('scavenge') && g.recentDeaths.length) {
       const SR = FR + 400;
-      let sx = 0, sy = 0, sm = 0, sd = 0, sreach = 0;
+      let sx = 0, sy = 0, sm = 0, sd = 0, sreach = 0, srem = null;
       for (const rem of g.recentDeaths) {
         const dx = rem.x - hx, dy = rem.y - hy, d = Math.sqrt(dx * dx + dy * dy);
         if (d > SR || rem.x * rem.x + rem.y * rem.y > edge2) continue;
@@ -729,14 +730,17 @@
           if (o !== w && !o.dead && Math.hypot(o.sx[0] - rem.x, o.sy[0] - rem.y) < d) { contested = true; break; }
         }
         if (contested) continue;
-        meal = sc; sx = rem.x; sy = rem.y; sm = rem.value * 5; sd = d; sreach = rem.reach;
+        meal = sc; sx = rem.x; sy = rem.y; sm = rem.value * 5; sd = d; sreach = rem.reach; srem = rem;
       }
       if (meal > 0) {
-        // Arrived (#141): inside the remains, go for their food itself, scored like plain food, and
-        // don't boost. Aiming at the middle point made the bot circle it, boosting, while the food
-        // spread around it stayed uneaten.
+        // Arrived (#141): in the remains, go for their food itself, scored like plain food, and don't
+        // boost. Aiming at the middle point made the bot circle it, boosting, while the food spread
+        // around it stayed uneaten. Once in, overshooting the edge a little while chasing a pellet
+        // there still counts as arrived, or it turned back for the middle at a boost (#146).
+        if (sd < sreach) ai.remainsIn = srem; // not saved, like the remains themselves
+        const there = sd < sreach || (ai.remainsIn === srem && sd < sreach + REMAINS_MARGIN);
         let tx = sx, ty = sy;
-        if (sd < sreach) {
+        if (there) {
           let bs = 0;
           g.foodGrid.query(sx, sy, sreach, (i) => {
             const f = g.food[i];
@@ -748,7 +752,7 @@
           });
         }
         mealA = Math.atan2(ty - hy, tx - hx);
-        mealBoost = sm > 300 && sd >= sreach && sd < 500 && w.mass > 60;
+        mealBoost = sm > 300 && !there && sd < 500 && w.mass > 60;
       }
       if (meal > best) {
         goal = mealA;

@@ -12,7 +12,8 @@ test('power-ups in the HUD', async (t) => {
   await page.startRun();
   // Only the power-ups a test adds: none in the arena and none spawning. Otherwise the magnet
   // (which pulls power-ups in from far away) can collect a random one and restart a timer.
-  await page.eval(`window.__player.shield = 1e5; Object.assign(window.__game, { powerups: [], powerupTarget: 0 })`);
+  // `; 0`: returning the game itself made eval copy it out of the page, which can fail ("Object reference chain is too long").
+  await page.eval(`window.__player.shield = 1e5; Object.assign(window.__game, { powerups: [], powerupTarget: 0 }); 0`);
   // Pauses or resumes; presses P only if needed (the game also pauses itself, e.g. on losing focus).
   const pause = async (on) => {
     const paused = `!document.getElementById('paused').classList.contains('hidden')`;
