@@ -725,7 +725,7 @@
         goal = mealA;
         goalW = 1.3;
         mode = 'scavenge';
-        if (mealBoost) boost = true;
+        boost = mealBoost; // its own call: a boost rolled for plain food it passed over doesn't carry over (#141)
       }
     }
 

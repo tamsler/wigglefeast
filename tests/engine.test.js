@@ -1661,10 +1661,11 @@ test('a scavenger that has reached spread-out remains eats them instead of circl
   withTactics('expert', ONLY('scavenge'), () => {
     for (let i = 0; i < 8 * 60; i++) {
       game.update(1 / 60);
-      if (bot.boosting) boosting++;
+      // Only boosting for the remains counts: with them eaten, plain food may still earn a boost (review).
+      if (bot.boosting && bot.ai.mode === 'scavenge') boosting++;
     }
   });
   const left = game.food.filter((f) => !f.dead && !f.natural).reduce((s, f) => s + f.v, 0);
   assert.ok(left <= total * 0.25, `ate the remains (${Math.round(left)} of ${total} left)`);
-  assert.ok(boosting < 60, `no boosting once there (${(boosting / 60).toFixed(1)} s)`);
+  assert.equal(boosting, 0, `no boosting for the remains once there (${(boosting / 60).toFixed(1)} s)`);
 });
