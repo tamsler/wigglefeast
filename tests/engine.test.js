@@ -1648,14 +1648,14 @@ test('a scavenger that has reached spread-out remains eats them instead of circl
   // worm's body leaves it. Aiming at the middle point, it circled it, boosting, and ate about half
   // in 8 s; eating the food itself, it clears most of it.
   const { game, worms: [bot] } = withTactics('expert', ONLY('scavenge'), () => scene('expert', [{ name: 'Bot', mass: 300, x: 0, y: 0, angle: 0, ai: {} }]));
-  const C = { x: 60, y: 0 };
+  const C = { x: 60, y: 0 }, reach = 300;
   let total = 0;
   for (let k = 0; k < 48; k++) {
     const a = k * 2.39996, d = 110 + (k % 6) * 30;
     game.food.push({ x: C.x + Math.cos(a) * d, y: C.y + Math.sin(a) * d, v: 5, r: 8, c: '#fff', life: 60, ph: 0, dead: false, natural: false });
     total += 5;
   }
-  game.recentDeaths.push({ x: C.x, y: C.y, reach: 300, mass: total, value: total, time: 0 });
+  game.recentDeaths.push({ x: C.x, y: C.y, reach, mass: total, value: total, time: 0 });
   game.rebuildFoodGrid();
   let boosting = 0;
   withTactics('expert', ONLY('scavenge'), () => {
@@ -1663,7 +1663,7 @@ test('a scavenger that has reached spread-out remains eats them instead of circl
       game.update(1 / 60);
       // Only boosting in the remains counts. A bot may leave them for a pickup and boost back in from
       // outside, which is fine; just past their edge is covered by the #146 test.
-      if (bot.boosting && bot.ai.mode === 'scavenge' && Math.hypot(bot.x - C.x, bot.y - C.y) < 300) boosting++;
+      if (bot.boosting && bot.ai.mode === 'scavenge' && Math.hypot(bot.x - C.x, bot.y - C.y) < reach) boosting++;
     }
   });
   const left = game.food.filter((f) => !f.dead && !f.natural).reduce((s, f) => s + f.v, 0);
