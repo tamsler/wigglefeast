@@ -18,31 +18,37 @@ test('massive worms', async (t) => {
   await t.test('a massive body crossing the screen, head off-screen, still draws', async () => {
     await page.press('KeyP');
     await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'the game to pause');
-    // Nothing animated near the column we read: no food or power-ups.
-    await page.eval(`(() => { const g = window.__game; g.food = []; g.powerups = []; g.rebuildFoodGrid(); })()`);
-    await page.frames(5);
-    const column = `(() => {
-      const c = document.getElementById('game'), g = c.getContext('2d');
-      return Array.from(g.getImageData(Math.round(c.width / 2), Math.round(c.height / 2), 1, Math.round(c.height / 2)).data);
-    })()`;
-    const before = await page.eval(column);
-    // A 50,000-mass bot laid straight across the view, 150 units below the player; its head
-    // and tail are thousands of units off-screen on either side.
-    await page.eval(`(() => {
-      const g = window.__game, p = window.__player, { radiusFor } = window.WormEngine;
-      const b = g.worms.find((w) => w.ai);
-      b.mass = 50000; b.r = radiusFor(50000);
-      const step = b.r * 0.42, n = Math.ceil(16000 / step);
-      b.sx = []; b.sy = [];
-      for (let i = 0; i < n; i++) { b.sx.push(p.x - 8000 + i * step); b.sy.push(p.y + 150); }
-      b.updateBounds();
-    })()`);
-    await page.frames(10);
-    const after = await page.eval(column);
-    let changed = 0;
-    for (let i = 0; i < before.length; i += 4) if (Math.abs(before[i] - after[i]) + Math.abs(before[i + 1] - after[i + 1]) + Math.abs(before[i + 2] - after[i + 2]) > 30) changed++;
-    assert.ok(changed > 30, `${changed} pixels of the column changed where the body crosses`);
-    await page.press('KeyP');
+    try {
+      // Nothing animated near the column we read: no food, power-ups or special food (which
+      // pulses on real time, even while paused).
+      await page.eval(`(() => { const g = window.__game; g.food = []; g.powerups = []; g.specials = []; g.rebuildFoodGrid(); })()`);
+      await page.frames(5);
+      const column = `(() => {
+        const c = document.getElementById('game'), g = c.getContext('2d');
+        return Array.from(g.getImageData(Math.round(c.width / 2), Math.round(c.height / 2), 1, Math.round(c.height / 2)).data);
+      })()`;
+      const before = await page.eval(column);
+      // A 50,000-mass bot laid straight across the view, 150 units below the player; its head
+      // and tail are thousands of units off-screen on either side.
+      await page.eval(`(() => {
+        const g = window.__game, p = window.__player, { radiusFor } = window.WormEngine;
+        const b = g.worms.find((w) => w.ai);
+        b.mass = 50000; b.r = radiusFor(50000);
+        // A bright skin: a near-black one (Galaxy) barely differs from the arena floor (#159).
+        b.skin = window.WormEngine.SKINS.find((s) => s.name === 'Cherry Pop');
+        const step = b.r * 0.42, n = Math.ceil(16000 / step);
+        b.sx = []; b.sy = [];
+        for (let i = 0; i < n; i++) { b.sx.push(p.x - 8000 + i * step); b.sy.push(p.y + 150); }
+        b.updateBounds();
+      })()`);
+      await page.frames(10);
+      const after = await page.eval(column);
+      let changed = 0;
+      for (let i = 0; i < before.length; i += 4) if (Math.abs(before[i] - after[i]) + Math.abs(before[i + 1] - after[i + 1]) + Math.abs(before[i + 2] - after[i + 2]) > 30) changed++;
+      assert.ok(changed > 30, `${changed} pixels of the column changed where the body crosses`);
+    } finally {
+      await page.press('KeyP'); // unpause even on failure, so the next tests can run (#159)
+    }
   });
 
   await t.test('frames stay fast with the player at 50,000 mass', async (st) => {
