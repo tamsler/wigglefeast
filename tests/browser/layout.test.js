@@ -35,6 +35,37 @@ for (const [width, height] of [[844, 390], [667, 375], [1280, 713], [1440, 900]]
   });
 }
 
+// Phones in portrait with touch (#165): the main menu fits without scrolling, and shows the touch
+// hint instead of the mouse and keyboard hints. (Very short phones like 375x667 may still scroll.)
+for (const [width, height] of [[390, 844], [412, 915], [360, 740]]) {
+  test(`main menu fits a ${width}x${height} phone without scrolling`, async (t) => {
+    const page = await launch({ width, height, mobile: true });
+    t.after(() => page.close());
+    await page.coarsePointer();
+    await page.goto(gameUrl());
+    await page.frames(3);
+    const m = await page.eval(`(() => {
+      const p = document.querySelector('#menu .panel'), shown = (s) => [...document.querySelectorAll(s)].some((e) => e.getClientRects().length > 0);
+      return { over: p.scrollHeight - p.clientHeight, touch: shown('.help .touch'), desk: shown('.help .desk'), wide: document.documentElement.scrollWidth > innerWidth };
+    })()`);
+    assert.equal(m.over, 0, `menu panel scrolls by ${m.over}px`);
+    assert.equal(m.touch, true, 'touch hint shows');
+    assert.equal(m.desk, false, 'mouse and keyboard hints hidden');
+    assert.equal(m.wide, false, 'no sideways scrolling');
+  });
+}
+
+// Tablets and touch laptops may have a keyboard, so they keep the mouse and keyboard hints (#165 review).
+test('a touch tablet keeps the keyboard hints', async (t) => {
+  const page = await launch({ width: 820, height: 1180 });
+  t.after(() => page.close());
+  await page.coarsePointer();
+  await page.goto(gameUrl());
+  const shown = (s) => page.eval(`[...document.querySelectorAll(${JSON.stringify(s)})].some((e) => e.getClientRects().length > 0)`);
+  assert.equal(await shown('.help .desk'), true, 'keyboard hints show');
+  assert.equal(await shown('.help .touch'), true, 'touch hint shows');
+});
+
 // In-game HUD on touch screens (#11): the touch buttons and every HUD element fit
 // inside the screen without overlapping, in portrait and landscape. The feed is
 // transient and ignores taps, so it is left out.
