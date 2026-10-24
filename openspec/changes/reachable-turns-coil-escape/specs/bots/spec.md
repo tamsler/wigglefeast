@@ -63,7 +63,7 @@ Each bot SHALL know a set of tactics fixed for its lifetime and drawn from its d
 ## ADDED Requirements
 
 ### Requirement: Noticing a coil
-A bot that escapes coils SHALL count itself circled when its own head is closed in by bodies in most directions and a clearly bigger worm nearby (at least half again its mass) is turning steadily on a circle centred near the bot's head. It SHALL decide this only from what a player could see: positions, sizes and observed turning, never which tactic the other worm uses.
+A bot that escapes coils SHALL count itself circled when its own head is closed in by bodies in most directions and a clearly bigger worm nearby (at least half again its mass) is turning steadily on a circle that the bot's head lies inside. It SHALL decide this only from what a player could see: positions, sizes and observed turning, never which tactic the other worm uses.
 
 #### Scenario: Circled by a bigger worm
 - **WHEN** an escaping bot's head is closed in by a loop of a worm three times its mass, and that worm's head is circling around it
