@@ -18,7 +18,7 @@
 
 **Non-Goals:**
 - Simulating re-planning, other worms' reactions or food inside the look-ahead. The path is our own turn-then-straight move, checked against bodies where they are now (and the ghosts/threat paths that already exist).
-- Making bot coilers die. They'll keep avoiding head shots. The aim against bots is the trapped bot surviving.
+- Making coilers die. The aim is the trapped bot surviving (see decision 4.2).
 
 ## Decisions
 
@@ -34,7 +34,7 @@ The time to a point is still `s / v`, so the ghost timing in `blocked(px, py, t,
 
 ### 2. Where the path is used
 - **Before boosting** (Expert, `sharp.reach > 0`), the bot checks its chosen heading along the *boosted* path out to `1.6·L`, at the close step. It does this whether or not it's boosting already, not only for anticipating bots. If the path is blocked, `wantBoost = false`. This covers the spec's *Turning wider while boosting* scenario. Bots without reach keep today's straight two-point check.
-- **Circled bots** that know `escape` use the same boosted-path check before any boost (*No boosting inside a coil*), whatever their level, and judge the *out* and *head-shot* moves along reachable paths (decision 4).
+- **Circled bots** that know `escape` use the same boosted-path check before any boost (*No boosting inside a coil*), whatever their level, and judge the *out* move along reachable paths (decision 4).
 - **Candidate headings stay straight lines** for every bot. The sample points and the close check are unchanged, and so is `L`.
 
 *Measured and rejected during apply:* judging every candidate heading along its normal-speed reachable path (the first version of this decision). On the task 1.1 seed, Expert bot deaths per minute fell from 71–73 to 20–22, and kills by cut-offs from about 170 to about 10. The top bot's median mass rose from about 5,200 to about 9,000, and ms/tick from 0.40 to 0.49. In `tools/coil.js` the trapped bot died more often: 35% → 50% against a bot coiler. Inside a loop, a bot survives by turning continuously, and a single "turn, then straight" path ranks those moves worse. The boost check alone cost Expert bot deaths about 13% (62–64 per minute) and changed nothing in coils.
@@ -54,15 +54,15 @@ Detection reads only `mass, turnRate, speed, r`, head positions and bodies, neve
 *Alternative:* reading `o.ai.mode === 'coil'` breaks *Fair information* and wouldn't work against the player.
 
 ### 4. Escape moves, in priority order
-The escape check runs after hunting and before evasion. While circled, a bot ends any hunt (`endHunt`), skips head-on and evasion, and leaves the coiler out of anticipation ghosts (`ignore = o`), because it may mean to cross the coiler's predicted path. Other worms' ghosts still count. `mode = 'escape'`, and `ai.escape` is `'out' | 'shot' | 'hug'` for tests and tools.
+The escape check runs after hunting and before evasion. While circled, a bot ends any hunt (`endHunt`), skips head-on and evasion, and leaves the coiler out of anticipation ghosts (not through `ignore`, which would also make sharp bots skip part of its body). Other worms' ghosts still count. `mode = 'escape'`, and `ai.escape` is `'out' | 'hug'` for tests and tools.
 
 1. **Out.** Among the candidate headings, take those whose normal-speed reachable path is clear at the close step out to `L`, and whose end point lies outside the loop (`|p − c| > ρ + o.r + r`). Pick the one closest to the current heading. Goal weight 3.5. If its boosted path out to `1.6·L` is also clear and outside, `boost = true`. Then the ordinary heading choice picks the goal. Its straight-line check doesn't overrule a goal the reachable check has already cleared, because the goal candidate's danger is taken from this check while escaping.
-2. **Head shot.** For each candidate, walk its normal-speed path in close steps, at time `τ = s / v`, against the coiler's predicted head `H(t) = predictHead(o, t)` for `t` from 0.1 to 1.0 s in steps of 0.1. It's a shot when some point at `τ ≤ t − 0.15` lies within `o.r + w.r` of `H(t)`, and our body still covers it then (`v·(t − τ) < lengthFor(w.mass)`). The path up to that point must be clear of bodies, and our head must stay at least `3·(w.r + o.r)` from `H(t′)` at every earlier `t′`, because the coiler wins any head-on. Pick the shot with the earliest `t`. Goal weight 3.5, no boost.
+2. **Head shot (built, measured, removed).** For each candidate, the bot walked its path against the coiler's predicted head `predictHead(o, t)` for `t` up to 1 s. It went for the earliest point it could cover at least 0.15 s before the head got there, along a clear path, with its own head staying `(w.r + o.r)` from the coiler's head. In `tools/coil.js` about a fifth of encounters tried a shot and none landed, even against a coiler blind to every body (median miss about 60 beyond lethal range). A coiler steers round its prey's *head*, so when the prey crosses its path, the coil moves with the prey and the head leaves the predicted arc. Variants made no difference: 0.1–0.2 s margins, a looser head clearance, a 1.5 s window, committing to a shot, and only taking shots that land within 0.3 s. Without the move, survival stayed within noise (Expert vs bot coiler: 15% with it, 19% without, about 1.3 standard errors). It's out of this change; #94 keeps the idea.
 3. **Hug.** Circle the centre `c` the way the coiler turns (`dir = sign(o.turnRate)`) at the target radius `ρₕ = max(minTurn, ρ − o.r − w.r − m)`. `minTurn` is our normal-speed turning radius and `m = w.r` is the clearance. Steer with the same formula coiling uses: `goal = φ + dir · (π/2 + clamp((dist − ρₕ)/ρₕ, −0.5, 0.8))`. Goal weight 2.5. The ordinary straight-line heading check keeps the head off the coiler's body. Re-planning several times a second makes that a continuous turn, which survives a loop better than a single turn-then-straight path (decision 2).
 
 Whatever move is taken, `boost` is false unless move 1 set it. This overrides every other reason to boost.
 
-*Why hug the same way round:* going against the coiler's direction meets its head often, and head-ons are lost. Going the same way, the coiler's head comes up from behind, so a shot opens up within a second or so.
+*Why hug the same way round:* going against the coiler's direction meets its head often, and head-ons are lost. Going the same way, the coiler's head comes up from behind, slowly, at the difference of the two speeds.
 
 *Alternatives tried and measured in #94:* a dash without reachable paths (worse while boosting, even without), and running alongside then cutting outward (no better). Both are kept as arms of the measurement tool for comparison.
 
@@ -84,10 +84,9 @@ Coil escape ships only if the tool shows the spec's *Coil escape works* outcome 
 
 - [The escape still doesn't beat doing nothing, as in #94] → the gate in decision 7, 300+ encounters per arm, and live coils only. The reach-only arm is the baseline the escape arm has to beat.
 - [The boost check makes Expert bots harder to kill] → measured as mild (bot deaths per minute about 13% lower, top bot a little bigger). The PR records the before/after balance report on the same seed.
-- [Frame time] → the boost check adds about 13 grid queries to a think that boosts. The head-shot walk runs only for circled bots, about 21 candidates × 10 times × a few points. The 150-bot test must stay under its 25 ms limit, and the PR lists ms/tick before and after (0.40 → 0.41–0.42 for the boost check).
+- [Frame time] → the boost check adds about 13 grid queries to a think that boosts. The escape check runs only for circled bots: about 27 candidate paths checked closely out to `L`. The 150-bot test must stay under its 25 ms limit, and the PR lists ms/tick before and after (0.40 → 0.41–0.42 for the boost check).
 - [False "circled" in crowds] → four conditions, including `freedom` and our head inside the coiler's circle, plus tests with a straight-passing worm, a worm circling far away and a loose loop.
 - [Hugging too close kills the bot] → clearance `m = w.r` on top of the probe radius, with the reachable check as the final guard. A test checks that the hugging bot survives a few seconds inside a held loop.
-- [Head-ons in a head shot] → the `3·(w.r + o.r)` head clearance throughout, and crossing at least 0.15 s before the coiler's head arrives.
 
 ## Migration Plan
 
@@ -95,4 +94,4 @@ One minor release (1.25.0). Nothing new is saved, and old saves load with the sa
 
 ## Open Questions
 
-- The exact head-shot timing margin (0.15 s), the hug clearance and the goal weights get tuned with `tools/coil.js` during apply. Their values don't change the spec or the task list.
+- The hug clearance and the goal weights can be tuned later with `tools/coil.js`. Their values don't change the spec or the task list.

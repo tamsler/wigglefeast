@@ -4,7 +4,7 @@
 
 Bots judge each candidate heading as a straight line from the head, but a worm can't turn instantly. A mass-120 worm turns on a circle of radius about 47, and about 115 while boosting. A heading that is clear as a straight line can be one the bot can't reach, or reaching it can mean swinging through a body (tamsler/wigglefeast#149).
 
-This is also why the first coil-escape attempt failed (tamsler/wigglefeast#94). A trapped bot dashing across the coiler's path while boosting died more often (45–48 of 80 encounters) than one that did nothing (25–42 of 120). It turned too wide and ran into the next loop of the coil. A circled bot should get out, or make the coiler run into it. It can only do that safely if it judges moves by the path it can actually take.
+This is also why the first coil-escape attempt failed (tamsler/wigglefeast#94). A trapped bot dashing across the coiler's path while boosting died more often (45–48 of 80 encounters) than one that did nothing (25–42 of 120). It turned too wide and ran into the next loop of the coil. A circled bot should get out, or at least not be squeezed to death. It can only do that safely if it judges its moves by the path it can actually take.
 
 ## What Changes
 
@@ -16,14 +16,15 @@ This is also why the first coil-escape attempt failed (tamsler/wigglefeast#94). 
 - **New tactic: coil escape** (`escape`, appended to the tactic list). A bot that knows it notices when it is being circled. Its own head is closed in, and a clearly bigger worm nearby is turning steadily around it. The bot sees this only from positions, sizes and observed turning. While circled it:
   - **hugs the inside edge** of the loop, turning the same way as the coiler, with its head just clear of the coiler's body. It uses the room inside the loop instead of being squeezed into the middle. It keeps circling, which a single "turn, then go straight" path can't describe, so hugging steers the way coiling does and keeps the usual heading checks;
   - **slips out** when a reachable path leads clear of the loop;
-  - **takes a head shot** when a reachable path lets it cross the coiler's predicted path ahead of the coiler's head, early enough that the coiler's head meets its body;
   - **doesn't boost inside the loop**, unless the boosted path is clear all the way out.
 - **Levels.** Hard: half the bots know coil escape. Expert: every bot. Easy and Normal: none. Easy, Normal and Hard bots without the tactic play exactly as before.
+- **No head shot.** A head shot (crossing just ahead of the coiler's head so it runs into the trapped bot's body) was built and measured. None landed, because a coiler steers round its prey's head: as the prey crosses, the coil moves with it. Dropping the move left survival within noise, so it was taken out, and tamsler/wigglefeast#94 stays open for a new approach.
 - **Measurement tool.** `tools/coil.js` runs many seeded coil encounters. There are two coilers: a bot, and a scripted coiler that reacts late to bodies cutting across, like a person might. It reports prey deaths, escapes and coiler deaths, with and without the tactic and reachable paths.
 
 ## Out of scope
 
 - The other ideas in tamsler/wigglefeast#120: committed attack phases, hunting much bigger worms, bot personalities, and the check on smaller cutters.
+- The head shot (see above; tamsler/wigglefeast#94 keeps it).
 - Judging every candidate heading along reachable paths (measured and rejected, see above; the numbers go on tamsler/wigglefeast#149).
 - Reachable paths for aiming a hunt (`cutPoint`, intercept timing).
 - Changing how bots coil: boosting less to circle tighter, and accounting for power-ups (raised in #94's W2 note). That's a separate balance change.
@@ -36,7 +37,7 @@ This is also why the first coil-escape attempt failed (tamsler/wigglefeast#94). 
 <!-- none -->
 
 ### Modified Capabilities
-- `bots`: *Expert sharpness* adds the reachable-path check before boosting. *Tactics by difficulty* adds coil escape on Hard and Expert. New requirements cover noticing a coil, hugging, slipping out, the head shot, boosting inside a coil, and the measured result.
+- `bots`: *Expert sharpness* adds the reachable-path check before boosting. *Tactics by difficulty* adds coil escape on Hard and Expert. New requirements cover noticing a coil, hugging, slipping out, boosting inside a coil, and the measured result.
 
 ## Impact
 

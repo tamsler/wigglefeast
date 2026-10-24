@@ -118,10 +118,12 @@ function coilScene({ seed = 1, coiler = 'bot', prey: level = 'expert', preyMass 
   if (bot) { cai.prey = p; c.ai = null; }
   let thinkT = 0;
   const coilerThink = () => {
-    const sharp = DIFFICULTY[level].sharp, saved = sharp && sharp.reach;
+    // It always knows how to coil (on hard only some bots do).
+    const sharp = DIFFICULTY[level].sharp, saved = sharp && sharp.reach, tac = DIFFICULTY[level].tactics, coil = tac.coil;
     if (sharp) sharp.reach = coilerReach;
+    tac.coil = 1;
     c.ai = cai;
-    try { botThink(c, g); } finally { c.ai = null; if (sharp) sharp.reach = saved; }
+    try { botThink(c, g); } finally { c.ai = null; if (sharp) sharp.reach = saved; tac.coil = coil; }
     thinkT = cai.interval * rand(0.8, 1.2);
     if (sharp) thinkT = Math.max(0.04, thinkT * sharp.think);
   };

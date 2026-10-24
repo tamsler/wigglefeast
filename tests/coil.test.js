@@ -17,3 +17,16 @@ test('both coilers close a loop around the prey, as a live coil does (#94)', () 
     assert.ok(closed >= 7, `${coiler}: the loop closed in ${closed} of 10`);
   }
 });
+
+test('bots that escape coils die clearly less often in a fixed batch of live coils (#94)', () => {
+  // 60 seeded coils per arm; the full measurement (300+ per arm) is `node tools/coil.js`.
+  for (const [coiler, most] of [['scripted', 0.6], ['bot', 0.8]]) {
+    const deaths = (arm) => {
+      let n = 0;
+      for (let i = 0; i < 60; i++) if (encounter({ seed: 500 + i, coiler, arm }).outcome === 'prey') n++;
+      return n;
+    };
+    const before = deaths('baseline'), after = deaths('escape');
+    assert.ok(after <= before * most, `${coiler} coiler: the trapped bot died ${after} times with the tactic, ${before} without`);
+  }
+});

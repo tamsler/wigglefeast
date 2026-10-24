@@ -82,10 +82,10 @@ A bot that escapes coils SHALL count itself circled when its own head is closed 
 - **THEN** the bot decides the same way in each case
 
 ### Requirement: Hugging the loop
-While circled, and with no way out or head shot available, a bot that escapes coils SHALL follow the inside edge of the coiler's loop, turning the same way round as the coiler, with its head kept just clear of the coiler's body, rather than staying in the middle of the loop. Its headings SHALL be checked against bodies as usual.
+While circled, and with no way out available, a bot that escapes coils SHALL follow the inside edge of the coiler's loop, turning the same way round as the coiler, with its head kept just clear of the coiler's body, rather than staying in the middle of the loop. Its headings SHALL be checked against bodies as usual.
 
 #### Scenario: Waiting inside the loop
-- **WHEN** an escaping bot is circled and no path it can take leads out of the loop or across the coiler's head
+- **WHEN** an escaping bot is circled and no path it can take leads out of the loop
 - **THEN** it moves round the loop in the coiler's direction, nearer the coiler's body than the loop's middle, without touching it
 
 ### Requirement: Slipping out of a coil
@@ -99,17 +99,6 @@ A circled bot that escapes coils SHALL take a path out of the loop when a path i
 - **WHEN** an escaping bot (on hard or expert) is circled, and a straight line toward a gap is clear, but its turn toward that gap runs into the loop
 - **THEN** it does not head for that gap
 
-### Requirement: Head shot on a coiler
-A circled bot that escapes coils SHALL cross the coiler's path when a path it can actually take, clear of bodies, lets its body lie across the coiler's predicted path ahead of the coiler's head early enough that the coiler's head would meet it. A way out SHALL come before a head shot.
-
-#### Scenario: The coiler's head comes round
-- **WHEN** an escaping bot is circled and can reach a point on the coiler's predicted path ahead of the coiler's head with time to spare, along a path clear of bodies
-- **THEN** it crosses there, so the coiler's head runs into its body if the coiler holds its course
-
-#### Scenario: Out beats a head shot
-- **WHEN** a circled bot has both a reachable way out and a reachable head shot
-- **THEN** it takes the way out
-
 ### Requirement: No boosting inside a coil
 A circled bot that escapes coils SHALL NOT boost unless its boosting path, at boost speed and its wider boosting turn, leads clear of the loop with no body in the way, whatever its level.
 
@@ -122,12 +111,12 @@ A circled bot that escapes coils SHALL NOT boost unless its boosting path, at bo
 - **THEN** it may boost out
 
 ### Requirement: Coil escape works
-Across many repeated coil encounters, bots that escape coils SHALL die less often than the same bots without the tactic. Against a coiler that circles without avoiding bodies, as a person might, they SHALL also kill the coiler more often.
+Across many repeated coil encounters, expert bots that escape coils SHALL die clearly less often than the same bots without the tactic, both against a coiling bot and against a coiler that circles the way a person might, reacting late to a body cutting across.
 
 #### Scenario: Against a coiling bot
 - **WHEN** a mass-120 expert bot is coiled by a mass-3,000 coiling bot in several hundred seeded encounters, with and without coil escape
 - **THEN** the trapped bot dies clearly less often with coil escape
 
 #### Scenario: Against a person-like coiler
-- **WHEN** the same encounters are run with a coiler that circles the trapped bot without steering around bodies
-- **THEN** with coil escape the trapped bot dies less often and the coiler dies more often
+- **WHEN** the same encounters are run with a coiler that circles the trapped bot and reacts late to a body cutting across
+- **THEN** with coil escape the trapped bot dies clearly less often

@@ -2101,7 +2101,7 @@ test('coil escape decides only from what is visible, and draws no random numbers
   assert.equal(run(() => {}, ONLY(null)).calls, asCoiler.calls, 'the same random draws as without the tactic');
 });
 
-test('a circled bot takes a way out it can turn into, before a head shot (#94)', () => {
+test('a circled bot takes a way out it can turn into (#94)', () => {
   // A loop of radius 100 open ahead of the coiler's head, from -120° round to +45°: straight ahead
   // (+x) is the way out.
   const open = { R: 100, at: (-2 * Math.PI) / 3, span: (195 / 180) * Math.PI };
@@ -2109,9 +2109,9 @@ test('a circled bot takes a way out it can turn into, before a head shot (#94)',
   assert.equal(out.ai.escape, 'out');
   assert.ok(Math.abs(out.targetAngle) < 0.5, `heads out through the gap (${out.targetAngle.toFixed(2)})`);
   assert.ok(Math.hypot(out.ai.aim.x, out.ai.aim.y) > 100 + 34 + out.r, 'its path ends outside the loop');
-  // With a second ring beyond the gap there's no way out, and the same loop offers a head shot.
-  const shot = withTactics('expert', ESCAPE, () => { const s = laidCoil('expert', { ...open, outer: 320 }); botThink(s.p, s.game); return s.p; });
-  assert.equal(shot.ai.escape, 'shot', 'blocked beyond: a head shot instead');
+  // With a second ring beyond the gap there's no way out: it hugs the loop instead.
+  const held = withTactics('expert', ESCAPE, () => { const s = laidCoil('expert', { ...open, outer: 320 }); botThink(s.p, s.game); return s.p; });
+  assert.equal(held.ai.escape, 'hug', 'blocked beyond: no way out');
 });
 
 test('a circled bot does not go for a gap it cannot turn into (#94)', () => {
@@ -2131,37 +2131,7 @@ test('a circled bot does not go for a gap it cannot turn into (#94)', () => {
   assert.notEqual(s.p.ai.escape, 'out');
 });
 
-test('a head shot crosses the coiler\'s path early, and a coiler holding its course runs into it (#94)', () => {
-  const opts = { R: 100, at: (-2 * Math.PI) / 3, span: (195 / 180) * Math.PI, outer: 320 };
-  withTactics('expert', ESCAPE, () => {
-    const s = laidCoil('expert', opts);
-    botThink(s.p, s.game);
-    assert.equal(s.p.ai.escape, 'shot');
-    const aim = s.p.ai.aim, v = CFG.BASE_SPEED;
-    const hits = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1].filter((t) => {
-      const h = predictHead(s.c, t);
-      return Math.hypot(aim.x - h.x, aim.y - h.y) < s.c.r + s.p.r && Math.hypot(aim.x, aim.y - 0) / v <= t - 0.15;
-    });
-    assert.ok(hits.length, 'the aim lies on the coiler\'s path, reached at least 0.15 s before its head');
-    // Until the coiler's head reaches the aim, our head stays clear of it (contact kills at 0.78).
-    const path = reachPath(s.p, s.p.targetAngle, false);
-    for (let t = 0.1; t <= hits[0] + 1e-9; t += 0.1) {
-      const me = reachAt(path, v * t), h = predictHead(s.c, t);
-      assert.ok(Math.hypot(me.x - h.x, me.y - h.y) >= s.c.r + s.p.r, `heads apart at ${t.toFixed(1)} s`);
-    }
-    // Now let it play out: the coiler keeps turning at its rate, the prey thinks for itself.
-    let coilerDied = false;
-    s.game.on('death', (e) => { if (e.victim === s.c) coilerDied = e.killer === s.p; });
-    const rate = s.c.turnRate;
-    for (let i = 0; i < 90 && !coilerDied && !s.p.dead; i++) {
-      s.c.targetAngle = s.c.angle + rate / 60;
-      s.game.update(1 / 60);
-    }
-    assert.ok(coilerDied, `the coiler ran into the prey (prey dead: ${s.p.dead})`);
-  });
-});
-
-test('with no way out and no shot, a circled bot hugs the loop its coiler\'s way round and survives (#94)', () => {
+test('with no way out, a circled bot hugs the loop its coiler\'s way round and survives (#94)', () => {
   withTactics('expert', ESCAPE, () => {
     const s = laidCoil('expert');
     s.c.update = () => {}; // the loop holds still

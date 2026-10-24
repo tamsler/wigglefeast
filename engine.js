@@ -599,9 +599,6 @@
     return { cx, cy, rho, dir };
   }
   const CIRCLED_HOLD = 0.5; // seconds a bot stays circled after the signs last held (#94)
-  const SHOT_T = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
-  const SHOT_EARLY = 0.15; // our body must lie across the coiler's path this long before its head arrives
-  const SHOT_CLEAR = 1; // and our head keep this many (r + r') from its head meanwhile (0.78 kills)
 
   // The point to cross in front of a prey. Without prediction: ahead along its heading, by
   // more the farther it is. With prediction: where its curving path meets ours. fast: how much
@@ -1054,12 +1051,14 @@
     const blocked = (px, py, t, speed) => hitAt(g, w, px, py, rad, headMass, pass, t > past ? Infinity : nearSegs)
       || (ghost && ghostHit(ghost, px, py, rad, t / speed)) || (threatPath && ghostHit(threatPath, px, py, rad, 0));
     const step = 2 * rad;
-    // Escape moves (#94), in order: out of the loop, a head shot, else hug the loop's inside edge.
-    // Out and the head shot are judged along the path the bot can really take (#149), closely; a
-    // goal one of them cleared counts as clear in the heading choice below.
+    // Escape moves (#94): out of the loop if it can, else hug the loop's inside edge. The way out is
+    // judged along the path the bot can really take (#149), closely, and then counts as clear in the
+    // heading choice below. (A head shot, crossing just ahead of the coiler's head, was built and
+    // measured: none landed. A coiler steers round its prey's head, so as the prey crosses, the
+    // coil moves with it and the coiler's head leaves the predicted arc.)
     let cleared = null;
     if (circled) {
-      const o = circled.o, v = reachPath(w, w.angle, false).v;
+      const o = circled.o;
       const outR = circled.rho + o.r + r;
       const outside = (q) => Math.hypot(q.x - circled.cx, q.y - circled.cy) > outR;
       // How far each candidate's path is clear, out to `far`.
@@ -1075,46 +1074,23 @@
       cands.sort((x, y) => Math.abs(angleDiff(w.angle, x)) - Math.abs(angleDiff(w.angle, y)));
       const paths = cands.map((a) => { const p = reachPath(w, a, false); return { a, p, to: clearTo(p, L) }; });
       let move = null;
-      // 1. Out: a path clear all the way that ends outside the loop, the smallest turn first.
+      // Out: a path clear all the way that ends outside the loop, the smallest turn first.
       for (const c of paths) {
         if (c.to < L) continue;
-        if (!outside(reachAt(c.p, L))) continue;
         const end = reachAt(c.p, L);
+        if (!outside(end)) continue;
         move = { a: c.a, kind: 'out', aim: { x: end.x, y: end.y } };
         const bp = reachPath(w, c.a, true);
         if (clearTo(bp, L * 1.6) >= L * 1.6 && outside(reachAt(bp, L * 1.6))) boost = true;
         break;
       }
-      // 2. Head shot: our body across the coiler's predicted path SHOT_EARLY before its head gets
-      // there, along a clear path, without our head coming near its head first. Earliest wins.
-      if (!move) {
-        const H = SHOT_T.map((t) => predictHead(o, t)), len = lengthFor(w.mass);
-        const touch = o.r + r, keep = SHOT_CLEAR * (o.r + r);
-        let bestT = Infinity;
-        for (const c of paths) {
-          let ok = true;
-          for (let j = 0; j < SHOT_T.length && ok && SHOT_T[j] < bestT; j++) {
-            const t = SHOT_T[j];
-            if (v * t > c.to) break; // we'd have hit something by then
-            const me = reachAt(c.p, v * t);
-            if (Math.hypot(me.x - H[j].x, me.y - H[j].y) < keep) { ok = false; break; } // too near its head
-            let hit = false;
-            for (let s2 = step; s2 <= v * (t - SHOT_EARLY) && !hit; s2 += step) {
-              if (v * t - s2 > len) continue; // our tail has passed it by then
-              const q = reachAt(c.p, s2);
-              if (Math.hypot(q.x - H[j].x, q.y - H[j].y) < touch) hit = { x: q.x, y: q.y };
-            }
-            if (hit) { bestT = t; move = { a: c.a, kind: 'shot', aim: hit, t }; }
-          }
-        }
-      }
       if (move) {
         goal = move.a;
         goalW = 3.5;
         cleared = move.a;
-        ai.aim = move.aim; // the exit point, or where the coiler's head should meet our body
+        ai.aim = move.aim; // the exit point
       } else {
-        // 3. Hug: circle the coiler's centre its way round, just inside its body. Re-planned several
+        // Hug: circle the coiler's centre its way round, just inside its body. Re-planned several
         // times a second, this is a steady turn, checked against bodies like any heading.
         const minTurn = reachPath(w, w.angle + Math.PI / 2, false).s1 / (Math.PI / 2);
         const rh = Math.max(minTurn, circled.rho - o.r - r - r);
