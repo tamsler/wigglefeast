@@ -34,7 +34,7 @@
 ## 5. Release
 
 - [x] 5.1 Bump `VERSION` in `sw.js` to 1.25.0 (no new game files for `FILES`), and run `node --test "tests/**/*.test.js"`; verify all tests pass
-- [ ] 5.2 Comment on #149 with the measured numbers for judging headings along reachable paths (why only the boost check ships). Comment on #94 with the head-shot numbers (it stays open for a new approach). Open the PR with `Closes #149` and `Part of #94` and the numbers from tasks 2.4, 4.1 and 4.4. Run the `pr-reviewer` agent, verify each finding, fix the real ones and note dismissed ones in the PR, then squash-merge once *Tests* and *Release version bumped* pass; verify the `v1.25.0` release is published
+- [x] 5.2 Comment on #149 with the measured numbers for judging headings along reachable paths (why only the boost check ships). Comment on #94 with the head-shot numbers (it stays open for a new approach). Open the PR with `Closes #149` and `Part of #94` and the numbers from tasks 2.4, 4.1 and 4.4. Run the `pr-reviewer` agent, verify each finding, fix the real ones and note dismissed ones in the PR, then squash-merge once *Tests* and *Release version bumped* pass; verify the `v1.25.0` release is published
 
 ## Workflow follow-up
 
