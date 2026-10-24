@@ -71,7 +71,7 @@ A worm SHALL be able to boost to 2.1× speed while its mass is above 12, losing 
 - **THEN** neither the badge nor the arrows show
 
 ### Requirement: Collisions and death
-A worm SHALL die when its head touches another worm's body. In a head-on collision (the other worm's first three segments) the worm with more mass survives. Worms never collide with themselves. A dying worm SHALL leave 80% of its mass as food along its body, which fades after 45–60 seconds.
+A worm SHALL die when its head touches another worm's body. In a head-on collision (the other worm's first three segments) the worm with more mass survives. Worms never collide with themselves. A worm SHALL NOT die on a smaller worm's body where its own body, beyond its head and neck, already lies over that spot: it is on top there, as it is drawn. A dying worm SHALL leave 80% of its mass as food along its body, which fades after 45–60 seconds.
 
 #### Scenario: Running into a body
 - **WHEN** worm A's head touches worm B's body behind B's head
@@ -80,6 +80,14 @@ A worm SHALL die when its head touches another worm's body. In a head-on collisi
 #### Scenario: Head-on collision
 - **WHEN** two worms' heads collide and A has more mass than B
 - **THEN** B dies and A survives
+
+#### Scenario: On top of a smaller worm
+- **WHEN** worm A coils a smaller worm B, and A's head touches B's body where A's own body already lies over it
+- **THEN** A does not die
+
+#### Scenario: Smaller head on a bigger body
+- **WHEN** the smaller worm B's head touches A's body, whatever lies under it
+- **THEN** B dies
 
 ### Requirement: Spawn shield
 Newly spawned players SHALL be shielded for 2.5 seconds; shielded worms can neither kill nor be killed and are drawn semi-transparent.

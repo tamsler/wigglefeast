@@ -711,3 +711,58 @@ test('a world with special food keeps producing valid saves and replays from its
   assert.deepEqual(a, b, 'replays exactly');
   assert.ok(a.eaten > 0, 'worms ate some special food');
 });
+
+// --- A body under your own (#155) ---------------------------------------------------
+
+// A big worm A (mass 1000) with its head at (0, 30) heading down onto a small worm B's body, which
+// runs along y = 0 (B's head at (200, 0), heading +x). A's neck goes up from its head; the rest of
+// its body lies along y = 0 over B's body from x = -150 to 150 (`over`), and far away beyond that.
+function underScene(over, level = 'normal') {
+  const s = scene(level, [
+    { name: 'A', mass: 1000, x: 0, y: 30, angle: -Math.PI / 2 },
+    { name: 'B', mass: 100, x: 200, y: 0, angle: 0 },
+  ]);
+  const [a] = s.worms, sp = a.r * 0.42;
+  for (let i = 0; i < a.sx.length; i++) {
+    const x = -150 + (i - 10) * sp, onB = over && x <= 150; // over B's body, short of B's head at x = 200
+    if (i < 10) { a.sx[i] = 0; a.sy[i] = 30 + i * sp; } else { a.sx[i] = x; a.sy[i] = onB ? 0 : 900; }
+  }
+  a.updateBounds();
+  s.game.rebuildSegGrid();
+  return s;
+}
+
+test('a head does not die on a smaller worm\'s body where its own body lies over it (#155)', () => {
+  const collide = (over) => {
+    const { game, worms: [a, b] } = underScene(over);
+    const dead = [];
+    game.on('death', (e) => dead.push(e.victim.name));
+    game.checkCollisions();
+    return dead;
+  };
+  assert.deepEqual(collide(true), [], 'A lies on top of B there: it survives');
+  assert.deepEqual(collide(false), ['A'], 'without its own body there, A dies as before');
+  // A smaller worm's head on a bigger worm's body still dies, whatever lies under it.
+  const { game, worms: [a, b] } = underScene(true);
+  b.sx[0] = a.sx[20]; b.sy[0] = a.sy[20] + 10;
+  game.rebuildSegGrid();
+  const dead = [];
+  game.on('death', (e) => dead.push(e.victim.name));
+  game.checkCollisions();
+  assert.deepEqual(dead, ['B']);
+});
+
+test('bots treat a smaller body under their own as clear, like the collision rule (#155)', () => {
+  // A is a bot after food straight below it, across B's body.
+  const heading = (over) => withTactics('expert', { ...Object.fromEntries(Object.keys(DIFFICULTY.expert.tactics).map((k) => [k, 0])) }, () => {
+    const s = underScene(over, 'expert');
+    const [a] = s.worms;
+    a.ai = { skill: 1, aggro: 0, interval: 0.1, wx: 0, wy: -300, prey: null, huntUntil: 0 };
+    s.game.food.push({ x: 0, y: -250, v: 8, r: 6, c: '#fff', life: Infinity, ph: 0, dead: false, natural: true });
+    s.game.rebuildFoodGrid();
+    botThink(a, s.game);
+    return a.targetAngle;
+  });
+  assert.ok(Math.abs(heading(true) + Math.PI / 2) < 0.05, `straight down across the covered body (${heading(true).toFixed(2)})`);
+  assert.ok(Math.abs(heading(false) + Math.PI / 2) > 0.1, `around B's body when it isn't covered (${heading(false).toFixed(2)})`);
+});
