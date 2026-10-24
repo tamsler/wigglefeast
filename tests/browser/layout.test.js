@@ -55,6 +55,17 @@ for (const [width, height] of [[390, 844], [412, 915], [360, 740]]) {
   });
 }
 
+// Tablets and touch laptops may have a keyboard, so they keep the mouse and keyboard hints (#165 review).
+test('a touch tablet keeps the keyboard hints', async (t) => {
+  const page = await launch({ width: 820, height: 1180 });
+  t.after(() => page.close());
+  await page.coarsePointer();
+  await page.goto(gameUrl());
+  const shown = (s) => page.eval(`[...document.querySelectorAll(${JSON.stringify(s)})].some((e) => e.getClientRects().length > 0)`);
+  assert.equal(await shown('.help .desk'), true, 'keyboard hints show');
+  assert.equal(await shown('.help .touch'), true, 'touch hint shows');
+});
+
 // In-game HUD on touch screens (#11): the touch buttons and every HUD element fit
 // inside the screen without overlapping, in portrait and landscape. The feed is
 // transient and ignores taps, so it is left out.
