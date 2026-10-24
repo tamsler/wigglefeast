@@ -28,7 +28,7 @@
 ## 6. Release
 
 - [x] 6.1 Bump `VERSION` in `sw.js` to 1.26.0 (no new game files), and run `node --test "tests/**/*.test.js"`; verify all tests pass
-- [ ] 6.2 Open the PR with `Closes #150` and the numbers from task 5.1. Run the `pr-reviewer` agent, verify each finding, fix the real ones and note dismissed ones in the PR, then squash-merge once *Tests* and *Release version bumped* pass; verify the `v1.26.0` release is published
+- [x] 6.2 Open the PR with `Closes #150` and the numbers from task 5.1. Run the `pr-reviewer` agent, verify each finding, fix the real ones and note dismissed ones in the PR, then squash-merge once *Tests* and *Release version bumped* pass; verify the `v1.26.0` release is published
 
 ## Workflow follow-up
 
