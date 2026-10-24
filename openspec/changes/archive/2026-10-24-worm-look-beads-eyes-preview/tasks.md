@@ -26,7 +26,7 @@
 
 - [x] 4.1 Bump `VERSION` in `sw.js` to 1.27.0 (no new files, so `FILES` is unchanged). Verify `.github/scripts/check-version.sh origin/main` passes locally.
 - [x] 4.2 Run `node --test "tests/**/*.test.js"` and verify everything passes, including `tests/fixtures/save-v1.json` loading.
-- [ ] 4.3 Take before/after screenshots of the arena (several skins, a large and a small worm) and the menu preview, desktop and phone size, and attach them to the PR. Check on a real phone that the menu fits and the game still runs smoothly with 30 bots.
+- [x] 4.3 Take before/after screenshots of the arena (several skins, a large and a small worm) and the menu preview, desktop and phone size, and attach them to the PR. Check on a real phone that the menu fits and the game still runs smoothly with 30 bots.
 
 ## Workflow follow-up
 
