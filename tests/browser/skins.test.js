@@ -67,7 +67,7 @@ test('skins', async (t) => {
       const g = window.__game, p = window.__player;
       g.worms = [p, ...g.worms.filter((w) => w.skin.name === 'Magma')];
       Object.assign(g, { food: [], powerups: [], specials: [], foodTarget: 0, powerupTarget: 0, specialTarget: 0 }); g.rebuildFoodGrid();
-      // These blink or pulse on real time and are not finishes: the shield, boost glow and arrows,
+      // These blink or pulse on real time and are not finishes: the shield, the boost arrows,
       // and the arena border (moved out of view).
       g.worms.forEach((w) => { w.shield = 0; w.wantBoost = false; w.boosting = false; });
       g.R = 1e6;
@@ -80,5 +80,55 @@ test('skins', async (t) => {
     await new Promise((r) => setTimeout(r, 400));
     await page.frames(3);
     assert.equal(await page.eval(HASH), a, 'nothing moves while paused');
+  });
+});
+
+// Skin preview (#161): the selected skin on a wiggling worm under the Skin label.
+test('skin preview', async (t) => {
+  let page;
+  t.after(() => page && page.close());
+  page = await launch();
+  await page.goto(gameUrl());
+  const preview = () => page.eval('window.wigglefeastDebug.previewSkin()');
+  const pixels = `(() => { const c = document.getElementById('skinPreview'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let h = 0; for (let i = 0; i < d.length; i += 7) h = (h * 31 + d[i]) | 0; return h; })()`;
+
+  await t.test('shows the remembered skin, then each picked skin straight away', async () => {
+    await page.frames(2);
+    assert.equal(await preview(), await page.eval(`document.getElementById('skinName').textContent`));
+    await page.click('#skins button[title="Leopard"]');
+    await page.frames(2);
+    assert.equal(await preview(), 'Leopard');
+    await page.click('#skins button[title="Chrome"]');
+    await page.frames(2);
+    assert.equal(await preview(), 'Chrome');
+  });
+
+  await t.test('wiggles, and holds still when the system asks for reduced motion', async () => {
+    const a = await page.eval(pixels);
+    await page.frames(10);
+    assert.notEqual(await page.eval(pixels), a, 'the worm moves');
+    await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    await page.frames(2);
+    const b = await page.eval(pixels);
+    await page.frames(10);
+    assert.equal(await page.eval(pixels), b, 'the worm holds still');
+    await page.send('Emulation.setEmulatedMedia', { features: [] });
+  });
+
+  await t.test('a remembered hidden skin shows in the preview', async () => {
+    await page.eval(`localStorage.removeItem('wormarena.world');
+      localStorage.setItem('wormarena.settings', JSON.stringify({ name: 'Old', skin: 8, botCount: 30, difficulty: 'normal' }))`);
+    await page.reload();
+    await page.frames(2);
+    assert.equal(await preview(), 'Lavender');
+  });
+
+  await t.test('is not drawn while playing', async () => {
+    await page.startRun('Prev');
+    await page.frames(2);
+    const n = await page.eval('window.wigglefeastDebug.previewFrames()');
+    await page.frames(10);
+    assert.equal(await page.eval('window.wigglefeastDebug.previewFrames()'), n);
   });
 });

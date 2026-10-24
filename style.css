@@ -183,6 +183,12 @@ h2 { margin: 0 0 14px; font-size: 26px; }
 }
 #name:focus { border-color: #4cc9f0; }
 
+/* Skin preview (#161): the selected skin on a wiggling worm, drawn by main.js. */
+#skinPreview {
+  display: block; width: 100%; height: 64px; margin-bottom: 8px; border-radius: 12px;
+  background: #0d1322; box-shadow: inset 0 0 0 2px rgba(0,0,0,.35);
+}
+@media (max-width: 420px) { #skinPreview { height: 56px; } }
 #skins { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
 #skins button {
   aspect-ratio: 1; border-radius: 50%; border: 3px solid transparent; cursor: pointer; padding: 0;
@@ -266,15 +272,17 @@ kbd {
 @media (max-height: 760px) {
   .overlay { padding-top: calc(8px + env(safe-area-inset-top)); padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
   .panel { padding: 20px 22px 16px; }
-  .tag { margin: 2px 0 12px; }
-  .help { margin-top: 10px; line-height: 1.6; }
-  /* Tighter rows so the menu, with the Food picker (#64), fits a laptop screen without scrolling. */
-  h1 { font-size: 38px; }
-  .label { margin: 9px 0 5px; }
-  #name { padding: 9px 12px; }
-  .seg button { padding: 7px 0; }
-  button.primary { margin-top: 12px; padding: 11px; }
-  button.ghost { margin-top: 7px; padding: 10px; }
+  .tag { margin: 0 0 8px; }
+  .help { margin-top: 6px; line-height: 1.6; }
+  /* Tighter rows so the menu, with the Food picker (#64) and the skin preview (#161), fits a
+     laptop screen without scrolling. */
+  h1 { font-size: 34px; }
+  .label { margin: 7px 0 4px; }
+  #name { padding: 7px 12px; }
+  #skinPreview { height: 40px; margin-bottom: 6px; }
+  .seg button { padding: 6px 0; }
+  button.primary { margin-top: 10px; padding: 9px; }
+  button.ghost { margin-top: 6px; padding: 8px; }
 }
 
 /* Short screens (phones in landscape): tighten the menus so less scrolling is needed. */
@@ -286,6 +294,7 @@ kbd {
   #name { padding: 8px 12px; font-size: 15px; }
   .label { margin: 8px 0 4px; }
   #skins { gap: 5px; }
+  #skinPreview { height: 44px; margin-bottom: 6px; }
   .seg button { padding: 6px 0; }
   button.primary { margin-top: 10px; padding: 9px; font-size: 16px; }
   button.ghost { margin-top: 6px; padding: 7px; }
