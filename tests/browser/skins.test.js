@@ -61,11 +61,12 @@ test('skins', async (t) => {
   });
 
   await t.test('animated finishes freeze while paused (#58)', async () => {
-    // Only a Magma worm and the player; no food or power-ups, which pulse on real time.
+    // Only a Magma worm and the player; no food, power-ups or special food (#143), which pulse on
+    // real time (a special food in view made this flaky).
     await page.eval(`{
       const g = window.__game, p = window.__player;
       g.worms = [p, ...g.worms.filter((w) => w.skin.name === 'Magma')];
-      Object.assign(g, { food: [], powerups: [], foodTarget: 0, powerupTarget: 0 }); g.rebuildFoodGrid();
+      Object.assign(g, { food: [], powerups: [], specials: [], foodTarget: 0, powerupTarget: 0, specialTarget: 0 }); g.rebuildFoodGrid();
       // These blink or pulse on real time and are not finishes: the shield, boost glow and arrows,
       // and the arena border (moved out of view).
       g.worms.forEach((w) => { w.shield = 0; w.wantBoost = false; w.boosting = false; });
