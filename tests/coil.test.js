@@ -38,7 +38,6 @@ test('bots that escape coils die clearly less often in a fixed batch of live coi
 // --- Coil escape in the engine (#94) ---------------------------------------------
 
 test('escape is appended, on half the hard bots and every expert bot; every bot keeps its other tactics (#94)', () => {
-  assert.equal(TACTICS.length, 12);
   assert.equal(TACTICS[11], 'escape');
   for (const level of ['easy', 'normal']) assert.equal(DIFFICULTY[level].tactics.escape, 0, level);
   assert.equal(DIFFICULTY.hard.tactics.escape, 0.5);

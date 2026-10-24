@@ -161,7 +161,7 @@
 
   // Bot tactics (#78). Their order is part of each bot's identity (see knowsTactic):
   // only ever append.
-  const TACTICS = ['predict', 'anticipate', 'evade', 'headOn', 'scavenge', 'trap', 'pin', 'coil', 'flank', 'read', 'learn', 'escape'];
+  const TACTICS = ['predict', 'anticipate', 'evade', 'headOn', 'scavenge', 'trap', 'pin', 'coil', 'flank', 'read', 'learn', 'escape', 'overcoil', 'shadow'];
   const tactics = (shares) => Object.fromEntries(TACTICS.map((k) => [k, shares[k] || 0]));
 
   // Per difficulty (#16). skill: look-ahead, reaction time and steering precision.
@@ -181,7 +181,7 @@
     },
     hard: {
       skill: [0.7, 1.0], aggro: [0.35, 1.0], preyRatio: 1.6, bigShare: 0.2, bigMax: 2500,
-      tactics: tactics({ predict: 1, anticipate: 0.7, evade: 0.6, headOn: 0.5, scavenge: 0.5, trap: 0.4, pin: 0.4, coil: 0.3, read: 0.5, escape: 0.5 }),
+      tactics: tactics({ predict: 1, anticipate: 0.7, evade: 0.6, headOn: 0.5, scavenge: 0.5, trap: 0.4, pin: 0.4, coil: 0.3, read: 0.5, escape: 0.5, overcoil: 0.3, shadow: 0.4 }),
     },
     expert: {
       skill: [0.85, 1.0], aggro: [0.6, 1.0], preyRatio: 2, bigShare: 0.35, bigMax: 5000,
@@ -585,19 +585,38 @@
     return clear / dirs.length;
   }
 
-  // Coil escape (#94): the circle a clearly bigger nearby head is turning on, if our head is inside
-  // it. Only what a player could see: mass, observed turning, speed and positions, never o.ai.
+  // The circle a head is visibly turning on: from its observed turning, speed and heading, never
+  // o.ai. Null unless it turns steadily (1.2 rad/s or more) on a circle of radius 500 or less.
   // dir: +1 when it circles counter-clockwise (turnRate > 0), -1 clockwise.
-  function coilCircle(w, o) {
-    if (o.mass < 1.5 * w.mass) return null;
+  function turnCircle(o) {
     const tr = o.turnRate;
     if (Math.abs(tr) < 1.2) return null;
     const rho = o.speed / Math.abs(tr), dir = tr > 0 ? 1 : -1;
     if (rho > 500) return null;
-    const cx = o.sx[0] - Math.sin(o.angle) * rho * dir, cy = o.sy[0] + Math.cos(o.angle) * rho * dir;
-    if (Math.hypot(cx - w.sx[0], cy - w.sy[0]) >= rho - o.r) return null;
-    return { cx, cy, rho, dir };
+    return { cx: o.sx[0] - Math.sin(o.angle) * rho * dir, cy: o.sy[0] + Math.cos(o.angle) * rho * dir, rho, dir };
   }
+  // Coil escape (#94): the circle a clearly bigger nearby head is turning on, if our head is inside it.
+  function coilCircle(w, o) {
+    if (o.mass < 1.5 * w.mass) return null;
+    const c = turnCircle(o);
+    if (!c || Math.hypot(c.cx - w.sx[0], c.cy - w.sy[0]) >= c.rho - o.r) return null;
+    return c;
+  }
+  // Coil the coiler (#150): o's turn circle when it is visibly coiling, that is when the head of a
+  // worm with at most half its mass is inside it. Adds that worm as `victim`.
+  function knotOf(g, o) {
+    const c = turnCircle(o);
+    if (!c) return null;
+    for (const v of g.worms) {
+      if (v === o || v.dead || v.mass > 0.5 * o.mass) continue;
+      if (Math.hypot(c.cx - v.sx[0], c.cy - v.sy[0]) < c.rho - o.r) return { ...c, victim: v };
+    }
+    return null;
+  }
+  // The radius to start coiling round a knot: outside the coiler's circle and its body, with room
+  // for our own body (r: ours).
+  const knotRadius = (k, o, r) => k.rho + o.r + 2 * r + 20;
+  const KNOT_HOLD = 0.5;
   const CIRCLED_HOLD = 0.5; // seconds a bot stays circled after the signs last held (#94)
 
   // The point to cross in front of a prey. Without prediction: ahead along its heading, by
@@ -665,7 +684,7 @@
   const wariness = (ai, o, now) => { const m = recall(ai, o.id, now); return m ? m.kills + m.grudge : 0; };
   const CUT_MODES = ['cut', 'trap', 'flank', 'pin', 'learn']; // moving in ahead of the prey
   const REMAINS_MARGIN = 100; // a scavenger this far past the remains' reach is still there (#146)
-  const endHunt = (ai) => { ai.prey = null; ai.coilDir = 0; ai.retaliating = null; };
+  const endHunt = (ai) => { ai.prey = null; ai.coilDir = 0; ai.retaliating = null; ai.coilKnot = false; ai.fromShadow = false; ai.shadowBoost = false; };
   // What hunting worm o, its head d away, is worth against a meal of remains (score value / (d + 200)):
   // what the kill drops, discounted for hunts that fail (#122).
   const huntScore = (o, d) => (CFG.HUNT_ODDS * Math.max(10, 0.8 * o.mass)) / (d + 200);
@@ -689,6 +708,7 @@
     seekRemains(t);
     seekHeadOn(t);
     pickPrey(t);
+    seekShadow(t);
     chasePrey(t);
     noticeCoil(t);
     evadeCutters(t);
@@ -904,7 +924,18 @@
       let bg = SEEN_MIN;
       for (const c of cands) if (c.grudge >= bg) { bg = c.grudge; grudgeTgt = c.o; }
     }
+    let coiler = null;
+    if (!grudgeTgt && t.knows('overcoil') && t.knows('coil')) {
+      // Coil the coiler (#150): the nearest worm visibly coiling a smaller one that we could coil
+      // round the whole knot.
+      for (const c of cands) {
+        if (c.o.mass > w.mass * 0.5) continue;
+        const k = knotOf(g, c.o);
+        if (k && lengthFor(w.mass) >= TAU * knotRadius(k, c.o, t.r) * 1.3) { coiler = c.o; break; }
+      }
+    }
     if (grudgeTgt) tgt = grudgeTgt;
+    else if (coiler) tgt = coiler;
     else if (t.knows('trap')) {
       let bs = Infinity;
       for (const c of cands.slice(0, 3)) {
@@ -918,27 +949,117 @@
     ai.coilDir = 0;
   }
 
+  // Shadowing (#150): a bot with nothing better to do runs alongside a worm too big to hunt, up to
+  // SHADOW_MAX times its mass, and cuts in at its head when a safe cut opens. At most two bots shadow
+  // the same worm (bots may know what other bots are doing, as for hunting). Not saved.
+  const SHADOW_MAX = 4, SHADOW_PICK = 600, SHADOW_LOSE = 900, SHADOW_TIME = 15, SHADOW_GAP = 50, SHADOW_CUT = 350;
+  function shadowers(g, w, o) {
+    let n = 0;
+    for (const b of g.worms) if (b !== w && !b.dead && b.ai && b.ai.shadow === o) n++;
+    return n;
+  }
+  function seekShadow(t) {
+    const { w, g, ai, hx, hy } = t;
+    if (!t.knows('shadow')) return;
+    let o = ai.shadow;
+    if (o && (o.dead || g.time > ai.shadowUntil || ai.prey || t.meal > 0 || Math.hypot(o.sx[0] - hx, o.sy[0] - hy) > SHADOW_LOSE)) o = ai.shadow = null;
+    if (t.mode === 'headOn' || ai.prey || t.meal > 0) return;
+    if (!o) {
+      if (w.mass <= 30 || !(g.rng() < ai.aggro * 0.1)) return;
+      let bd = SHADOW_PICK;
+      for (const c of g.worms) {
+        if (c === w || c.dead || c.shield > 0) continue;
+        if (c.mass <= w.mass * t.diff.preyRatio || c.mass > w.mass * SHADOW_MAX) continue;
+        const d = Math.hypot(c.sx[0] - hx, c.sy[0] - hy);
+        if (d >= bd || shadowers(g, w, c) >= 2) continue;
+        const m = t.read ? recall(ai, c.id, g.time) : null;
+        if (m && m.kills >= SEEN_MIN) continue; // a reader leaves alone a worm it saw kill
+        bd = d; o = c;
+      }
+      if (!o) return;
+      ai.shadow = o;
+      ai.shadowUntil = g.time + SHADOW_TIME;
+    }
+    const cut = shadowCut(t, o);
+    if (cut) {
+      // Hand over to an ordinary cut-off: the prey limit only applies to picking prey.
+      ai.shadow = null;
+      ai.shadowBoost = cut.boost;
+      ai.prey = o;
+      ai.retaliating = null;
+      ai.huntUntil = g.time + 2;
+      ai.coilDir = 0;
+      ai.fromShadow = true;
+      return;
+    }
+    // Run alongside: a point beside its body, a little behind its head, out on the side we are on.
+    const sp = spacingFor(o.r), n = o.sx.length;
+    const k = Math.min(n - 2, Math.max(1, Math.round((3 * (o.r + t.r) + 60) / sp)));
+    const px = o.sx[k], py = o.sy[k];
+    let nx = -(o.sy[k - 1] - o.sy[k + 1]), ny = o.sx[k - 1] - o.sx[k + 1];
+    const nl = Math.hypot(nx, ny) || 1;
+    nx /= nl; ny /= nl;
+    if (nx * (hx - px) + ny * (hy - py) < 0) { nx = -nx; ny = -ny; }
+    const off = o.r + t.r + SHADOW_GAP;
+    t.goal = Math.atan2(py + ny * off - hy, px + nx * off - hx);
+    t.goalW = 1.6;
+    t.mode = 'shadow';
+  }
+  // A shadow's cut-in: near its head but not in front of it, going its way, and the cut-off point is
+  // reachable along a path we can take, clear of bodies, before its head gets there: at normal speed,
+  // or boosting when we can afford it and the boosted path is clear too. Returns null, or { boost }.
+  function shadowCut(t, o) {
+    const { w, g, hx, hy, r, skill } = t;
+    const ohx = o.sx[0], ohy = o.sy[0];
+    if (Math.hypot(ohx - hx, ohy - hy) > SHADOW_CUT) return null;
+    if ((hx - ohx) * Math.cos(o.angle) + (hy - ohy) * Math.sin(o.angle) > 2 * o.r) return null; // in front: a head-on
+    if (Math.abs(angleDiff(w.angle, o.angle)) > Math.PI / 3) return null; // going its way
+    const cp = cutPoint(w, o, t.knows('predict'));
+    const theirs = Math.hypot(cp.x - ohx, cp.y - ohy) / Math.max(o.speed, 1);
+    const rad = r + 4 + 6 * skill, step = 2 * rad, a = Math.atan2(cp.y - hy, cp.x - hx);
+    for (const boost of w.mass > 60 ? [false, true] : [false]) {
+      const p = reachPath(w, a, boost);
+      const len = p.s1 + Math.hypot(cp.x - p.x1, cp.y - p.y1); // along the turn, then straight
+      if (len / p.v > theirs - 0.1) continue;
+      let clear = true;
+      for (let s = step; s < len && clear; s += step) {
+        const q = reachAt(p, s);
+        if (hitAt(g, w, q.x, q.y, rad)) clear = false;
+      }
+      if (clear) return { boost };
+    }
+    return null;
+  }
+
   // Chase the prey: drop it for a better meal, coil it, or cut it off.
   function chasePrey(t) {
-    const { w, ai, hx, hy, r } = t;
+    const { w, g, ai, hx, hy, r } = t;
     const o = ai.prey;
     if (!o) return;
     const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d = Math.sqrt(dx * dx + dy * dy);
-    const R0 = Math.max(120, 4 * o.r + 2 * r);
+    // A prey that is coiling a smaller worm is circled round its whole knot (#150). The knot is held
+    // for KNOT_HOLD after it was last seen, so a wobble in the coiler's turning doesn't restart our
+    // circle. Not saved.
+    let knot = t.knows('overcoil') && t.knows('coil') ? knotOf(g, o) : null;
+    if (knot) { ai.knot = knot; ai.knotUntil = g.time + KNOT_HOLD; } else if (ai.coilKnot && ai.knot && g.time < ai.knotUntil) knot = ai.knot;
+    if (!!knot !== !!ai.coilKnot) { ai.coilDir = 0; ai.coilKnot = !!knot; } // start the circle afresh
+    const R0 = knot ? knotRadius(knot, o, r) : Math.max(120, 4 * o.r + 2 * r);
+    const dc = knot ? Math.hypot(knot.cx - hx, knot.cy - hy) : d; // to what we circle
     if (d > 900) endHunt(ai);
     else if (t.meal > huntScore(o, d)) {
       // A meal before a fight: drop the hunt, coil included, for better remains (#122). A head-on
       // set above still comes first.
       endHunt(ai);
       if (t.mode !== 'headOn') goForMeal(t);
-    } else if (t.knows('coil') && o.mass <= w.mass * 0.5 && lengthFor(w.mass) >= TAU * R0 * 1.3 && d < (ai.coilDir ? 2.5 * R0 : 350)) {
-      coilPrey(t, o, dx, dy, R0);
+    } else if (t.knows('coil') && o.mass <= w.mass * 0.5 && lengthFor(w.mass) >= TAU * R0 * 1.3 && dc < (ai.coilDir ? 2.5 * R0 : knot ? R0 + 350 : 350)) {
+      coilPrey(t, o, knot ? knot.cx - hx : dx, knot ? knot.cy - hy : dy, R0, knot); // turn toward what we circle
     } else cutOff(t, o, dx, dy, d);
     if (ai.prey) { t.headMass = 0; t.ignore = null; }
   }
 
-  // Coil: circle the prey's head at a shrinking radius; our own body is the trap.
-  function coilPrey(t, o, dx, dy, R0) {
+  // Coil: circle the prey's head at a shrinking radius; our own body is the trap. Round a knot, circle
+  // the coiler's circle instead, down to that circle itself: the coiler has to turn in or cross us.
+  function coilPrey(t, o, dx, dy, R0, knot) {
     const { w, g, ai, hx, hy, r } = t;
     if (!ai.coilDir) {
       ai.coilDir = Math.cos(w.angle) * dy - Math.sin(w.angle) * dx >= 0 ? 1 : -1; // turn toward the prey's side
@@ -946,9 +1067,10 @@
       ai.coilT = g.time;
       ai.huntUntil = g.time + 6;
     }
-    ai.coilR = Math.max(2 * o.r + 2 * r, ai.coilR * Math.pow(0.85, g.time - ai.coilT));
+    const floor = knot ? Math.max(knot.rho, 2 * o.r + 2 * r) : 2 * o.r + 2 * r;
+    ai.coilR = Math.max(floor, ai.coilR * Math.pow(0.85, g.time - ai.coilT));
     ai.coilT = g.time;
-    const c = predictHead(o, 0.3);
+    const c = knot ? { x: knot.cx, y: knot.cy } : predictHead(o, 0.3);
     const rho = Math.hypot(hx - c.x, hy - c.y), phi = Math.atan2(hy - c.y, hx - c.x);
     t.goal = phi + ai.coilDir * (Math.PI / 2 + clamp((rho - ai.coilR) / ai.coilR, -0.5, 0.8));
     t.goalW = 2;
@@ -1002,6 +1124,8 @@
     // heading for them: most hunters that die are killed by their own prey turning in.
     const safe = !knows('predict') || (d > 150 + 2 * (r + o.r) && Math.abs(angleDiff(o.angle, Math.atan2(-dy, -dx))) > Math.PI / 2);
     if (d < 450 && w.mass > 60 && safe && g.rng() < ai.aggro * skill) t.boost = true;
+    // A cut from a shadow (#150) that only works boosting boosts; steer checks the boosted path.
+    if (ai.fromShadow && ai.shadowBoost) t.boost = true;
   }
 
   // Coil escape (#94): circled by a clearly bigger worm, with our head closed in. The circle comes
@@ -1162,7 +1286,8 @@
     // really take, as far as a boost carries them, whether or not they are boosting already (#149).
     // Headings themselves are still judged along straight lines: judging them along reachable paths
     // made Expert bots very hard to kill and trapped bots worse at surviving a coil (measured, #149).
-    const reach = !!(sharp && sharp.reach > 0) || !!t.circled; // circled bots check it on any level (#94)
+    // Circled bots (#94) and cuts from a shadow (#150) check it on any level.
+    const reach = !!(sharp && sharp.reach > 0) || !!t.circled || !!w.ai.fromShadow;
     if (w.wantBoost && reach) {
       const p = reachPath(w, bestA, true), far = L * 1.6;
       for (let d = step; ; d += step) {
@@ -1787,6 +1912,6 @@
   root.WormEngine = {
     CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, MIN_BOTS, MAX_BOTS, arenaRadius, DIFFICULTY, DIFFICULTIES, TACTICS, SPECIALS, validateSnapshot, seasonalTheme,
     freshHabits, validHabits, recordHabit, habitBias, habitBoost,
-    Game, Worm, botThink, knowsTactic, predictHead, reachPath, reachAt, freedom, radiusFor, lengthFor, angleDiff, TAU,
+    Game, Worm, botThink, knowsTactic, predictHead, reachPath, reachAt, freedom, knotOf, radiusFor, lengthFor, angleDiff, TAU,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
