@@ -8,10 +8,15 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-// Seconds per file on CI (mean of 4 runs with Chrome warmed up, #134). Only the balance depends on
-// these, never which files run. Remeasure when a file's tests change a lot.
+// Seconds per file on CI (mean of 4 runs with Chrome warmed up, #134; the engine test files split
+// in #153 are estimated from local runs x 1.3). Only the balance depends on these, never which
+// files run. Remeasure when a file's tests change a lot.
 const SECONDS = {
-  'tests/engine.test.js': 41,
+  'tests/simulation.test.js': 22,
+  'tests/engine.test.js': 10,
+  'tests/habits.test.js': 9,
+  'tests/bots.test.js': 5,
+  'tests/coil.test.js': 3,
   'tests/browser/layout.test.js': 37,
   'tests/browser/tabs.test.js': 29,
   'tests/browser/bots.test.js': 13,

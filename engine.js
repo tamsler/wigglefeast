@@ -676,31 +676,74 @@
     return n;
   }
 
+  // botThink runs these in order (#153). Each reads and updates one plan, `t`: the goal heading
+  // and its weight, whether to boost, the mode, and what the heading check should treat
+  // differently. The order is part of the behaviour: later steps override earlier goals, and the
+  // random draws (g.rng) must come in the same sequence for seeded worlds to replay.
   function botThink(w, g) {
+    const t = thinkPlan(w, g);
+    refreshWander(t);
+    seekFood(t);
+    seekPowerups(t);
+    gatherHeads(t);
+    seekRemains(t);
+    seekHeadOn(t);
+    pickPrey(t);
+    chasePrey(t);
+    noticeCoil(t);
+    evadeCutters(t);
+    if (t.goal === null) {
+      t.goal = Math.atan2(w.ai.wy - t.hy, w.ai.wx - t.hx);
+      t.goalW = 0.5;
+    }
+    w.ai.mode = t.mode;
+    planGhosts(t);
+    steer(t);
+  }
+
+  // What every step needs, and the plan they build. Not saved: rebuilt every think.
+  function thinkPlan(w, g) {
     const ai = w.ai, skill = ai.skill, r = w.r;
     const level = g.settings.difficulty;
     const diff = DIFFICULTY[level] || DIFFICULTY.normal;
     const sharp = diff.sharp; // expert only (#110)
-    const sense = sharp ? sharp.sense : 1;
     const knows = (k) => knowsTactic(w, level, k);
     const hx = w.sx[0], hy = w.sy[0];
-    const edge = g.R - r * 3 - 40, edge2 = edge * edge;
-    const L = (80 + 240 * skill) * (w.boosting ? 1.6 : 1) * (sharp ? sharp.look : 1) + r * 3;
-    const mySpeed = Math.max(w.speed, CFG.BASE_SPEED);
-    let goal = null, goalW = 0, boost = false, mode = 'wander';
-    let headMass = 0, ignore = null; // set while going head-on
+    const edge = g.R - r * 3 - 40;
     ai.aim = null; // the point a hunt aims at, for tests and tools; not saved
+    return {
+      w, g, ai, skill, r, diff, sharp, knows, hx, hy,
+      sense: sharp ? sharp.sense : 1,
+      edge2: edge * edge,
+      L: (80 + 240 * skill) * (w.boosting ? 1.6 : 1) * (sharp ? sharp.look : 1) + r * 3, // look-ahead
+      mySpeed: Math.max(w.speed, CFG.BASE_SPEED),
+      ca: Math.cos(w.angle), sa: Math.sin(w.angle),
+      FR: 200 + 300 * skill, // food range
+      anticipate: knows('anticipate'), evade: knows('evade'), headOn: knows('headOn'), escape: knows('escape'), read: knows('read'),
+      heads: [], // nearby heads, nearest first ({ o, d })
+      best: 0, // score of the best food
+      meal: 0, mealA: 0, mealBoost: false, // score, heading and boost of the best uncontested remains
+      // The plan:
+      goal: null, goalW: 0, boost: false, mode: 'wander',
+      headMass: 0, ignore: null, // set while going head-on
+      threatPath: null, // sharp bots: the coming paths of every cutter
+      circled: null, // { o, cx, cy, rho, dir } while a coil escape runs (#94)
+    };
+  }
 
-    // Wander point, refreshed when reached or occasionally.
-    const wdx = ai.wx - hx, wdy = ai.wy - hy;
+  // Wander point, refreshed when reached or occasionally.
+  function refreshWander(t) {
+    const { ai, g } = t;
+    const wdx = ai.wx - t.hx, wdy = ai.wy - t.hy;
     if (wdx * wdx + wdy * wdy < 200 * 200 || g.rng() < 0.01) {
       const p = randomInCircle(g.rng, g.R * 0.75);
       ai.wx = p.x; ai.wy = p.y;
     }
+  }
 
-    // Food: best value-per-distance, preferring what's ahead.
-    const FR = 200 + 300 * skill;
-    const ca = Math.cos(w.angle), sa = Math.sin(w.angle);
+  // Food: best value-per-distance, preferring what's ahead.
+  function seekFood(t) {
+    const { w, g, hx, hy, ca, sa, FR, edge2, skill } = t;
     let best = 0, bx = 0, by = 0, bv = 0, bd = 0;
     g.foodGrid.query(hx, hy, FR, (i) => {
       const f = g.food[i];
@@ -722,386 +765,360 @@
       const s = (v * (1.3 + 0.7 * ((dx * ca + dy * sa) / d))) / (d + 40);
       if (s > best) { best = s; bx = p.x; by = p.y; bv = v; bd = d; }
     }
+    t.best = best;
     if (best > 0) {
-      goal = Math.atan2(by - hy, bx - hx);
-      goalW = 1;
-      mode = 'food';
-      if (bv >= 6 && bd < 260 && skill > 0.45 && w.mass > 50 && g.rng() < skill * 0.5) boost = true;
+      t.goal = Math.atan2(by - hy, bx - hx);
+      t.goalW = 1;
+      t.mode = 'food';
+      if (bv >= 6 && bd < 260 && skill > 0.45 && w.mass > 50 && g.rng() < skill * 0.5) t.boost = true;
     }
+  }
 
-    // Power-ups are worth a detour.
+  // Power-ups are worth a detour.
+  function seekPowerups(t) {
+    const { g, hx, hy, edge2, skill } = t;
     const PR = 220 + 220 * skill;
     for (const p of g.powerups) {
       const dx = p.x - hx, dy = p.y - hy;
       if (dx * dx + dy * dy < PR * PR && p.x * p.x + p.y * p.y < edge2) {
-        goal = Math.atan2(dy, dx);
-        goalW = 1.5;
-        mode = 'powerup';
+        t.goal = Math.atan2(dy, dx);
+        t.goalW = 1.5;
+        t.mode = 'powerup';
         break;
       }
     }
+  }
 
-    // Nearby heads, nearest first, for the defensive tactics.
-    const anticipate = knows('anticipate'), evade = knows('evade'), headOn = knows('headOn'), escape = knows('escape');
-    const heads = [];
-    if (anticipate || evade || headOn || escape) {
-      const HR = (L + 300) * sense;
+  // Nearby heads, nearest first, for the defensive tactics.
+  function gatherHeads(t) {
+    const { w, g, hx, hy, sharp, heads } = t;
+    if (!(t.anticipate || t.evade || t.headOn || t.escape)) return;
+    const HR = (t.L + 300) * t.sense;
+    for (const o of g.worms) {
+      if (o === w || o.dead || o.shield > 0) continue;
+      const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d2 = dx * dx + dy * dy;
+      if (d2 < HR * HR) heads.push({ o, d: Math.sqrt(d2) });
+    }
+    heads.sort((a, b) => a.d - b.d);
+    const maxHeads = sharp ? sharp.heads : 8;
+    if (heads.length > maxHeads) heads.length = maxHeads;
+  }
+
+  // Scavenging: the remains of a worm that died nearby, if they beat the best food and no other
+  // head is closer to them: racing others into the remains got scavengers killed. The best such
+  // meal is also weighed against hunting: a meal before a fight (#122).
+  function seekRemains(t) {
+    const { w, g, ai, hx, hy, ca, sa, edge2 } = t;
+    if (!t.knows('scavenge') || !g.recentDeaths.length) return;
+    const SR = t.FR + 400;
+    let meal = 0, sx = 0, sy = 0, sm = 0, sd = 0, sreach = 0, srem = null;
+    for (const rem of g.recentDeaths) {
+      const dx = rem.x - hx, dy = rem.y - hy, d = Math.sqrt(dx * dx + dy * dy);
+      if (d > SR || rem.x * rem.x + rem.y * rem.y > edge2) continue;
+      const sc = rem.value / (d + 200); // what is left of it (#122)
+      if (sc <= meal) continue;
+      let contested = false;
       for (const o of g.worms) {
-        if (o === w || o.dead || o.shield > 0) continue;
-        const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d2 = dx * dx + dy * dy;
-        if (d2 < HR * HR) heads.push({ o, d: Math.sqrt(d2) });
+        if (o !== w && !o.dead && Math.hypot(o.sx[0] - rem.x, o.sy[0] - rem.y) < d) { contested = true; break; }
       }
-      heads.sort((a, b) => a.d - b.d);
-      const maxHeads = sharp ? sharp.heads : 8;
-      if (heads.length > maxHeads) heads.length = maxHeads;
+      if (contested) continue;
+      meal = sc; sx = rem.x; sy = rem.y; sm = rem.value * 5; sd = d; sreach = rem.reach; srem = rem;
     }
-
-    // Scavenging: the remains of a worm that died nearby, if they beat the best food and no other
-    // head is closer to them: racing others into the remains got scavengers killed. The best such
-    // meal is also weighed against hunting below: a meal before a fight (#122).
-    let meal = 0, mealA = 0, mealBoost = false; // meal: score of the best uncontested remains
-    if (knows('scavenge') && g.recentDeaths.length) {
-      const SR = FR + 400;
-      let sx = 0, sy = 0, sm = 0, sd = 0, sreach = 0, srem = null;
-      for (const rem of g.recentDeaths) {
-        const dx = rem.x - hx, dy = rem.y - hy, d = Math.sqrt(dx * dx + dy * dy);
-        if (d > SR || rem.x * rem.x + rem.y * rem.y > edge2) continue;
-        const sc = rem.value / (d + 200); // what is left of it (#122)
-        if (sc <= meal) continue;
-        let contested = false;
-        for (const o of g.worms) {
-          if (o !== w && !o.dead && Math.hypot(o.sx[0] - rem.x, o.sy[0] - rem.y) < d) { contested = true; break; }
-        }
-        if (contested) continue;
-        meal = sc; sx = rem.x; sy = rem.y; sm = rem.value * 5; sd = d; sreach = rem.reach; srem = rem;
+    t.meal = meal;
+    if (meal > 0) {
+      // Arrived (#141): in the remains, go for their food itself, scored like plain food, and don't
+      // boost. Aiming at the middle point made the bot circle it, boosting, while the food spread
+      // around it stayed uneaten. Once in, overshooting the edge a little while chasing a pellet
+      // there still counts as arrived, or it turned back for the middle at a boost (#146).
+      if (sd < sreach) ai.remainsIn = srem; // not saved, like the remains themselves
+      const there = sd < sreach || (ai.remainsIn === srem && sd < sreach + REMAINS_MARGIN);
+      let tx = sx, ty = sy;
+      if (there) {
+        let bs = 0;
+        g.foodGrid.query(sx, sy, sreach, (i) => {
+          const f = g.food[i];
+          if (f.dead || f.natural || (f.x - sx) ** 2 + (f.y - sy) ** 2 > sreach * sreach) return false;
+          const dx = f.x - hx, dy = f.y - hy, d = Math.sqrt(dx * dx + dy * dy) + 1;
+          const s = (f.v * (1.3 + 0.7 * ((dx * ca + dy * sa) / d))) / (d + 40);
+          if (s > bs) { bs = s; tx = f.x; ty = f.y; }
+          return false;
+        });
       }
-      if (meal > 0) {
-        // Arrived (#141): in the remains, go for their food itself, scored like plain food, and don't
-        // boost. Aiming at the middle point made the bot circle it, boosting, while the food spread
-        // around it stayed uneaten. Once in, overshooting the edge a little while chasing a pellet
-        // there still counts as arrived, or it turned back for the middle at a boost (#146).
-        if (sd < sreach) ai.remainsIn = srem; // not saved, like the remains themselves
-        const there = sd < sreach || (ai.remainsIn === srem && sd < sreach + REMAINS_MARGIN);
-        let tx = sx, ty = sy;
-        if (there) {
-          let bs = 0;
-          g.foodGrid.query(sx, sy, sreach, (i) => {
-            const f = g.food[i];
-            if (f.dead || f.natural || (f.x - sx) ** 2 + (f.y - sy) ** 2 > sreach * sreach) return false;
-            const dx = f.x - hx, dy = f.y - hy, d = Math.sqrt(dx * dx + dy * dy) + 1;
-            const s = (f.v * (1.3 + 0.7 * ((dx * ca + dy * sa) / d))) / (d + 40);
-            if (s > bs) { bs = s; tx = f.x; ty = f.y; }
-            return false;
-          });
-        }
-        mealA = Math.atan2(ty - hy, tx - hx);
-        mealBoost = sm > 300 && !there && sd < 500 && w.mass > 60;
-      }
-      if (meal > best) {
-        goal = mealA;
-        goalW = 1.3;
-        mode = 'scavenge';
-        boost = mealBoost; // its own call: a boost rolled for plain food it passed over doesn't carry over (#141)
-      }
+      t.mealA = Math.atan2(ty - hy, tx - hx);
+      t.mealBoost = sm > 300 && !there && sd < 500 && w.mass > 60;
     }
+    if (meal > t.best) goForMeal(t);
+  }
+  function goForMeal(t) {
+    t.goal = t.mealA;
+    t.goalW = 1.3;
+    t.mode = 'scavenge';
+    t.boost = t.mealBoost; // its own call: a boost rolled for plain food it passed over doesn't carry over (#141)
+  }
 
-    // Head-on: the bigger worm wins, so meet a clearly smaller oncoming head.
-    if (headOn) {
-      for (const { o, d } of heads) {
-        if (d > 220) break;
-        if (o.mass >= w.mass * HEAD_ON || Math.abs(angleDiff(w.angle, o.angle)) < (2 * Math.PI) / 3) continue;
-        if (Math.abs(angleDiff(w.angle, Math.atan2(o.sy[0] - hy, o.sx[0] - hx))) > Math.PI / 3) continue;
-        const p = predictHead(o, d / (mySpeed + o.speed));
-        goal = Math.atan2(p.y - hy, p.x - hx);
-        goalW = 2.5;
-        mode = 'headOn';
-        headMass = w.mass * HEAD_ON;
-        ignore = o;
-        break;
-      }
+  // Head-on: the bigger worm wins, so meet a clearly smaller oncoming head.
+  function seekHeadOn(t) {
+    const { w, hx, hy } = t;
+    if (!t.headOn) return;
+    for (const { o, d } of t.heads) {
+      if (d > 220) break;
+      if (o.mass >= w.mass * HEAD_ON || Math.abs(angleDiff(w.angle, o.angle)) < (2 * Math.PI) / 3) continue;
+      if (Math.abs(angleDiff(w.angle, Math.atan2(o.sy[0] - hy, o.sx[0] - hx))) > Math.PI / 3) continue;
+      const p = predictHead(o, d / (t.mySpeed + o.speed));
+      t.goal = Math.atan2(p.y - hy, p.x - hx);
+      t.goalW = 2.5;
+      t.mode = 'headOn';
+      t.headMass = w.mass * HEAD_ON;
+      t.ignore = o;
+      break;
     }
+  }
 
-    // Hunting: pick a nearby worm lighter than the level allows; with trap, prefer one with
-    // few ways out.
-    const read = knows('read');
+  // Hunting: pick a nearby worm lighter than the level allows; with trap, prefer one with few ways
+  // out. Readers retaliate, and leave alone a worm they saw kill.
+  function pickPrey(t) {
+    const { w, g, ai, hx, hy, read, meal } = t;
     if (ai.prey && (ai.prey.dead || g.time > ai.huntUntil)) endHunt(ai);
-    if (!ai.prey && w.mass > 30 && g.rng() < ai.aggro * 0.2) {
-      const td = Math.pow(300 + 350 * ai.aggro, 2), cands = [];
-      for (const o of g.worms) {
-        if (o === w || o.dead || o.shield > 0) continue;
-        const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d2 = dx * dx + dy * dy;
-        if (d2 < td && o.mass < w.mass * diff.preyRatio) {
-          if (meal > 0 && huntScore(o, Math.sqrt(d2)) <= meal) continue; // a meal before a fight (#122)
-          // A reader leaves alone a worm it saw kill, unless that worm is much smaller.
-          const m = read ? recall(ai, o.id, g.time) : null;
-          if (m && m.kills >= SEEN_MIN && o.mass > w.mass * 0.5) continue;
-          // No gang-ups: a worm it holds a grudge against, with two other bots already
-          // retaliating, isn't prey at all, not even as the nearest or easiest (#119).
-          if (m && m.grudge >= SEEN_MIN && retaliators(g, w, o) >= 2) continue;
-          cands.push({ o, d2, grudge: m ? m.grudge : 0 });
-        }
-      }
-      if (cands.length) {
-        cands.sort((a, b) => a.d2 - b.d2);
-        let tgt = cands[0].o, grudgeTgt = null;
-        if (read) {
-          // Retaliate against the worm it holds the biggest grudge against (ganged-up ones are
-          // already left out above).
-          let bg = SEEN_MIN;
-          for (const c of cands) if (c.grudge >= bg) { bg = c.grudge; grudgeTgt = c.o; }
-        }
-        if (grudgeTgt) tgt = grudgeTgt;
-        else if (knows('trap')) {
-          let bs = Infinity;
-          for (const c of cands.slice(0, 3)) {
-            const sc = Math.sqrt(c.d2) * (0.5 + freedom(g, c.o, w, 0));
-            if (sc < bs) { bs = sc; tgt = c.o; }
-          }
-        }
-        ai.prey = tgt;
-        ai.retaliating = grudgeTgt;
-        ai.huntUntil = g.time + rand(g.rng, 1.5, 4.5);
-        ai.coilDir = 0;
+    if (ai.prey || w.mass <= 30 || !(g.rng() < ai.aggro * 0.2)) return;
+    const td = Math.pow(300 + 350 * ai.aggro, 2), cands = [];
+    for (const o of g.worms) {
+      if (o === w || o.dead || o.shield > 0) continue;
+      const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d2 = dx * dx + dy * dy;
+      if (d2 < td && o.mass < w.mass * t.diff.preyRatio) {
+        if (meal > 0 && huntScore(o, Math.sqrt(d2)) <= meal) continue; // a meal before a fight (#122)
+        // A reader leaves alone a worm it saw kill, unless that worm is much smaller.
+        const m = read ? recall(ai, o.id, g.time) : null;
+        if (m && m.kills >= SEEN_MIN && o.mass > w.mass * 0.5) continue;
+        // No gang-ups: a worm it holds a grudge against, with two other bots already
+        // retaliating, isn't prey at all, not even as the nearest or easiest (#119).
+        if (m && m.grudge >= SEEN_MIN && retaliators(g, w, o) >= 2) continue;
+        cands.push({ o, d2, grudge: m ? m.grudge : 0 });
       }
     }
-    if (ai.prey) {
-      const o = ai.prey;
-      const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d = Math.sqrt(dx * dx + dy * dy);
-      const R0 = Math.max(120, 4 * o.r + 2 * r);
-      if (d > 900) endHunt(ai);
-      else if (meal > huntScore(o, d)) {
-        // A meal before a fight: drop the hunt, coil included, for better remains (#122). A head-on
-        // set above still comes first.
-        endHunt(ai);
-        if (mode !== 'headOn') { goal = mealA; goalW = 1.3; mode = 'scavenge'; boost = mealBoost; }
-      } else if (knows('coil') && o.mass <= w.mass * 0.5 && lengthFor(w.mass) >= TAU * R0 * 1.3 && d < (ai.coilDir ? 2.5 * R0 : 350)) {
-        // Coil: circle the prey's head at a shrinking radius; our own body is the trap.
-        if (!ai.coilDir) {
-          ai.coilDir = Math.cos(w.angle) * dy - Math.sin(w.angle) * dx >= 0 ? 1 : -1; // turn toward the prey's side
-          ai.coilR = R0;
-          ai.coilT = g.time;
-          ai.huntUntil = g.time + 6;
-        }
-        ai.coilR = Math.max(2 * o.r + 2 * r, ai.coilR * Math.pow(0.85, g.time - ai.coilT));
-        ai.coilT = g.time;
-        const c = predictHead(o, 0.3);
-        const rho = Math.hypot(hx - c.x, hy - c.y), phi = Math.atan2(hy - c.y, hx - c.x);
-        goal = phi + ai.coilDir * (Math.PI / 2 + clamp((rho - ai.coilR) / ai.coilR, -0.5, 0.8));
-        goalW = 2;
-        mode = 'coil';
-        if (w.mass > 150) boost = true;
-      } else {
-        ai.coilDir = 0;
-        // Learning (#135): against the player, use the record of how they escape a cut-off. Without
-        // evidence bias and pBoost are 0, and the cut is exactly the one without learning.
-        const learn = o.isPlayer && knows('learn');
-        const bias = learn ? habitBias(g.habits) : 0;
-        const pBoost = learn && !o.boosting ? habitBoost(g.habits) : 0;
-        let p = cutPoint(w, o, knows('predict'), 1 + pBoost * (CFG.BOOST_MULT - 1));
-        const nx = -Math.sin(p.a), ny = Math.cos(p.a); // the prey's +1 side
-        const shift = (k, m) => { p = { x: p.x + nx * k, y: p.y + ny * k, a: p.a }; mode = m; };
-        mode = 'cut';
-        const orad = Math.hypot(o.sx[0], o.sy[0]);
-        const radial = orad > 0 ? (Math.cos(o.angle) * o.sx[0] + Math.sin(o.angle) * o.sy[0]) / orad : 1;
-        let flankSide = 0;
-        if (knows('flank')) {
-          for (const h of g.worms) {
-            if (h === w || h.dead || !h.ai || h.ai.prey !== o) continue;
-            const side = Math.cos(o.angle) * (h.sy[0] - o.sy[0]) - Math.sin(o.angle) * (h.sx[0] - o.sx[0]);
-            flankSide = side >= 0 ? -1 : 1; // the side opposite the other hunter
-            break;
-          }
-        }
-        if (knows('pin') && g.R - orad < 450 && Math.abs(radial) < 0.5 && Math.hypot(hx, hy) < orad) {
-          // Pin: cut in on the arena side, ahead of a prey running along the wall.
-          const pr = Math.hypot(p.x, p.y) || 1;
-          p = { x: p.x - (p.x / pr) * 3 * o.r, y: p.y - (p.y / pr) * 3 * o.r, a: p.a };
-          mode = 'pin';
-        } else if (flankSide) shift(flankSide * 4 * o.r, 'flank');
-        else if (Math.abs(bias) >= 0.1) {
-          // Aim at the side the player usually escapes to: away from us (-s) when bias > 0.
-          const s = Math.cos(o.angle) * (hy - o.sy[0]) - Math.sin(o.angle) * (hx - o.sx[0]) >= 0 ? 1 : -1;
-          shift(-s * bias * 4 * o.r, 'learn');
-        } else if (knows('trap')) {
-          // Close the side with more room, so the prey's only way out is the blocked one.
-          const up = freedom(g, o, w, 1), down = freedom(g, o, w, -1);
-          if (Math.abs(up - down) >= 0.25) shift((up > down ? 1 : -1) * 4 * o.r, 'trap');
-        }
-        goal = Math.atan2(p.y - hy, p.x - hx);
-        goalW = 2;
-        ai.aim = p;
-        // Experienced (predicting) hunters don't boost at point-blank range or at a prey
-        // heading for them: most hunters that die are killed by their own prey turning in.
-        const safe = !knows('predict') || (d > 150 + 2 * (r + o.r) && Math.abs(angleDiff(o.angle, Math.atan2(-dy, -dx))) > Math.PI / 2);
-        if (d < 450 && w.mass > 60 && safe && g.rng() < ai.aggro * skill) boost = true;
-      }
-      if (ai.prey) { headMass = 0; ignore = null; }
+    if (!cands.length) return;
+    cands.sort((a, b) => a.d2 - b.d2);
+    let tgt = cands[0].o, grudgeTgt = null;
+    if (read) {
+      // Retaliate against the worm it holds the biggest grudge against (ganged-up ones are
+      // already left out above).
+      let bg = SEEN_MIN;
+      for (const c of cands) if (c.grudge >= bg) { bg = c.grudge; grudgeTgt = c.o; }
     }
+    if (grudgeTgt) tgt = grudgeTgt;
+    else if (t.knows('trap')) {
+      let bs = Infinity;
+      for (const c of cands.slice(0, 3)) {
+        const sc = Math.sqrt(c.d2) * (0.5 + freedom(g, c.o, w, 0));
+        if (sc < bs) { bs = sc; tgt = c.o; }
+      }
+    }
+    ai.prey = tgt;
+    ai.retaliating = grudgeTgt;
+    ai.huntUntil = g.time + rand(g.rng, 1.5, 4.5);
+    ai.coilDir = 0;
+  }
 
-    // Coil escape (#94): circled by a clearly bigger worm, with our head closed in. The circle comes
-    // from what the coiler visibly does, and a bot stays circled for CIRCLED_HOLD after the signs
-    // last held, so one wobble doesn't flip it in and out. Not saved, like remainsIn.
-    let circled = null; // { o, cx, cy, rho, dir }
-    if (escape) {
-      const held = ai.circledBy;
-      if (held && (held.dead || g.time > ai.circledUntil)) ai.circledBy = null;
-      for (const { o } of heads) {
-        const c = coilCircle(w, o);
-        if (!c) continue;
-        if (o !== ai.circledBy && freedom(g, w, null, 0) > 0.5) continue;
-        ai.circledBy = o; ai.circledUntil = g.time + CIRCLED_HOLD; ai.circle = c;
+  // Chase the prey: drop it for a better meal, coil it, or cut it off.
+  function chasePrey(t) {
+    const { w, ai, hx, hy, r } = t;
+    const o = ai.prey;
+    if (!o) return;
+    const dx = o.sx[0] - hx, dy = o.sy[0] - hy, d = Math.sqrt(dx * dx + dy * dy);
+    const R0 = Math.max(120, 4 * o.r + 2 * r);
+    if (d > 900) endHunt(ai);
+    else if (t.meal > huntScore(o, d)) {
+      // A meal before a fight: drop the hunt, coil included, for better remains (#122). A head-on
+      // set above still comes first.
+      endHunt(ai);
+      if (t.mode !== 'headOn') goForMeal(t);
+    } else if (t.knows('coil') && o.mass <= w.mass * 0.5 && lengthFor(w.mass) >= TAU * R0 * 1.3 && d < (ai.coilDir ? 2.5 * R0 : 350)) {
+      coilPrey(t, o, dx, dy, R0);
+    } else cutOff(t, o, dx, dy, d);
+    if (ai.prey) { t.headMass = 0; t.ignore = null; }
+  }
+
+  // Coil: circle the prey's head at a shrinking radius; our own body is the trap.
+  function coilPrey(t, o, dx, dy, R0) {
+    const { w, g, ai, hx, hy, r } = t;
+    if (!ai.coilDir) {
+      ai.coilDir = Math.cos(w.angle) * dy - Math.sin(w.angle) * dx >= 0 ? 1 : -1; // turn toward the prey's side
+      ai.coilR = R0;
+      ai.coilT = g.time;
+      ai.huntUntil = g.time + 6;
+    }
+    ai.coilR = Math.max(2 * o.r + 2 * r, ai.coilR * Math.pow(0.85, g.time - ai.coilT));
+    ai.coilT = g.time;
+    const c = predictHead(o, 0.3);
+    const rho = Math.hypot(hx - c.x, hy - c.y), phi = Math.atan2(hy - c.y, hx - c.x);
+    t.goal = phi + ai.coilDir * (Math.PI / 2 + clamp((rho - ai.coilR) / ai.coilR, -0.5, 0.8));
+    t.goalW = 2;
+    t.mode = 'coil';
+    if (w.mass > 150) t.boost = true;
+  }
+
+  // Cut-off: cross ahead of the prey, shifted by pin, flank, learning or trap.
+  function cutOff(t, o, dx, dy, d) {
+    const { w, g, ai, hx, hy, r, knows, skill } = t;
+    ai.coilDir = 0;
+    // Learning (#135): against the player, use the record of how they escape a cut-off. Without
+    // evidence bias and pBoost are 0, and the cut is exactly the one without learning.
+    const learn = o.isPlayer && knows('learn');
+    const bias = learn ? habitBias(g.habits) : 0;
+    const pBoost = learn && !o.boosting ? habitBoost(g.habits) : 0;
+    let p = cutPoint(w, o, knows('predict'), 1 + pBoost * (CFG.BOOST_MULT - 1));
+    const nx = -Math.sin(p.a), ny = Math.cos(p.a); // the prey's +1 side
+    const shift = (k, m) => { p = { x: p.x + nx * k, y: p.y + ny * k, a: p.a }; t.mode = m; };
+    t.mode = 'cut';
+    const orad = Math.hypot(o.sx[0], o.sy[0]);
+    const radial = orad > 0 ? (Math.cos(o.angle) * o.sx[0] + Math.sin(o.angle) * o.sy[0]) / orad : 1;
+    let flankSide = 0;
+    if (knows('flank')) {
+      for (const h of g.worms) {
+        if (h === w || h.dead || !h.ai || h.ai.prey !== o) continue;
+        const side = Math.cos(o.angle) * (h.sy[0] - o.sy[0]) - Math.sin(o.angle) * (h.sx[0] - o.sx[0]);
+        flankSide = side >= 0 ? -1 : 1; // the side opposite the other hunter
         break;
       }
-      const o = ai.circledBy;
-      if (o && Math.hypot(o.sx[0] - hx, o.sy[0] - hy) > 2 * ai.circle.rho) ai.circledBy = null;
-      if (ai.circledBy) {
-        circled = { o: ai.circledBy, ...ai.circle };
-        endHunt(ai);
-        mode = 'escape';
-        boost = false; // unless the way out allows it, below
-        headMass = 0;
-        ignore = null;
-      }
     }
+    if (knows('pin') && g.R - orad < 450 && Math.abs(radial) < 0.5 && Math.hypot(hx, hy) < orad) {
+      // Pin: cut in on the arena side, ahead of a prey running along the wall.
+      const pr = Math.hypot(p.x, p.y) || 1;
+      p = { x: p.x - (p.x / pr) * 3 * o.r, y: p.y - (p.y / pr) * 3 * o.r, a: p.a };
+      t.mode = 'pin';
+    } else if (flankSide) shift(flankSide * 4 * o.r, 'flank');
+    else if (Math.abs(bias) >= 0.1) {
+      // Aim at the side the player usually escapes to: away from us (-s) when bias > 0.
+      const s = Math.cos(o.angle) * (hy - o.sy[0]) - Math.sin(o.angle) * (hx - o.sx[0]) >= 0 ? 1 : -1;
+      shift(-s * bias * 4 * o.r, 'learn');
+    } else if (knows('trap')) {
+      // Close the side with more room, so the prey's only way out is the blocked one.
+      const up = freedom(g, o, w, 1), down = freedom(g, o, w, -1);
+      if (Math.abs(up - down) >= 0.25) shift((up > down ? 1 : -1) * 4 * o.r, 'trap');
+    }
+    t.goal = Math.atan2(p.y - hy, p.x - hx);
+    t.goalW = 2;
+    ai.aim = p;
+    // Experienced (predicting) hunters don't boost at point-blank range or at a prey
+    // heading for them: most hunters that die are killed by their own prey turning in.
+    const safe = !knows('predict') || (d > 150 + 2 * (r + o.r) && Math.abs(angleDiff(o.angle, Math.atan2(-dy, -dx))) > Math.PI / 2);
+    if (d < 450 && w.mass > 60 && safe && g.rng() < ai.aggro * skill) t.boost = true;
+  }
 
-    // Evasion: a head that will cross our path in the next second before we get there.
-    // Sharp bots (#110) weigh every cutter: they sum each one's sideways escape, nearer ones
-    // counting more, and treat each cutter's coming path as an obstacle.
-    let threatPath = null;
-    if (evade && !circled) { // circled, the escape below decides
-      const ER = (250 + 150 * skill) * sense;
-      const multi = sharp && sharp.escape > 0;
-      let ex = 0, ey = 0, nearD = Infinity, nearAway = 0;
-      const mine = EVADE_T.map((t) => predictHead(w, t));
-      for (const { o, d } of heads) {
-        if (d > ER * 2) break;
-        // Readers give worms they are wary of more room (#83).
-        if (d > ER * (read ? 1 + 0.5 * Math.min(2, wariness(ai, o, g.time)) : 1)) continue;
-        if (headOn && o.mass < w.mass * HEAD_ON) continue; // a head-on there is a win
-        let threat = false;
-        for (let j = 0; j < EVADE_T.length && !threat; j++) {
-          const b = predictHead(o, EVADE_T[j]);
-          for (let i = j; i < EVADE_T.length; i++) {
-            if (Math.hypot(mine[i].x - b.x, mine[i].y - b.y) < 3 * r + o.r) { threat = true; break; }
-          }
+  // Coil escape (#94): circled by a clearly bigger worm, with our head closed in. The circle comes
+  // from what the coiler visibly does, and a bot stays circled for CIRCLED_HOLD after the signs
+  // last held, so one wobble doesn't flip it in and out. Not saved, like remainsIn.
+  function noticeCoil(t) {
+    const { w, g, ai, hx, hy } = t;
+    if (!t.escape) return;
+    const held = ai.circledBy;
+    if (held && (held.dead || g.time > ai.circledUntil)) ai.circledBy = null;
+    for (const { o } of t.heads) {
+      const c = coilCircle(w, o);
+      if (!c) continue;
+      if (o !== ai.circledBy && freedom(g, w, null, 0) > 0.5) continue;
+      ai.circledBy = o; ai.circledUntil = g.time + CIRCLED_HOLD; ai.circle = c;
+      break;
+    }
+    const o = ai.circledBy;
+    if (o && Math.hypot(o.sx[0] - hx, o.sy[0] - hy) > 2 * ai.circle.rho) ai.circledBy = null;
+    if (!ai.circledBy) return;
+    t.circled = { o: ai.circledBy, ...ai.circle };
+    endHunt(ai);
+    t.mode = 'escape';
+    t.boost = false; // unless the way out allows it (escapeMove)
+    t.headMass = 0;
+    t.ignore = null;
+  }
+
+  // Evasion: a head that will cross our path in the next second before we get there.
+  // Sharp bots (#110) weigh every cutter: they sum each one's sideways escape, nearer ones
+  // counting more, and treat each cutter's coming path as an obstacle. Circled, the coil escape
+  // decides instead.
+  function evadeCutters(t) {
+    const { w, g, ai, hx, hy, r, sharp, read } = t;
+    if (!t.evade || t.circled) return;
+    const ER = (250 + 150 * t.skill) * t.sense;
+    const multi = sharp && sharp.escape > 0;
+    let ex = 0, ey = 0, nearD = Infinity, nearAway = 0;
+    const mine = EVADE_T.map((s) => predictHead(w, s));
+    for (const { o, d } of t.heads) {
+      if (d > ER * 2) break;
+      // Readers give worms they are wary of more room (#83).
+      if (d > ER * (read ? 1 + 0.5 * Math.min(2, wariness(ai, o, g.time)) : 1)) continue;
+      if (t.headOn && o.mass < w.mass * HEAD_ON) continue; // a head-on there is a win
+      let threat = false;
+      for (let j = 0; j < EVADE_T.length && !threat; j++) {
+        const b = predictHead(o, EVADE_T[j]);
+        for (let i = j; i < EVADE_T.length; i++) {
+          if (Math.hypot(mine[i].x - b.x, mine[i].y - b.y) < 3 * r + o.r) { threat = true; break; }
         }
-        if (!threat) continue;
-        if (read) { // it tried to cut us off: a grudge, at most once a second per worm
-          const m = remember(ai, o.id, g.time);
-          if (g.time - m.cutAt >= 1) { m.grudge += 1; m.cutAt = g.time; }
-        }
-        // Head away from its line, on the side we are on.
-        const side = Math.cos(o.angle) * (hy - o.sy[0]) - Math.sin(o.angle) * (hx - o.sx[0]) >= 0 ? 1 : -1;
-        const away = o.angle + side * Math.PI / 2;
-        if (multi) {
-          const k = 1 / Math.max(d, 1);
-          ex += Math.cos(away) * k; ey += Math.sin(away) * k;
-          if (d < nearD) { nearD = d; nearAway = away; }
-          if (!threatPath) threatPath = [];
-          // t = -1: a cutter's coming path blocks whenever we would get there (ghostHit's
-          // timing filter never skips it), unlike anticipation's ghosts.
-          for (const t of EVADE_T) { const p = predictHead(o, t); threatPath.push(p.x, p.y, -1, o.r); }
-          continue;
-        }
-        goal = away;
-        goalW = 3;
-        mode = 'evade';
-        headMass = 0;
-        ignore = null;
-        if (w.mass > 60 && d < 200) boost = true;
-        break;
       }
-      if (threatPath) {
-        // Escapes that nearly cancel out give no direction: get away from the nearest cutter.
-        goal = Math.hypot(ex, ey) * nearD < 0.25 ? nearAway : Math.atan2(ey, ex);
-        goalW = 3;
-        mode = 'evade';
-        headMass = 0;
-        ignore = null;
-        if (w.mass > 60 && nearD < 200) boost = true;
+      if (!threat) continue;
+      if (read) { // it tried to cut us off: a grudge, at most once a second per worm
+        const m = remember(ai, o.id, g.time);
+        if (g.time - m.cutAt >= 1) { m.grudge += 1; m.cutAt = g.time; }
       }
-    }
-
-    if (goal === null) {
-      goal = Math.atan2(ai.wy - hy, ai.wx - hx);
-      goalW = 0.5;
-    }
-    ai.mode = mode;
-
-    // Anticipation: the paths nearby heads are about to cover count as obstacles.
-    let ghost = null;
-    if (anticipate && heads.length) {
-      ghost = [];
-      for (const { o } of heads) {
-        if (o === ignore || (circled && o === circled.o)) continue; // we may mean to cross the coiler's path
-        for (const t of GHOST_T) { const p = predictHead(o, t); ghost.push(p.x, p.y, t, o.r); }
+      // Head away from its line, on the side we are on.
+      const side = Math.cos(o.angle) * (hy - o.sy[0]) - Math.sin(o.angle) * (hx - o.sx[0]) >= 0 ? 1 : -1;
+      const away = o.angle + side * Math.PI / 2;
+      if (multi) {
+        const k = 1 / Math.max(d, 1);
+        ex += Math.cos(away) * k; ey += Math.sin(away) * k;
+        if (d < nearD) { nearD = d; nearAway = away; }
+        if (!t.threatPath) t.threatPath = [];
+        // t = -1: a cutter's coming path blocks whenever we would get there (ghostHit's
+        // timing filter never skips it), unlike anticipation's ghosts.
+        for (const s of EVADE_T) { const p = predictHead(o, s); t.threatPath.push(p.x, p.y, -1, o.r); }
+        continue;
       }
+      evadeTo(t, away);
+      if (w.mass > 60 && d < 200) t.boost = true;
+      return;
     }
+    if (t.threatPath) {
+      // Escapes that nearly cancel out give no direction: get away from the nearest cutter.
+      evadeTo(t, Math.hypot(ex, ey) * nearD < 0.25 ? nearAway : Math.atan2(ey, ex));
+      if (w.mass > 60 && nearD < 200) t.boost = true;
+    }
+  }
+  function evadeTo(t, a) {
+    t.goal = a;
+    t.goalW = 3;
+    t.mode = 'evade';
+    t.headMass = 0;
+    t.ignore = null;
+  }
 
-    // Evaluate candidate headings.
+  // Anticipation: the paths nearby heads are about to cover count as obstacles.
+  function planGhosts(t) {
+    t.ghost = null;
+    if (!t.anticipate || !t.heads.length) return;
+    const ghost = (t.ghost = []);
+    for (const { o } of t.heads) {
+      if (o === t.ignore || (t.circled && o === t.circled.o)) continue; // we may mean to cross the coiler's path
+      for (const s of GHOST_T) { const p = predictHead(o, s); ghost.push(p.x, p.y, s, o.r); }
+    }
+  }
+
+  // Pick the heading: candidates around the current one plus the goal, each probed for bodies, the
+  // wall and (for anticipating bots) ghosts; sharp bots then check the best ones closely. Then
+  // decide the boost.
+  function steer(t) {
+    const { w, g, hx, hy, skill, sharp, L, mySpeed, headMass, ghost, threatPath } = t;
     const N = 2 * Math.round((4 + 6 * skill) * (sharp ? sharp.headings : 1)) + 1;
     const spread = Math.PI * (0.6 + 0.35 * skill);
-    const rad = r + 4 + 6 * skill;
+    const rad = t.r + 4 + 6 * skill;
     // Going head-on, a sharp bot ignores the target's body beyond its head (meeting the head
     // ends the fight first) and the stretch right behind the head it is bound to brush. Any
     // other part of the target, such as a loop across the way, still counts (#110).
-    const pass = sharp ? ignore : null;
+    const pass = sharp ? t.ignore : null;
     const past = pass ? Math.hypot(pass.sx[0] - hx, pass.sy[0] - hy) : Infinity;
     const nearSegs = pass ? Math.ceil((2 * (rad + pass.r)) / spacingFor(pass.r)) : 0;
-    const blocked = (px, py, t, speed) => hitAt(g, w, px, py, rad, headMass, pass, t > past ? Infinity : nearSegs)
-      || (ghost && ghostHit(ghost, px, py, rad, t / speed)) || (threatPath && ghostHit(threatPath, px, py, rad, 0));
+    const blocked = (px, py, s, speed) => hitAt(g, w, px, py, rad, headMass, pass, s > past ? Infinity : nearSegs)
+      || (ghost && ghostHit(ghost, px, py, rad, s / speed)) || (threatPath && ghostHit(threatPath, px, py, rad, 0));
     const step = 2 * rad;
-    // Escape moves (#94): out of the loop if it can, else hug the loop's inside edge. The way out is
-    // judged along the path the bot can really take (#149), closely, and then counts as clear in the
-    // heading choice below. (A head shot, crossing just ahead of the coiler's head, was built and
-    // measured: none landed. A coiler steers round its prey's head, so as the prey crosses, the
-    // coil moves with it and the coiler's head leaves the predicted arc.)
-    let cleared = null;
-    if (circled) {
-      const o = circled.o;
-      const outR = circled.rho + o.r + r;
-      const outside = (q) => Math.hypot(q.x - circled.cx, q.y - circled.cy) > outR;
-      // How far each candidate's path is clear, out to `far`.
-      const clearTo = (p, far) => {
-        for (let t = step; ; t += step) {
-          const tt = Math.min(t, far), q = reachAt(p, tt);
-          if (blocked(q.x, q.y, tt, p.v)) return tt - step;
-          if (tt >= far) return far;
-        }
-      };
-      const cands = [];
-      for (let k = 0; k < N; k++) cands.push(w.angle + spread * ((2 * k) / (N - 1) - 1));
-      cands.sort((x, y) => Math.abs(angleDiff(w.angle, x)) - Math.abs(angleDiff(w.angle, y)));
-      const paths = cands.map((a) => { const p = reachPath(w, a, false); return { a, p, to: clearTo(p, L) }; });
-      let move = null;
-      // Out: a path clear all the way that ends outside the loop, the smallest turn first.
-      for (const c of paths) {
-        if (c.to < L) continue;
-        const end = reachAt(c.p, L);
-        if (!outside(end)) continue;
-        move = { a: c.a, kind: 'out', aim: { x: end.x, y: end.y } };
-        const bp = reachPath(w, c.a, true);
-        if (clearTo(bp, L * 1.6) >= L * 1.6 && outside(reachAt(bp, L * 1.6))) boost = true;
-        break;
-      }
-      if (move) {
-        goal = move.a;
-        goalW = 3.5;
-        cleared = move.a;
-        ai.aim = move.aim; // the exit point
-      } else {
-        // Hug: circle the coiler's centre its way round, just inside its body. Re-planned several
-        // times a second, this is a steady turn, checked against bodies like any heading.
-        const minTurn = reachPath(w, w.angle + Math.PI / 2, false).s1 / (Math.PI / 2);
-        const rh = Math.max(minTurn, circled.rho - o.r - r - r);
-        const dist = Math.hypot(hx - circled.cx, hy - circled.cy), phi = Math.atan2(hy - circled.cy, hx - circled.cx);
-        goal = phi + circled.dir * (Math.PI / 2 + clamp((dist - rh) / rh, -0.5, 0.8));
-        goalW = 2.5;
-        move = { kind: 'hug' };
-      }
-      ai.escape = move.kind;
-      ai.mode = 'escape';
-    } else ai.escape = null;
+    const cleared = t.circled ? escapeMove(t, blocked, step, N, spread) : ((w.ai.escape = null), null);
+    const { goal, goalW } = t;
     const dense = sharp && sharp.dense > 0 ? [] : null; // [angle, score, danger] per candidate
     let bestA = w.angle, bestS = -Infinity, bestD = 0;
     for (let k = 0; k <= N; k++) {
@@ -1110,8 +1127,8 @@
       let danger = 0;
       if (!(k === N && cleared !== null)) {
         for (let j = 0; j < 4; j++) {
-          const t = L * SAMPLE_T[j];
-          if (blocked(hx + c * t, hy + s * t, t, mySpeed)) { danger = SAMPLE_W[j]; break; }
+          const d = L * SAMPLE_T[j];
+          if (blocked(hx + c * d, hy + s * d, d, mySpeed)) { danger = SAMPLE_W[j]; break; }
         }
       }
       const score = -danger + goalW * Math.cos(angleDiff(a, goal)) - 0.25 * Math.abs(angleDiff(w.angle, a));
@@ -1129,10 +1146,10 @@
         if (bi < 0) break;
         const e = dense[bi], c = Math.cos(e[0]), s = Math.sin(e[0]);
         e[3] = true; // checked closely
-        for (let t = step; ; t += step) {
-          const tt = Math.min(t, L);
-          if (blocked(hx + c * tt, hy + s * tt, tt, mySpeed)) { e[2] = dangerAt(tt / L); e[1] -= e[2]; break; }
-          if (tt >= L) break;
+        for (let d = step; ; d += step) {
+          const dd = Math.min(d, L);
+          if (blocked(hx + c * dd, hy + s * dd, dd, mySpeed)) { e[2] = dangerAt(dd / L); e[1] -= e[2]; break; }
+          if (dd >= L) break;
         }
         if (e[2] === 0) break; // clear all the way
       }
@@ -1140,27 +1157,75 @@
       for (const e of dense) if ((e[3] || e[2] > 0) && e[1] > bestS) { bestS = e[1]; bestA = e[0]; bestD = e[2]; }
     }
     w.targetAngle = bestA;
-    w.wantBoost = boost && bestD === 0;
+    w.wantBoost = t.boost && bestD === 0;
     // A boost turns wider and goes farther: bots with reach check, closely, the path a boost would
     // really take, as far as a boost carries them, whether or not they are boosting already (#149).
     // Headings themselves are still judged along straight lines: judging them along reachable paths
     // made Expert bots very hard to kill and trapped bots worse at surviving a coil (measured, #149).
-    const reach = !!(sharp && sharp.reach > 0) || !!circled; // circled bots check it on any level (#94)
+    const reach = !!(sharp && sharp.reach > 0) || !!t.circled; // circled bots check it on any level (#94)
     if (w.wantBoost && reach) {
       const p = reachPath(w, bestA, true), far = L * 1.6;
-      for (let t = step; ; t += step) {
-        const tt = Math.min(t, far), q = reachAt(p, tt);
-        if (blocked(q.x, q.y, tt, p.v)) { w.wantBoost = false; break; }
-        if (tt >= far) break;
+      for (let d = step; ; d += step) {
+        const dd = Math.min(d, far), q = reachAt(p, dd);
+        if (blocked(q.x, q.y, dd, p.v)) { w.wantBoost = false; break; }
+        if (dd >= far) break;
       }
-    } else if (w.wantBoost && anticipate && !w.boosting) {
+    } else if (w.wantBoost && t.anticipate && !w.boosting) {
       // Anticipating bots look as far as a boost will carry them before they boost.
       const c = Math.cos(bestA), s = Math.sin(bestA), boostSpeed = mySpeed * CFG.BOOST_MULT;
       for (const f of [0.62, 1]) {
-        const t = L * 1.6 * f, px = hx + c * t, py = hy + s * t;
-        if (blocked(px, py, t, boostSpeed)) { w.wantBoost = false; break; }
+        const d = L * 1.6 * f, px = hx + c * d, py = hy + s * d;
+        if (blocked(px, py, d, boostSpeed)) { w.wantBoost = false; break; }
       }
     }
+  }
+
+  // Escape moves (#94): out of the loop if it can, else hug the loop's inside edge. The way out is
+  // judged along the path the bot can really take (#149), closely, and then counts as clear in the
+  // heading choice. Returns the cleared heading, or null. (A head shot, crossing just ahead of the
+  // coiler's head, was built and measured: none landed. A coiler steers round its prey's head, so
+  // as the prey crosses, the coil moves with it and the coiler's head leaves the predicted arc.)
+  function escapeMove(t, blocked, step, N, spread) {
+    const { w, ai, hx, hy, r, L, circled } = t;
+    const o = circled.o;
+    const outR = circled.rho + o.r + r;
+    const outside = (q) => Math.hypot(q.x - circled.cx, q.y - circled.cy) > outR;
+    // How far a path is clear, out to `far`.
+    const clearTo = (p, far) => {
+      for (let d = step; ; d += step) {
+        const dd = Math.min(d, far), q = reachAt(p, dd);
+        if (blocked(q.x, q.y, dd, p.v)) return dd - step;
+        if (dd >= far) return far;
+      }
+    };
+    const cands = [];
+    for (let k = 0; k < N; k++) cands.push(w.angle + spread * ((2 * k) / (N - 1) - 1));
+    cands.sort((x, y) => Math.abs(angleDiff(w.angle, x)) - Math.abs(angleDiff(w.angle, y)));
+    let cleared = null;
+    ai.mode = 'escape';
+    // Out: a path clear all the way that ends outside the loop, the smallest turn first.
+    for (const a of cands) {
+      const p = reachPath(w, a, false);
+      if (clearTo(p, L) < L) continue;
+      const end = reachAt(p, L);
+      if (!outside(end)) continue;
+      t.goal = a;
+      t.goalW = 3.5;
+      ai.aim = { x: end.x, y: end.y }; // the exit point
+      const bp = reachPath(w, a, true);
+      if (clearTo(bp, L * 1.6) >= L * 1.6 && outside(reachAt(bp, L * 1.6))) t.boost = true;
+      ai.escape = 'out';
+      return (cleared = a);
+    }
+    // Hug: circle the coiler's centre its way round, just inside its body. Re-planned several
+    // times a second, this is a steady turn, checked against bodies like any heading.
+    const minTurn = reachPath(w, w.angle + Math.PI / 2, false).s1 / (Math.PI / 2);
+    const rh = Math.max(minTurn, circled.rho - o.r - r - r);
+    const dist = Math.hypot(hx - circled.cx, hy - circled.cy), phi = Math.atan2(hy - circled.cy, hx - circled.cx);
+    t.goal = phi + circled.dir * (Math.PI / 2 + clamp((dist - rh) / rh, -0.5, 0.8));
+    t.goalW = 2.5;
+    ai.escape = 'hug';
+    return cleared;
   }
 
   // ---------------------------------------------------------------------------
