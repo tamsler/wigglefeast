@@ -47,7 +47,9 @@ test('draw order around the player', async (t) => {
     // Heaviest first, the reverse of the draw order (a list order alone used to decide it).
     g.worms = [heavier, across, wrapper, p, wrapped, lighter]; g.food = []; g.powerups = []; g.rebuildFoodGrid();
     g.rebuildSegGrid(); g.maxR = Math.max(...g.worms.map((w) => w.r)); // as a game tick would before drawing
-    return { lighter: [px - 220, py], heavier: [px - 540, py], head: [px, py], wrap: [px - 400, py - 280] };
+    // The head is sampled half a radius behind its centre: inside the repainted head and under the
+    // heavier body, but clear of the big eyes' outlines just ahead of it (#161).
+    return { lighter: [px - 220, py], heavier: [px - 540, py], head: [px - 0.5 * radiusFor(1000), py], wrap: [px - 400, py - 280] };
   })()`);
   await page.frames(5);
   // A world point's pixel, through the transform the game leaves on the canvas.
@@ -80,28 +82,33 @@ test('draw order around the player', async (t) => {
     assert.ok(isLava(c), `player colour (red), got rgb(${c})`);
   });
 
-  // Review of #104: an earlier version left a dark seam across the player's body just behind the
-  // head. With nothing over the head the player must be drawn in one piece: along the centreline
-  // from the head back 5 radii, no pixel much darker than the skin's stripes (Emerald).
-  await t.test('no seam behind the head', async () => {
-    const line = await page.eval(`(() => {
-      const g = window.__game, p = window.__player, { SKINS } = window.WormEngine;
-      p.skin = SKINS.find((s) => s.name === 'Emerald');
-      g.worms = [p];
-      g.rebuildSegGrid();
-      return { x: p.x, y: p.y, r: p.r };
-    })()`);
+  // Review of #104: an earlier version repainted the player's head every frame and left a dark
+  // seam across the body. The head is repainted only when another body covers it, and a
+  // repainted head must look exactly like one drawn in one piece. Since #161 the body has dark
+  // edges between its round segments on purpose, so this compares pixels instead of looking
+  // for dark ones.
+  await t.test('a repainted head matches one drawn in one piece (#104)', async () => {
+    // Every canvas pixel along the player's centreline, from just behind the eyes back to the
+    // repaint circle's edge (r + 3; outside it the heavier body lies on top).
+    const centreline = `(() => {
+      const p = window.__player, c = document.getElementById('game'), g = c.getContext('2d'), m = g.getTransform();
+      const y = Math.round(m.d * p.y + m.f), x1 = Math.round(m.a * (p.x - 0.2 * p.r) + m.e), x0 = Math.round(m.a * (p.x - p.r) + m.e);
+      return Array.from(g.getImageData(x0, y, x1 - x0, 1).data);
+    })()`;
+    await page.eval(`window.__player.skin = window.WormEngine.SKINS.find((s) => s.name === 'Emerald')`);
     await page.frames(5);
-    // Every canvas pixel along the centreline (the seam is only a couple of pixels thick).
-    const lum = await page.eval(`(() => {
-      const c = document.getElementById('game'), g = c.getContext('2d'), m = g.getTransform();
-      const y = Math.round(m.d * ${line.y} + m.f), x1 = Math.round(m.a * (${line.x} - 0.2 * ${line.r}) + m.e), x0 = Math.round(m.a * (${line.x} - 5 * ${line.r}) + m.e);
-      const d = g.getImageData(x0, y, x1 - x0, 1).data, out = [];
-      for (let i = 0; i < d.length; i += 4) out.push(0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]);
-      return out;
-    })()`);
-    // The darker Emerald stripe (#118ab2) is about 115; a half-dark outline seam would be about 60.
-    const min = Math.min(...lum);
-    assert.ok(min > 85, `darkest centreline pixel behind the head: ${min.toFixed(0)} (seam if well below the stripes' ~115)`);
+    const debug = 'window.wigglefeastDebug.headRepaints()';
+    assert.ok((await page.eval(debug)) >= 1, 'the head is repainted while a heavier body lies across it');
+    const covered = await page.eval(centreline);
+    await page.eval(`(() => { const g = window.__game; g.worms = [window.__player]; g.rebuildSegGrid(); })()`);
+    await page.frames(5);
+    assert.equal(await page.eval(debug), 0, 'with nothing over it, the head is not repainted');
+    const alone = await page.eval(centreline);
+    assert.equal(covered.length, alone.length);
+    let worst = 0;
+    for (let i = 0; i < alone.length; i += 4) {
+      worst = Math.max(worst, Math.abs(covered[i] - alone[i]) + Math.abs(covered[i + 1] - alone[i + 1]) + Math.abs(covered[i + 2] - alone[i + 2]));
+    }
+    assert.ok(worst <= 12, `largest colour difference along the centreline: ${worst}`);
   });
 });

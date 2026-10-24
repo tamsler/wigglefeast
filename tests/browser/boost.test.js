@@ -94,3 +94,41 @@ test('boost indicator', async (t) => {
     await page.key('keyUp', 'Space');
   });
 });
+
+// #161: boosting no longer draws a glow around the body, and the arrows sit clear of the eyes.
+test('boost look: arrows only, ahead of the eyes', async (t) => {
+  let page;
+  t.after(() => page && page.close());
+  page = await launch();
+  await page.goto(gameUrl());
+  await page.startRun();
+  await page.press('KeyP');
+  await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'the game to pause');
+  // The player alone, straight, heading right; paused, so nothing moves and the boost flag we set stays.
+  const p = await page.eval(`(() => {
+    const g = window.__game, p = window.__player, { radiusFor } = window.WormEngine;
+    Object.assign(g, { worms: [p], respawnQueue: [], food: [], powerups: [], specials: [] }); g.rebuildFoodGrid();
+    p.mass = 400; p.r = radiusFor(400); p.shield = 0;
+    p.sx = p.sx.map((_, i) => p.x - i * p.r * 0.42); p.sy = p.sy.map(() => p.y);
+    p.angle = p.targetAngle = 0; p.updateBounds(); g.rebuildSegGrid();
+    return { x: p.x, y: p.y, r: p.r };
+  })()`);
+  // Pixels at world points: beside the body (just outside its outline) and just ahead of the eyes.
+  const sample = () => page.eval(`(() => {
+    const c = document.getElementById('game'), g = c.getContext('2d'), m = g.getTransform();
+    const at = (x, y) => Array.from(g.getImageData(Math.round(m.a * x + m.e), Math.round(m.d * y + m.f), 1, 1).data.slice(0, 3));
+    const { x, y, r } = ${JSON.stringify(p)};
+    return { beside: [at(x - 3 * r, y - r - 6), at(x - 3 * r, y + r + 6)], ahead: at(x + 1.4 * r, y) };
+  })()`);
+  const diff = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+
+  await page.frames(5);
+  const still = await sample();
+  await page.eval('window.__player.boosting = true');
+  await page.frames(5);
+  assert.equal(await page.eval('window.wigglefeastDebug.boostArrows()'), 1, 'the arrows draw');
+  const boosting = await sample();
+  for (let i = 0; i < 2; i++) assert.ok(diff(still.beside[i], boosting.beside[i]) <= 12, `no glow beside the body: rgb(${still.beside[i]}) -> rgb(${boosting.beside[i]})`);
+  assert.ok(diff(still.ahead, boosting.ahead) <= 12, `nothing drawn between the eyes and the arrows: rgb(${still.ahead}) -> rgb(${boosting.ahead})`);
+  await page.eval('window.__player.boosting = false');
+});

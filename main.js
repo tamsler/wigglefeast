@@ -633,11 +633,12 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Skin finishes (#58): how a skin's body is painted. Each routine draws on the context it
-  // is given, so the picker swatches use exactly the arena's code. Smooth colours are stroked
-  // in runs of 3 segments, like stripes, so every finish costs about the same per worm, and
-  // patterns are spaced in body lengths (segments sit 0.42 r apart) so they look the same at
-  // any size. t is game time, so animated finishes freeze while paused.
+  // Skin finishes (#58): how a skin's body is painted. A finish gives each band of 3 segments its
+  // colour and may draw markings over the body (and, for neon, a glow under it); ridges come on
+  // top of the colour (#161). Every routine draws on the context it is given, so
+  // the arena, the picker swatches and the menu preview share one drawing path. Patterns are
+  // spaced in body lengths (segments sit 0.42 r apart) so they look the same at any size. t is
+  // game time, so animated finishes freeze while paused.
   const SEGMENT = 0.42;
   const every = (lengths) => Math.max(1, Math.round(lengths / SEGMENT)); // body lengths (in r) -> segments
   // Segments a per-segment decoration visits: every `step` from `first` up to `last`, limited to
@@ -671,24 +672,6 @@
     g.moveTo(sx[from], sy[from]);
     for (let i = from - 1; i >= to; i--) g.lineTo(sx[i], sy[i]);
   }
-  // Strokes the body tail to head in runs of 3 segments, coloured by colorAt(first segment, count).
-  function inRuns(g, sx, sy, r, colorAt) {
-    const n = sx.length;
-    g.lineWidth = 2 * r;
-    for (let c = Math.ceil((n - 1) / 3) - 1; c >= 0; c--) {
-      const a = c * 3, b = Math.min(n - 1, a + 3);
-      if (span && (b < span[0] || a > span[1])) continue;
-      g.strokeStyle = colorAt(a, n);
-      traceOn(g, sx, sy, b, a);
-      g.stroke();
-    }
-  }
-  function solid(g, sx, sy, r, color) {
-    g.strokeStyle = color;
-    g.lineWidth = 2 * r;
-    traceOn(g, sx, sy, sx.length - 1, 0);
-    g.stroke();
-  }
   // Unit normal of the body at segment i (pointing to the worm's left).
   function normalAt(sx, sy, i) {
     const a = Math.max(0, i - 1), b = Math.min(sx.length - 1, i + 1);
@@ -697,122 +680,189 @@
   }
   const hash01 = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 
+  // color(skin, a, n, t): the colour of the band of 3 segments starting at segment a. marks: drawn
+  // over the body. under: drawn under it. soft: lighter ridges, for dark-bodied finishes.
   const FINISH = {
-    stripes(g, sx, sy, r, skin) {
-      const cols = skin.colors;
-      inRuns(g, sx, sy, r, (a) => cols[(a / 3) % cols.length]);
-    },
-    gradient(g, sx, sy, r, skin) {
-      inRuns(g, sx, sy, r, (a, n) => along(skin.colors, a / Math.max(1, n - 1)));
-    },
-    neon(g, sx, sy, r, skin, t) {
-      const [body, glow, lights] = skin.colors, n = sx.length, a0 = g.globalAlpha;
-      g.strokeStyle = glow;
-      for (const [w, k] of [[2 * r + r * 1.4, 0.12], [2 * r + r * 0.75, 0.25]]) {
-        g.globalAlpha = a0 * k;
-        g.lineWidth = w;
+    stripes: { color: (skin, a) => skin.colors[(a / 3) % skin.colors.length] },
+    gradient: { color: (skin, a, n) => along(skin.colors, a / Math.max(1, n - 1)) },
+    neon: {
+      soft: true,
+      color: (skin) => skin.colors[0],
+      under(g, sx, sy, r, skin) {
+        const n = sx.length, a0 = g.globalAlpha;
+        g.strokeStyle = skin.colors[1];
+        for (const [w, k] of [[2 * r + r * 1.4, 0.12], [2 * r + r * 0.75, 0.25]]) {
+          g.globalAlpha = a0 * k;
+          g.lineWidth = w;
+          traceOn(g, sx, sy, n - 1, 0);
+          g.stroke();
+        }
+        g.globalAlpha = a0;
+      },
+      marks(g, sx, sy, r, skin, t) {
+        const [, glow, lights] = skin.colors, n = sx.length, a0 = g.globalAlpha;
+        g.strokeStyle = glow;
+        g.lineWidth = r * 0.32;
         traceOn(g, sx, sy, n - 1, 0);
         g.stroke();
-      }
-      g.globalAlpha = a0;
-      solid(g, sx, sy, r, body);
-      g.strokeStyle = glow;
-      g.lineWidth = r * 0.32;
-      traceOn(g, sx, sy, n - 1, 0);
-      g.stroke();
-      g.fillStyle = lights;
-      const lit = every(2.8), [l0, l1] = stepRange(lit, lit, n - 2);
-      for (let i = l0; i <= l1; i += lit) {
-        g.globalAlpha = a0 * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 6 - i * 0.3)));
-        g.beginPath();
-        g.arc(sx[i], sy[i], r * 0.26, 0, TAU);
-        g.fill();
-      }
-      g.globalAlpha = a0;
+        g.fillStyle = lights;
+        const lit = every(2.8), [l0, l1] = stepRange(lit, lit, n - 2);
+        for (let i = l0; i <= l1; i += lit) {
+          g.globalAlpha = a0 * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 6 - i * 0.3)));
+          g.beginPath();
+          g.arc(sx[i], sy[i], r * 0.26, 0, TAU);
+          g.fill();
+        }
+        g.globalAlpha = a0;
+      },
     },
-    metallic(g, sx, sy, r, skin, t) {
-      const [base, sheen, edge] = skin.colors, n = sx.length, a0 = g.globalAlpha;
-      const p = (((t * 0.45) % 1.6) - 0.3) * n; // the shine sweeps head to tail
-      inRuns(g, sx, sy, r, (a) => {
-        const i = a + 1.5, k = Math.exp(-((i - p) ** 2) / 50) + 0.35 * Math.exp(-((i - p - 15) ** 2) / 27);
-        return mix(base, sheen, Math.min(1, k));
-      });
+    metallic: {
+      color(skin, a, n, t) { // the shine sweeps head to tail
+        const p = (((t * 0.45) % 1.6) - 0.3) * n, i = a + 1.5;
+        const k = Math.exp(-((i - p) ** 2) / 50) + 0.35 * Math.exp(-((i - p - 15) ** 2) / 27);
+        return mix(skin.colors[0], skin.colors[1], Math.min(1, k));
+      },
+    },
+    spots: {
+      color: (skin) => skin.colors[0],
+      marks(g, sx, sy, r, skin) {
+        const [, spot, ring] = skin.colors, n = sx.length, step = every(2.8);
+        const [s0, s1] = stepRange(step, step, n - 2);
+        for (let i = s0; i <= s1; i += step) {
+          // The side comes from the spot's own number, so spots don't swap sides when only part is drawn.
+          const [, , nx, ny] = normalAt(sx, sy, i), side = (i / step - 1) % 2 ? 1 : -1;
+          const x = sx[i] + nx * side * r * 0.42, y = sy[i] + ny * side * r * 0.42;
+          g.beginPath();
+          g.arc(x, y, r * 0.3, 0, TAU);
+          if (ring) {
+            g.fillStyle = ring;
+            g.fill();
+            g.strokeStyle = spot;
+            g.lineWidth = r * 0.16;
+            g.stroke();
+          } else {
+            g.fillStyle = spot;
+            g.fill();
+          }
+        }
+      },
+    },
+    scales: {
+      color: (skin) => skin.colors[0],
+      marks(g, sx, sy, r, skin) {
+        const [, mark, dark] = skin.colors, n = sx.length, L = r * 0.62, Wd = r * 0.5;
+        g.fillStyle = mark;
+        g.strokeStyle = dark;
+        g.lineWidth = r * 0.1;
+        const sc = every(2.1), [c0, c1] = stepRange(sc, sc, n - 2);
+        for (let i = c0; i <= c1; i += sc) {
+          const [tx, ty, nx, ny] = normalAt(sx, sy, i), x = sx[i], y = sy[i];
+          g.beginPath();
+          g.moveTo(x + tx * L, y + ty * L);
+          g.lineTo(x + nx * Wd, y + ny * Wd);
+          g.lineTo(x - tx * L, y - ty * L);
+          g.lineTo(x - nx * Wd, y - ny * Wd);
+          g.closePath();
+          g.fill();
+          g.stroke();
+        }
+      },
+    },
+    galaxy: {
+      soft: true,
+      color: (skin, a) => mix(skin.colors[0], skin.colors[1], 0.35 + 0.35 * Math.sin(a * 0.168 + 1)),
+      marks(g, sx, sy, r, skin, t) {
+        const star = skin.colors[2], n = sx.length, a0 = g.globalAlpha;
+        // Stars batched into three brightness levels: three fills per worm, however long.
+        const paths = [new Path2D(), new Path2D(), new Path2D()];
+        const [g0, g1] = stepRange(0, 3, n - 1);
+        for (let i = g0; i <= g1; i += 3) {
+          const [, , nx, ny] = normalAt(sx, sy, i);
+          for (let k = 0; k < 2; k++) {
+            const seed = i * 2 + k, off = (hash01(seed) - 0.5) * 1.5 * r, size = r * (0.06 + 0.08 * hash01(seed + 99));
+            const level = Math.min(2, Math.floor((0.5 + 0.5 * Math.sin(t * 3 + seed * 1.7)) * 3));
+            const x = sx[i] + nx * off, y = sy[i] + ny * off;
+            paths[level].moveTo(x + size, y);
+            paths[level].arc(x, y, size, 0, TAU);
+          }
+        }
+        g.fillStyle = star;
+        paths.forEach((path, level) => { g.globalAlpha = a0 * (0.3 + 0.35 * level); g.fill(path); });
+        g.globalAlpha = a0;
+      },
+    },
+    pulse: { color: (skin, a, n, t) => mix(skin.colors[0], skin.colors[1], Math.max(0, Math.sin(a * 0.19 - t * 5)) ** 2) },
+  };
+
+  // Ridges (#161): the body reads as a stack of thin round discs, one per segment, laid from the
+  // tail to the head. Each disc hides most of the one behind it, so all that shows of a disc is
+  // the back part of its edge: a curved ridge line. The body is stroked as a smooth tube (in runs
+  // of 3 segments, each in its band's colour), then every ridge is added to one path and stroked
+  // once, which costs about the same as the tube itself. Worms under a few pixels wide skip them.
+  const RIDGE_MIN_PX = 6; // body width on screen, in pixels
+  // Paints a body: the finish's glow under it, the tube, ridges and a soft highlight, then the
+  // finish's markings. px: screen pixels per world unit.
+  function paintBody(g, sx, sy, r, skin, t, px) {
+    const f = FINISH[skin.finish], n = sx.length, last = n - 1, a0 = g.globalAlpha;
+    if (f.under) f.under(g, sx, sy, r, skin, t);
+    g.lineWidth = 2 * r;
+    for (let c = Math.ceil(last / 3) - 1; c >= 0; c--) {
+      const a = c * 3, b = Math.min(last, a + 3);
+      if (span && (b < span[0] || a > span[1])) continue;
+      g.strokeStyle = f.color(skin, a, n, t);
+      traceOn(g, sx, sy, b, a);
+      g.stroke();
+    }
+    if (n === 1) { // a single segment: just its disc
+      g.fillStyle = f.color(skin, 0, n, t);
+      g.beginPath();
+      g.arc(sx[0], sy[0], r, 0, TAU);
+      g.fill();
+    }
+    if (2 * r * px >= RIDGE_MIN_PX && n > 1) {
+      const k = f.soft ? 0.6 : 1, lo = Math.max(1, span ? span[0] : 1), hi = span ? span[1] : last;
+      g.beginPath();
+      for (let i = hi; i >= lo; i--) {
+        // Disc i's edge is hidden where disc i - 1 (one segment nearer the head) covers it: within
+        // acos(d / 2r) of straight ahead, d being the distance between them.
+        const dx = sx[i - 1] - sx[i], dy = sy[i - 1] - sy[i], d = Math.hypot(dx, dy);
+        if (d < 1e-6) continue;
+        const ahead = Math.atan2(dy, dx), half = Math.acos(Math.min(1, d / (2 * r)));
+        const from = ahead + half;
+        g.moveTo(sx[i] + Math.cos(from) * r, sy[i] + Math.sin(from) * r);
+        g.arc(sx[i], sy[i], r, from, ahead + TAU - half);
+      }
+      g.globalAlpha = a0 * k;
+      g.strokeStyle = 'rgba(0,0,0,0.28)';
+      g.lineWidth = Math.max(1 / px, r * 0.08);
+      g.stroke();
+      // A faint light rim just inside each ridge, so each disc looks raised.
+      g.beginPath();
+      const ri = r * 0.88;
+      for (let i = hi; i >= lo; i--) {
+        const dx = sx[i - 1] - sx[i], dy = sy[i - 1] - sy[i], d = Math.hypot(dx, dy);
+        if (d < 1e-6) continue;
+        const ahead = Math.atan2(dy, dx), half = Math.acos(Math.max(-1, Math.min(1, (d * d + ri * ri - r * r) / (2 * d * ri))));
+        if (half >= Math.PI) continue; // all of this rim is covered
+        const from = ahead + half;
+        g.moveTo(sx[i] + Math.cos(from) * ri, sy[i] + Math.sin(from) * ri);
+        g.arc(sx[i], sy[i], ri, from, ahead + TAU - half);
+      }
+      g.strokeStyle = 'rgba(255,255,255,0.14)';
+      g.stroke();
+      // A soft highlight along the body, so it reads as a round tube.
       g.save();
-      g.translate(r * 0.3, r * 0.55);
-      g.globalAlpha = a0 * 0.55;
-      g.strokeStyle = edge;
-      g.lineWidth = r * 0.22;
-      traceOn(g, sx, sy, n - 1, 0);
+      g.translate(-r * 0.18, -r * 0.26);
+      g.globalAlpha = a0 * k * 0.2;
+      g.strokeStyle = '#fff';
+      g.lineWidth = r * 0.6;
+      traceOn(g, sx, sy, last, 0);
       g.stroke();
       g.restore();
-    },
-    spots(g, sx, sy, r, skin) {
-      const [base, spot, ring] = skin.colors, n = sx.length, step = every(2.8);
-      solid(g, sx, sy, r, base);
-      const [s0, s1] = stepRange(step, step, n - 2);
-      for (let i = s0; i <= s1; i += step) {
-        // The side comes from the spot's own number, so spots don't swap sides when only part is drawn.
-        const [, , nx, ny] = normalAt(sx, sy, i), side = (i / step - 1) % 2 ? 1 : -1;
-        const x = sx[i] + nx * side * r * 0.42, y = sy[i] + ny * side * r * 0.42;
-        g.beginPath();
-        g.arc(x, y, r * 0.3, 0, TAU);
-        if (ring) {
-          g.fillStyle = ring;
-          g.fill();
-          g.strokeStyle = spot;
-          g.lineWidth = r * 0.16;
-          g.stroke();
-        } else {
-          g.fillStyle = spot;
-          g.fill();
-        }
-      }
-    },
-    scales(g, sx, sy, r, skin) {
-      const [base, mark, dark] = skin.colors, n = sx.length, L = r * 0.62, Wd = r * 0.5;
-      solid(g, sx, sy, r, base);
-      g.fillStyle = mark;
-      g.strokeStyle = dark;
-      g.lineWidth = r * 0.1;
-      const sc = every(2.1), [c0, c1] = stepRange(sc, sc, n - 2);
-      for (let i = c0; i <= c1; i += sc) {
-        const [tx, ty, nx, ny] = normalAt(sx, sy, i), x = sx[i], y = sy[i];
-        g.beginPath();
-        g.moveTo(x + tx * L, y + ty * L);
-        g.lineTo(x + nx * Wd, y + ny * Wd);
-        g.lineTo(x - tx * L, y - ty * L);
-        g.lineTo(x - nx * Wd, y - ny * Wd);
-        g.closePath();
-        g.fill();
-        g.stroke();
-      }
-    },
-    galaxy(g, sx, sy, r, skin, t) {
-      const [base, nebula, star] = skin.colors, n = sx.length, a0 = g.globalAlpha;
-      inRuns(g, sx, sy, r, (a) => mix(base, nebula, 0.35 + 0.35 * Math.sin(a * 0.168 + 1)));
-      // Stars batched into three brightness levels: three fills per worm, however long.
-      const paths = [new Path2D(), new Path2D(), new Path2D()];
-      const [g0, g1] = stepRange(0, 3, n - 1);
-      for (let i = g0; i <= g1; i += 3) {
-        const [, , nx, ny] = normalAt(sx, sy, i);
-        for (let k = 0; k < 2; k++) {
-          const seed = i * 2 + k, off = (hash01(seed) - 0.5) * 1.5 * r, size = r * (0.06 + 0.08 * hash01(seed + 99));
-          const level = Math.min(2, Math.floor((0.5 + 0.5 * Math.sin(t * 3 + seed * 1.7)) * 3));
-          const x = sx[i] + nx * off, y = sy[i] + ny * off;
-          paths[level].moveTo(x + size, y);
-          paths[level].arc(x, y, size, 0, TAU);
-        }
-      }
-      g.fillStyle = star;
-      paths.forEach((path, level) => { g.globalAlpha = a0 * (0.3 + 0.35 * level); g.fill(path); });
       g.globalAlpha = a0;
-    },
-    pulse(g, sx, sy, r, skin, t) {
-      const [base, hot] = skin.colors;
-      inRuns(g, sx, sy, r, (a) => mix(base, hot, Math.max(0, Math.sin(a * 0.19 - t * 5)) ** 2));
-    },
-  };
-  const GLOSSY = (skin) => skin.finish !== 'neon' && skin.finish !== 'galaxy';
+    }
+    if (f.marks) f.marks(g, sx, sy, r, skin, t);
+  }
 
   // ---------------------------------------------------------------------------
   // Game state
@@ -1021,15 +1071,42 @@
     const r = size * 0.3, n = 14, sp = r * SEGMENT * Math.SQRT1_2, sx = [], sy = [];
     for (let i = 0; i < n; i++) { sx.push(size / 2 + (n / 2 - i) * sp); sy.push(size / 2 - (n / 2 - i) * sp); } // head at top right
     // A moment that shows the finish: the metallic shine or the pulse glow mid-swatch.
-    FINISH[skin.finish](g, sx, sy, r, skin, skin.finish === 'pulse' ? 1.21 : 1.8);
-    if (GLOSSY(skin)) {
-      g.translate(-r * 0.22, -r * 0.3);
-      g.strokeStyle = 'rgba(255,255,255,0.16)';
-      g.lineWidth = r * 0.55;
-      traceOn(g, sx, sy, n - 1, 0);
-      g.stroke();
-    }
+    paintBody(g, sx, sy, r, skin, skin.finish === 'pulse' ? 1.21 : 1.8, dpr);
     return c;
+  }
+  // Skin preview (#161): the selected skin on a worm wiggling across a strip under the Skin label,
+  // drawn with the arena's code. Redrawn by the frame loop while the menu shows; with reduced
+  // motion it holds one pose.
+  const previewEl = $('skinPreview'), menuEl = $('menu');
+  const reduceMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+  let previewName = null, previewFrames = 0;
+  function drawSkinPreview(now) {
+    if (menuEl.classList.contains('hidden')) return;
+    const w = previewEl.clientWidth, h = previewEl.clientHeight;
+    if (!w || !h) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(w * dpr), ch = Math.round(h * dpr);
+    if (previewEl.width !== cw || previewEl.height !== ch) { previewEl.width = cw; previewEl.height = ch; }
+    const g = previewEl.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, cw, ch);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    const still = reduceMotion.matches, t = still ? 1.8 : now / 1000, skin = SKINS[settings.skin];
+    // A body about two thirds of the strip long, head to the right, on a wave travelling tailward.
+    const r = h * 0.26, step = r * SEGMENT, n = Math.max(8, Math.min(90, Math.floor((w * 0.68) / step)));
+    const amp = h * 0.13, k = TAU / (step * 22), phase = still ? 0 : t * 4;
+    const x0 = (w + (n - 1) * step) / 2, sx = [], sy = [];
+    for (let i = 0; i < n; i++) { const x = x0 - i * step; sx.push(x); sy.push(h / 2 + amp * Math.sin(k * x - phase)); }
+    g.strokeStyle = 'rgba(0,0,0,0.5)'; // the outline, as in the arena
+    g.lineWidth = 2 * r + 4;
+    traceOn(g, sx, sy, n - 1, 0);
+    g.stroke();
+    paintBody(g, sx, sy, r, skin, t, dpr);
+    const angle = Math.atan2(sy[0] - sy[1], sx[0] - sx[1]);
+    drawEyes(g, sx[0], sy[0], angle, angle + (still ? 0 : 0.5 * Math.sin(t * 1.3)), r);
+    previewName = skin.name;
+    previewFrames++;
   }
   const skinsEl = $('skins');
   SKINS.forEach((skin, i) => {
@@ -1276,11 +1353,12 @@
   // Boost arrows (#37, #41): two chevrons just in front of a boosting worm's head,
   // pointing where it is going, pulsing from back to front.
   let boostArrowsDrawn = 0; // worms whose arrows were drawn in the last frame
+  let headRepaints = 0; // heads repainted over another body in the last frame (#102, #161)
   function drawBoostArrows(w, t, alpha) {
     const r = w.r, a = w.angle, arm = r * 1.05, spread = Math.PI / 4;
     const hx = w.sx[0], hy = w.sy[0];
     for (let k = 0; k < 2; k++) {
-      const d = r * (2 + 1.1 * k);
+      const d = r * (2.6 + 1.1 * k); // a little ahead of the eyes (#161)
       const tx = hx + Math.cos(a) * d, ty = hy + Math.sin(a) * d;
       ctx.beginPath();
       ctx.moveTo(tx - Math.cos(a - spread) * arm, ty - Math.sin(a - spread) * arm);
@@ -1327,6 +1405,9 @@
   // Read-only hook for the browser tests; nothing in the game uses it.
   window.wigglefeastDebug = {
     boostArrows: () => boostArrowsDrawn,
+    headRepaints: () => headRepaints, // #161
+    previewSkin: () => previewName, // #161
+    previewFrames: () => previewFrames,
     learningCues: () => learningAlpha.size, // #138
     learningCue: (id) => learningAlpha.get(id) || 0,
     theme: () => activeTheme, // #64
@@ -1362,8 +1443,33 @@
       return dx * dx + dy * dy < rr * rr;
     });
   }
+  // Eyes (#161): two big round eyes near the front of the head, close together and facing the way
+  // the worm moves; the pupils look where it steers (targetAngle), with a small white glint.
+  function drawEyes(g, hx, hy, angle, look, r) {
+    const ex = Math.cos(angle), ey = Math.sin(angle);
+    const lx = Math.cos(look) * r * 0.17, ly = Math.sin(look) * r * 0.17;
+    for (let side = -1; side <= 1; side += 2) {
+      const cx = hx + ex * r * 0.34 - ey * side * r * 0.4, cy = hy + ey * r * 0.34 + ex * side * r * 0.4;
+      g.beginPath();
+      g.arc(cx, cy, r * 0.44, 0, TAU);
+      g.fillStyle = '#fff';
+      g.fill();
+      g.lineWidth = Math.max(1, r * 0.07);
+      g.strokeStyle = 'rgba(0,0,0,0.45)';
+      g.stroke();
+      g.beginPath();
+      g.arc(cx + lx, cy + ly, r * 0.25, 0, TAU);
+      g.fillStyle = '#141414';
+      g.fill();
+      g.beginPath();
+      g.arc(cx + lx - r * 0.08, cy + ly - r * 0.09, r * 0.08, 0, TAU);
+      g.fillStyle = '#fff';
+      g.fill();
+    }
+  }
+
   function drawWorm(w, t, view, part = 'all') {
-    const m = w.boosting ? w.r * 3.5 : 0; // boost arrows reach ahead of the head
+    const m = w.boosting ? w.r * 4.2 : 0; // boost arrows reach ahead of the head
     if (w.maxX + m < view.x0 || w.minX - m > view.x1 || w.maxY + m < view.y0 || w.minY - m > view.y1) return;
     const sx = w.sx, sy = w.sy, n = sx.length, r = w.r, skin = w.skin;
     // The on-screen stretch of the body, padded for the widest glow (neon, boost) (#82).
@@ -1386,15 +1492,6 @@
     const alpha = w.shield > 0 ? 0.45 + 0.25 * Math.sin(t * 14) : 1;
     ctx.globalAlpha = alpha;
 
-    if (w.boosting && part !== 'head') { // the glow along the whole body, drawn once
-      ctx.globalAlpha = alpha * (0.3 + 0.15 * Math.sin(t * 18));
-      ctx.strokeStyle = skin.accent;
-      ctx.lineWidth = 2 * r + 16;
-      tracePath(sx, sy, n - 1, 0);
-      ctx.stroke();
-      ctx.globalAlpha = alpha;
-    }
-
     // The head pass repaints the head (clipped to a disc around it) only when another worm's body
     // actually touches it; otherwise the worm is drawn in one piece, exactly as before, with no seam.
     // While shielded nothing can hurt the player, so it never repaints (that would show through the
@@ -1402,6 +1499,7 @@
     const repaint = part !== 'head' || (w.shield <= 0 && headCovered(w));
     if (repaint) {
       if (part === 'head') {
+        headRepaints++;
         ctx.save();
         ctx.beginPath();
         ctx.arc(sx[0], sy[0], r + 3, 0, TAU);
@@ -1414,39 +1512,14 @@
       tracePath(sx, sy, n - 1, 0);
       ctx.stroke();
 
-      // Body, painted by the skin's finish (#58), then the glossy highlight
-      FINISH[skin.finish](ctx, sx, sy, r, skin, game.time);
-      if (GLOSSY(skin)) {
-        ctx.save();
-        ctx.translate(-r * 0.22, -r * 0.3);
-        ctx.strokeStyle = 'rgba(255,255,255,0.16)';
-        ctx.lineWidth = r * 0.55;
-        tracePath(sx, sy, n - 1, 0);
-        ctx.stroke();
-        ctx.restore();
-      }
+      // Body in the skin's finish, with ridges (#58, #161)
+      paintBody(ctx, sx, sy, r, skin, game.time, cam.z * DPR);
       if (part === 'head') ctx.restore();
     }
 
     if (part === 'body') { ctx.globalAlpha = 1; return; } // eyes and arrows come with the head pass
 
-    // Eyes
-    const hx = sx[0], hy = sy[0], ex = Math.cos(w.angle), ey = Math.sin(w.angle);
-    const lx = Math.cos(w.targetAngle) * r * 0.14, ly = Math.sin(w.targetAngle) * r * 0.14;
-    for (let side = -1; side <= 1; side += 2) {
-      const cx = hx + ex * r * 0.32 - ey * side * r * 0.46, cy = hy + ey * r * 0.32 + ex * side * r * 0.46;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * 0.36, 0, TAU);
-      ctx.fillStyle = '#fff';
-      ctx.fill();
-      ctx.lineWidth = Math.max(1, r * 0.06);
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(cx + lx, cy + ly, r * 0.19, 0, TAU);
-      ctx.fillStyle = '#141414';
-      ctx.fill();
-    }
+    drawEyes(ctx, sx[0], sy[0], w.angle, w.targetAngle, r);
     if (w.boosting) drawBoostArrows(w, t, alpha);
     ctx.globalAlpha = 1;
   }
@@ -1482,6 +1555,7 @@
   function render(t) {
     const z = cam.z;
     boostArrowsDrawn = 0;
+    headRepaints = 0;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#0b0f1c';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1789,6 +1863,7 @@
       updateCamera(dt);
     }
     render(now / 1000);
+    drawSkinPreview(now);
     if (mode !== 'menu' && mode !== 'standby') renderMinimap();
     updateHud(dt);
     syncUpdateBanner();
