@@ -171,7 +171,8 @@
   // sharp (expert only, #110): sharper than skill allows, applied when a bot thinks, so nothing
   // is saved. think: re-plan delay x; look: look-ahead x; dense: check the winning heading
   // closely (1/0); headings: candidates x; sense: threat-sensing range x; heads: heads tracked;
-  // escape: steer clear of every cutter, not only the nearest (1/0). 1 (or 8 heads) is off.
+  // escape: steer clear of every cutter, not only the nearest (1/0); reach: before boosting, check the
+  // turn a boost would really take (1/0, #149). 1 (or 8 heads) is off.
   const DIFFICULTY = {
     easy: { skill: [0.12, 0.45], aggro: [0.0, 0.35], preyRatio: 1, bigShare: 0.1, bigMax: 1200, tactics: tactics({}) },
     normal: {
@@ -185,7 +186,7 @@
     expert: {
       skill: [0.85, 1.0], aggro: [0.6, 1.0], preyRatio: 2, bigShare: 0.35, bigMax: 5000,
       tactics: tactics(Object.fromEntries(TACTICS.map((k) => [k, 1]))),
-      sharp: { think: 0.7, look: 1.25, dense: 1, headings: 1.3, sense: 1.4, heads: 12, escape: 1 },
+      sharp: { think: 0.7, look: 1.25, dense: 1, headings: 1.3, sense: 1.4, heads: 12, escape: 1, reach: 1 },
     },
   };
   const DIFFICULTIES = Object.keys(DIFFICULTY);
@@ -540,6 +541,33 @@
     if (Math.abs(turn) < 1e-3) return { x: x + Math.cos(a) * v * t, y: y + Math.sin(a) * v * t, a };
     const k = (v * t) / turn; // radius of the arc
     return { x: x + k * (Math.sin(a + turn) - Math.sin(a)), y: y - k * (Math.cos(a + turn) - Math.cos(a)), a: a + turn };
+  }
+
+  // Reachable paths (#149). A worm turns toward its target heading at full rate, the shortest way,
+  // then goes straight: Worm.update has no turning momentum. reachPath gives the shape of that
+  // move toward heading a, at normal speed or boosting; reachAt(p, s) the point s along it.
+  function reachPath(w, a, boosted) {
+    const v = CFG.BASE_SPEED * (w.pw.speed > 0 ? 1.25 : 1) * (boosted ? CFG.BOOST_MULT : 1);
+    const om = turnRateFor(w.r) * (boosted ? 0.85 : 1) * (w.pw.turn > 0 ? CFG.TURN_POWER_MULT : 1);
+    const a0 = w.angle, d = angleDiff(a0, a), k = (Math.sign(d) || 1) * (v / om); // signed turn radius
+    const hx = w.sx[0], hy = w.sy[0];
+    return {
+      hx, hy, a0, k, d, v, s1: Math.abs(d) * (v / om),
+      x1: hx + k * (Math.sin(a0 + d) - Math.sin(a0)), y1: hy - k * (Math.cos(a0 + d) - Math.cos(a0)),
+      c: Math.cos(a), s: Math.sin(a),
+    };
+  }
+  const REACH_PT = { x: 0, y: 0 }; // reused: reachAt runs for every probe point
+  function reachAt(p, s) {
+    if (s < p.s1) {
+      const th = s / p.k; // the turn so far, signed like k
+      REACH_PT.x = p.hx + p.k * (Math.sin(p.a0 + th) - Math.sin(p.a0));
+      REACH_PT.y = p.hy - p.k * (Math.cos(p.a0 + th) - Math.cos(p.a0));
+    } else {
+      REACH_PT.x = p.x1 + p.c * (s - p.s1);
+      REACH_PT.y = p.y1 + p.s * (s - p.s1);
+    }
+    return REACH_PT;
   }
 
   // Share of directions around a worm's head that are clear for 250 px, ignoring the worm
@@ -999,8 +1027,8 @@
     // look-ahead, so a thin body between the sparse points can't slip through (#110). They keep
     // going, best first, until one is clear all the way, and a heading never checked closely can't
     // win: boxed in by a loop of body, the way out may be far down the list (#118).
+    const step = 2 * rad;
     if (dense && bestD === 0) {
-      const step = 2 * rad;
       for (;;) {
         let bi = -1;
         for (let i = 0; i < dense.length; i++) if (!dense[i][3] && dense[i][2] === 0 && (bi < 0 || dense[i][1] > dense[bi][1])) bi = i;
@@ -1019,8 +1047,20 @@
     }
     w.targetAngle = bestA;
     w.wantBoost = boost && bestD === 0;
-    // Anticipating bots look as far as a boost will carry them before they boost.
-    if (w.wantBoost && anticipate && !w.boosting) {
+    // A boost turns wider and goes farther: bots with reach check, closely, the path a boost would
+    // really take, as far as a boost carries them, whether or not they are boosting already (#149).
+    // Headings themselves are still judged along straight lines: judging them along reachable paths
+    // made Expert bots very hard to kill and trapped bots worse at surviving a coil (measured, #149).
+    const reach = !!(sharp && sharp.reach > 0);
+    if (w.wantBoost && reach) {
+      const p = reachPath(w, bestA, true), far = L * 1.6;
+      for (let t = step; ; t += step) {
+        const tt = Math.min(t, far), q = reachAt(p, tt);
+        if (blocked(q.x, q.y, tt, p.v)) { w.wantBoost = false; break; }
+        if (tt >= far) break;
+      }
+    } else if (w.wantBoost && anticipate && !w.boosting) {
+      // Anticipating bots look as far as a boost will carry them before they boost.
       const c = Math.cos(bestA), s = Math.sin(bestA), boostSpeed = mySpeed * CFG.BOOST_MULT;
       for (const f of [0.62, 1]) {
         const t = L * 1.6 * f, px = hx + c * t, py = hy + s * t;
@@ -1588,6 +1628,6 @@
   root.WormEngine = {
     CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, MIN_BOTS, MAX_BOTS, arenaRadius, DIFFICULTY, DIFFICULTIES, TACTICS, SPECIALS, validateSnapshot, seasonalTheme,
     freshHabits, validHabits, recordHabit, habitBias, habitBoost,
-    Game, Worm, botThink, knowsTactic, predictHead, radiusFor, lengthFor, angleDiff, TAU,
+    Game, Worm, botThink, knowsTactic, predictHead, reachPath, reachAt, freedom, radiusFor, lengthFor, angleDiff, TAU,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

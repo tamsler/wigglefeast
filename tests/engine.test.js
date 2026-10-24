@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 require('../engine.js');
-const { Game, Worm, SKINS, DIFFICULTY, DIFFICULTIES, TACTICS, MAX_BOTS, arenaRadius, CFG, radiusFor, lengthFor, botThink, knowsTactic, predictHead, validateSnapshot } = globalThis.WormEngine;
+const { Game, Worm, SKINS, DIFFICULTY, DIFFICULTIES, TACTICS, MAX_BOTS, arenaRadius, CFG, radiusFor, lengthFor, botThink, knowsTactic, predictHead, reachPath, reachAt, validateSnapshot } = globalThis.WormEngine;
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const fixture = () => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v1.json'), 'utf8'));
@@ -1096,7 +1096,7 @@ function replans(game, bots, secs) {
 }
 
 test('only expert is sharp, and only expert starts with more and bigger large bots (#110)', () => {
-  assert.deepEqual(Object.keys(DIFFICULTY.expert.sharp).sort(), ['dense', 'escape', 'headings', 'heads', 'look', 'sense', 'think']);
+  assert.deepEqual(Object.keys(DIFFICULTY.expert.sharp).sort(), ['dense', 'escape', 'headings', 'heads', 'look', 'reach', 'sense', 'think']);
   for (const level of ['easy', 'normal', 'hard']) assert.equal(DIFFICULTY[level].sharp, undefined, level);
   const big = DIFFICULTIES.map((l) => [DIFFICULTY[l].bigShare, DIFFICULTY[l].bigMax]);
   assert.deepEqual(big, [[0.1, 1200], [0.15, 2000], [0.2, 2500], [0.35, 5000]]);
@@ -1914,4 +1914,77 @@ test('a scavenger that overshoots the remains\' edge doesn\'t boost back in (#14
   // a big meal (#122), and so it does once more than 100 px past the edge.
   assert.equal(think([330]).wantBoost, true, 'approaching: boosts in');
   assert.equal(think([200, 420]).wantBoost, true, 'well clear of the remains: approaching again');
+});
+
+// Reachable paths (#149).
+// Runs fn with expert's reach switched to `on` (1/0).
+function withReach(on, fn) {
+  const saved = DIFFICULTY.expert.sharp.reach;
+  DIFFICULTY.expert.sharp.reach = on;
+  try { return fn(); } finally { DIFFICULTY.expert.sharp.reach = saved; }
+}
+
+test('a reachable path is where the worm actually goes when it steers for that heading (#149)', () => {
+  const { game } = scene('expert', []);
+  for (const deg of [0, 45, 90, 170, -45, -90, -170]) {
+    for (const boosted of [false, true]) {
+      for (const turn of [0, 10]) {
+        const w = new Worm({ name: 'W', skin: SKINS[0], mass: 120, x: 0, y: 0, angle: 0.3, worldR: game.R, pw: { turn } });
+        const a = 0.3 + (deg * Math.PI) / 180, p = reachPath(w, a, boosted);
+        w.targetAngle = a; w.wantBoost = boosted; w.boosting = boosted;
+        for (let i = 1; i <= 60; i++) {
+          w.update(1 / 60, game);
+          if (i !== 30 && i !== 60) continue;
+          const q = reachAt(p, (p.v * i) / 60), off = Math.hypot(q.x - w.sx[0], q.y - w.sy[0]);
+          // The game turns in 1/60 s steps, a little ahead of the smooth arc: a few units at most.
+          assert.ok(off < 10, `${deg}°, boost ${boosted}, turn ${turn}, ${i / 60} s: ${off.toFixed(1)} off`);
+        }
+      }
+    }
+  }
+});
+
+test('an expert bot does not boost when only its wider boosting turn meets a body (#149)', () => {
+  // The bot goes for a big pellet 250 away, about 110° to its left, and its boost roll always passes.
+  // A body runs alongside that line, 170 to its right: clear of the straight line and of the normal
+  // turn (about 63 out at 110°), but on the wider boosting turn (about 154 out, and farther as it
+  // carries on past the pellet).
+  const a = (110 * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a), nx = sa, ny = -ca; // right of the line
+  const think = (reach) => withReach(reach, () => withTactics('expert', ONLY(null), () => {
+    const { game, worms: [bot, body] } = scene('expert', withFood([
+      { name: 'Bot', mass: 120, x: 0, y: 0, angle: 0, ai: {} },
+      { name: 'Body', mass: 2000, x: ca * 800 + nx * 170, y: sa * 800 + ny * 170, angle: a },
+    ], [{ x: ca * 250, y: sa * 250 }]));
+    game.rng = () => 0;
+    const L = 320 * DIFFICULTY.expert.sharp.look + 3 * bot.r, rad = bot.r + 10;
+    botThink(bot, game);
+    // How close the bot's path along its chosen heading comes to the body, out to `far`.
+    const gap = (boosted, far) => {
+      const p = reachPath(bot, bot.targetAngle, boosted);
+      let m = Infinity;
+      for (let t = 0; t <= far; t += 5) {
+        const q = reachAt(p, t);
+        for (let i = 0; i < body.sx.length; i++) m = Math.min(m, Math.hypot(body.sx[i] - q.x, body.sy[i] - q.y) - rad - body.r);
+      }
+      return m;
+    };
+    return { bot, normal: gap(false, L), boosted: gap(true, 1.6 * L) };
+  }));
+  const off = think(0), on = think(1);
+  assert.equal(off.bot.ai.mode, 'food');
+  assert.equal(off.bot.wantBoost, true, 'without reach it boosts');
+  assert.ok(Math.abs(on.bot.targetAngle - a) < 0.2, `with reach it still heads for the food (${on.bot.targetAngle.toFixed(2)})`);
+  assert.ok(on.normal > 0, `its normal turn there is clear (by ${on.normal.toFixed(0)})`);
+  assert.ok(on.boosted < 0, `its boosting turn there meets the body (${on.boosted.toFixed(0)})`);
+  assert.equal(on.bot.wantBoost, false, 'so it does not boost');
+});
+
+test('reachable paths change nothing on easy, normal and hard (#149)', () => {
+  const run = (level, reach) => withReach(reach, () => {
+    const g = new Game({ botCount: 30, difficulty: level }, null, { seed: 4242 });
+    for (let i = 0; i < 600; i++) g.update(1 / 60);
+    return JSON.stringify(g.worms.map((w) => [w.id, w.mass, w.sx[0], w.sy[0], w.angle]));
+  });
+  for (const level of ['easy', 'normal', 'hard']) assert.equal(run(level, 1), run(level, 0), level);
+  assert.notEqual(run('expert', 1), run('expert', 0), 'expert does change');
 });
