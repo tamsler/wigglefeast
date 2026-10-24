@@ -161,7 +161,7 @@
 
   // Bot tactics (#78). Their order is part of each bot's identity (see knowsTactic):
   // only ever append.
-  const TACTICS = ['predict', 'anticipate', 'evade', 'headOn', 'scavenge', 'trap', 'pin', 'coil', 'flank', 'read', 'learn'];
+  const TACTICS = ['predict', 'anticipate', 'evade', 'headOn', 'scavenge', 'trap', 'pin', 'coil', 'flank', 'read', 'learn', 'escape'];
   const tactics = (shares) => Object.fromEntries(TACTICS.map((k) => [k, shares[k] || 0]));
 
   // Per difficulty (#16). skill: look-ahead, reaction time and steering precision.
@@ -181,7 +181,7 @@
     },
     hard: {
       skill: [0.7, 1.0], aggro: [0.35, 1.0], preyRatio: 1.6, bigShare: 0.2, bigMax: 2500,
-      tactics: tactics({ predict: 1, anticipate: 0.7, evade: 0.6, headOn: 0.5, scavenge: 0.5, trap: 0.4, pin: 0.4, coil: 0.3, read: 0.5 }),
+      tactics: tactics({ predict: 1, anticipate: 0.7, evade: 0.6, headOn: 0.5, scavenge: 0.5, trap: 0.4, pin: 0.4, coil: 0.3, read: 0.5, escape: 0.5 }),
     },
     expert: {
       skill: [0.85, 1.0], aggro: [0.6, 1.0], preyRatio: 2, bigShare: 0.35, bigMax: 5000,
@@ -585,6 +585,24 @@
     return clear / dirs.length;
   }
 
+  // Coil escape (#94): the circle a clearly bigger nearby head is turning on, if our head is inside
+  // it. Only what a player could see: mass, observed turning, speed and positions, never o.ai.
+  // dir: +1 when it circles counter-clockwise (turnRate > 0), -1 clockwise.
+  function coilCircle(w, o) {
+    if (o.mass < 1.5 * w.mass) return null;
+    const tr = o.turnRate;
+    if (Math.abs(tr) < 1.2) return null;
+    const rho = o.speed / Math.abs(tr), dir = tr > 0 ? 1 : -1;
+    if (rho > 500) return null;
+    const cx = o.sx[0] - Math.sin(o.angle) * rho * dir, cy = o.sy[0] + Math.cos(o.angle) * rho * dir;
+    if (Math.hypot(cx - w.sx[0], cy - w.sy[0]) >= rho - o.r) return null;
+    return { cx, cy, rho, dir };
+  }
+  const CIRCLED_HOLD = 0.5; // seconds a bot stays circled after the signs last held (#94)
+  const SHOT_T = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+  const SHOT_EARLY = 0.15; // our body must lie across the coiler's path this long before its head arrives
+  const SHOT_CLEAR = 1; // and our head keep this many (r + r') from its head meanwhile (0.78 kills)
+
   // The point to cross in front of a prey. Without prediction: ahead along its heading, by
   // more the farther it is. With prediction: where its curving path meets ours. fast: how much
   // faster than now the prey is expected to go (1: as fast as now).
@@ -727,9 +745,9 @@
     }
 
     // Nearby heads, nearest first, for the defensive tactics.
-    const anticipate = knows('anticipate'), evade = knows('evade'), headOn = knows('headOn');
+    const anticipate = knows('anticipate'), evade = knows('evade'), headOn = knows('headOn'), escape = knows('escape');
     const heads = [];
-    if (anticipate || evade || headOn) {
+    if (anticipate || evade || headOn || escape) {
       const HR = (L + 300) * sense;
       for (const o of g.worms) {
         if (o === w || o.dead || o.shield > 0) continue;
@@ -923,11 +941,37 @@
       if (ai.prey) { headMass = 0; ignore = null; }
     }
 
+    // Coil escape (#94): circled by a clearly bigger worm, with our head closed in. The circle comes
+    // from what the coiler visibly does, and a bot stays circled for CIRCLED_HOLD after the signs
+    // last held, so one wobble doesn't flip it in and out. Not saved, like remainsIn.
+    let circled = null; // { o, cx, cy, rho, dir }
+    if (escape) {
+      const held = ai.circledBy;
+      if (held && (held.dead || g.time > ai.circledUntil)) ai.circledBy = null;
+      for (const { o } of heads) {
+        const c = coilCircle(w, o);
+        if (!c) continue;
+        if (o !== ai.circledBy && freedom(g, w, null, 0) > 0.5) continue;
+        ai.circledBy = o; ai.circledUntil = g.time + CIRCLED_HOLD; ai.circle = c;
+        break;
+      }
+      const o = ai.circledBy;
+      if (o && Math.hypot(o.sx[0] - hx, o.sy[0] - hy) > 2 * ai.circle.rho) ai.circledBy = null;
+      if (ai.circledBy) {
+        circled = { o: ai.circledBy, ...ai.circle };
+        endHunt(ai);
+        mode = 'escape';
+        boost = false; // unless the way out allows it, below
+        headMass = 0;
+        ignore = null;
+      }
+    }
+
     // Evasion: a head that will cross our path in the next second before we get there.
     // Sharp bots (#110) weigh every cutter: they sum each one's sideways escape, nearer ones
     // counting more, and treat each cutter's coming path as an obstacle.
     let threatPath = null;
-    if (evade) {
+    if (evade && !circled) { // circled, the escape below decides
       const ER = (250 + 150 * skill) * sense;
       const multi = sharp && sharp.escape > 0;
       let ex = 0, ey = 0, nearD = Infinity, nearAway = 0;
@@ -992,7 +1036,7 @@
     if (anticipate && heads.length) {
       ghost = [];
       for (const { o } of heads) {
-        if (o === ignore) continue;
+        if (o === ignore || (circled && o === circled.o)) continue; // we may mean to cross the coiler's path
         for (const t of GHOST_T) { const p = predictHead(o, t); ghost.push(p.x, p.y, t, o.r); }
       }
     }
@@ -1009,26 +1053,100 @@
     const nearSegs = pass ? Math.ceil((2 * (rad + pass.r)) / spacingFor(pass.r)) : 0;
     const blocked = (px, py, t, speed) => hitAt(g, w, px, py, rad, headMass, pass, t > past ? Infinity : nearSegs)
       || (ghost && ghostHit(ghost, px, py, rad, t / speed)) || (threatPath && ghostHit(threatPath, px, py, rad, 0));
+    const step = 2 * rad;
+    // Escape moves (#94), in order: out of the loop, a head shot, else hug the loop's inside edge.
+    // Out and the head shot are judged along the path the bot can really take (#149), closely; a
+    // goal one of them cleared counts as clear in the heading choice below.
+    let cleared = null;
+    if (circled) {
+      const o = circled.o, v = reachPath(w, w.angle, false).v;
+      const outR = circled.rho + o.r + r;
+      const outside = (q) => Math.hypot(q.x - circled.cx, q.y - circled.cy) > outR;
+      // How far each candidate's path is clear, out to `far`.
+      const clearTo = (p, far) => {
+        for (let t = step; ; t += step) {
+          const tt = Math.min(t, far), q = reachAt(p, tt);
+          if (blocked(q.x, q.y, tt, p.v)) return tt - step;
+          if (tt >= far) return far;
+        }
+      };
+      const cands = [];
+      for (let k = 0; k < N; k++) cands.push(w.angle + spread * ((2 * k) / (N - 1) - 1));
+      cands.sort((x, y) => Math.abs(angleDiff(w.angle, x)) - Math.abs(angleDiff(w.angle, y)));
+      const paths = cands.map((a) => { const p = reachPath(w, a, false); return { a, p, to: clearTo(p, L) }; });
+      let move = null;
+      // 1. Out: a path clear all the way that ends outside the loop, the smallest turn first.
+      for (const c of paths) {
+        if (c.to < L) continue;
+        if (!outside(reachAt(c.p, L))) continue;
+        const end = reachAt(c.p, L);
+        move = { a: c.a, kind: 'out', aim: { x: end.x, y: end.y } };
+        const bp = reachPath(w, c.a, true);
+        if (clearTo(bp, L * 1.6) >= L * 1.6 && outside(reachAt(bp, L * 1.6))) boost = true;
+        break;
+      }
+      // 2. Head shot: our body across the coiler's predicted path SHOT_EARLY before its head gets
+      // there, along a clear path, without our head coming near its head first. Earliest wins.
+      if (!move) {
+        const H = SHOT_T.map((t) => predictHead(o, t)), len = lengthFor(w.mass);
+        const touch = o.r + r, keep = SHOT_CLEAR * (o.r + r);
+        let bestT = Infinity;
+        for (const c of paths) {
+          let ok = true;
+          for (let j = 0; j < SHOT_T.length && ok && SHOT_T[j] < bestT; j++) {
+            const t = SHOT_T[j];
+            if (v * t > c.to) break; // we'd have hit something by then
+            const me = reachAt(c.p, v * t);
+            if (Math.hypot(me.x - H[j].x, me.y - H[j].y) < keep) { ok = false; break; } // too near its head
+            let hit = false;
+            for (let s2 = step; s2 <= v * (t - SHOT_EARLY) && !hit; s2 += step) {
+              if (v * t - s2 > len) continue; // our tail has passed it by then
+              const q = reachAt(c.p, s2);
+              if (Math.hypot(q.x - H[j].x, q.y - H[j].y) < touch) hit = { x: q.x, y: q.y };
+            }
+            if (hit) { bestT = t; move = { a: c.a, kind: 'shot', aim: hit, t }; }
+          }
+        }
+      }
+      if (move) {
+        goal = move.a;
+        goalW = 3.5;
+        cleared = move.a;
+        ai.aim = move.aim; // the exit point, or where the coiler's head should meet our body
+      } else {
+        // 3. Hug: circle the coiler's centre its way round, just inside its body. Re-planned several
+        // times a second, this is a steady turn, checked against bodies like any heading.
+        const minTurn = reachPath(w, w.angle + Math.PI / 2, false).s1 / (Math.PI / 2);
+        const rh = Math.max(minTurn, circled.rho - o.r - r - r);
+        const dist = Math.hypot(hx - circled.cx, hy - circled.cy), phi = Math.atan2(hy - circled.cy, hx - circled.cx);
+        goal = phi + circled.dir * (Math.PI / 2 + clamp((dist - rh) / rh, -0.5, 0.8));
+        goalW = 2.5;
+        move = { kind: 'hug' };
+      }
+      ai.escape = move.kind;
+      ai.mode = 'escape';
+    } else ai.escape = null;
     const dense = sharp && sharp.dense > 0 ? [] : null; // [angle, score, danger] per candidate
     let bestA = w.angle, bestS = -Infinity, bestD = 0;
     for (let k = 0; k <= N; k++) {
       const a = k === N ? goal : w.angle + spread * ((2 * k) / (N - 1) - 1);
       const c = Math.cos(a), s = Math.sin(a);
       let danger = 0;
-      for (let j = 0; j < 4; j++) {
-        const t = L * SAMPLE_T[j];
-        if (blocked(hx + c * t, hy + s * t, t, mySpeed)) { danger = SAMPLE_W[j]; break; }
+      if (!(k === N && cleared !== null)) {
+        for (let j = 0; j < 4; j++) {
+          const t = L * SAMPLE_T[j];
+          if (blocked(hx + c * t, hy + s * t, t, mySpeed)) { danger = SAMPLE_W[j]; break; }
+        }
       }
       const score = -danger + goalW * Math.cos(angleDiff(a, goal)) - 0.25 * Math.abs(angleDiff(w.angle, a));
-      if (dense) dense.push([a, score, danger]);
+      if (dense) dense.push(k === N && cleared !== null ? [a, score, 0, true] : [a, score, danger]);
       if (score > bestS) { bestS = score; bestA = a; bestD = danger; }
     }
     // Sharp bots check the best clear headings closely, at most 2·rad apart along the whole
     // look-ahead, so a thin body between the sparse points can't slip through (#110). They keep
     // going, best first, until one is clear all the way, and a heading never checked closely can't
     // win: boxed in by a loop of body, the way out may be far down the list (#118).
-    const step = 2 * rad;
-    if (dense && bestD === 0) {
+    if (dense && bestD === 0 && !(cleared !== null && bestA === cleared)) {
       for (;;) {
         let bi = -1;
         for (let i = 0; i < dense.length; i++) if (!dense[i][3] && dense[i][2] === 0 && (bi < 0 || dense[i][1] > dense[bi][1])) bi = i;
@@ -1051,7 +1169,7 @@
     // really take, as far as a boost carries them, whether or not they are boosting already (#149).
     // Headings themselves are still judged along straight lines: judging them along reachable paths
     // made Expert bots very hard to kill and trapped bots worse at surviving a coil (measured, #149).
-    const reach = !!(sharp && sharp.reach > 0);
+    const reach = !!(sharp && sharp.reach > 0) || !!circled; // circled bots check it on any level (#94)
     if (w.wantBoost && reach) {
       const p = reachPath(w, bestA, true), far = L * 1.6;
       for (let t = step; ; t += step) {

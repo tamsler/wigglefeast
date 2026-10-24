@@ -51,12 +51,14 @@ const pct = (arr, p) => {
 const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : NaN);
 
 // What killed a worm: the wall, the stand-in player, the killer's tactic (cut, pin, flank,
-// trap, learn, coil, headOn) when it was after this victim, or 'body' when it just was in the way.
+// trap, learn, coil, headOn) when it was after this victim, escape when a circled bot killed it,
+// or 'body' when it just was in the way.
 function cause(e) {
   const k = e.killer;
   if (!k) return 'wall';
   if (!k.ai) return 'player';
   if (k.ai.mode === 'headOn') return 'headOn';
+  if (k.ai.mode === 'escape') return 'escape'; // a circled bot's head shot or way out (#94)
   if (k.ai.prey !== e.victim) return 'body';
   return ['cut', 'pin', 'flank', 'trap', 'learn', 'coil'].includes(k.ai.mode) ? k.ai.mode : 'hunt'; // hunting it, doing something else this moment
 }

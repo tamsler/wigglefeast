@@ -77,79 +77,97 @@ function sectors(c, prey) {
   return s.size;
 }
 
-// One encounter. Returns { outcome: 'prey' | 'coiler' | 'free' | 'held', loop: most sectors
-// closed, modes: Set of the prey's modes, secs }.
-function encounter({ seed = 1, coiler = 'bot', arm = 'baseline', prey: level = 'expert', secs = 6, preyMass = 120, coilerMass = 3000, dist = 400, coilerReach = 1 } = {}) {
-  return withArm(arm, level, () => {
-    const g = new Game({ botCount: 30, difficulty: level }, null, { seed }); // the default arena
-    const rng = g.rng, d = DIFFICULTY[level];
-    g.food = []; g.powerups = []; g.specials = []; g.worms = []; g.respawnQueue = [];
-    g.foodTarget = 0; g.powerupTarget = 0; g.specialTarget = 0;
-    g.settings.botCount = 0; // no replacements
-    const rand = (a, b) => a + rng() * (b - a);
-    const ai = (o) => {
-      const skill = rand(d.skill[0], d.skill[1]);
-      return { skill, aggro: rand(d.aggro[0], d.aggro[1]), interval: 0.32 - 0.22 * skill, wx: 0, wy: 0, prey: null, huntUntil: 0, ...o };
-    };
-    // Random ids, so the tactics drawn from them vary between encounters as they do in play.
-    const id = () => 1 + Math.floor(rng() * 1e8);
-    const pa = rand(-Math.PI, Math.PI);
-    const p = new Worm({ id: id(), rng, name: 'Prey', skin: SKINS[0], mass: preyMass, x: 0, y: 0, angle: pa, worldR: g.R, ai: ai({}) });
-    // The coiler starts about `dist` from the prey, on its front half (its body trails behind it),
-    // heading roughly across its way, and clear of the prey's body.
-    const bot = coiler === 'bot';
-    let c = null;
-    for (let k = 0; k < 50 && !c; k++) {
-      const ba = pa + rand(-1.2, 1.2), cd = dist + rand(-30, 30);
-      const cx = Math.cos(ba) * cd, cy = Math.sin(ba) * cd;
-      const ca = ba + (rng() < 0.5 ? 1 : -1) * (Math.PI / 2) + rand(-0.4, 0.4);
-      const w = new Worm({ id: id(), rng, name: 'Coiler', skin: SKINS[1], mass: coilerMass, x: cx, y: cy, angle: ca, worldR: g.R,
-        ai: bot ? ai({ prey: null, huntUntil: 1e9 }) : null });
-      let near = Infinity;
-      for (let i = 0; i < w.sx.length; i++) {
-        for (let j = 0; j < p.sx.length; j++) near = Math.min(near, Math.hypot(w.sx[i] - p.sx[j], w.sy[i] - p.sy[j]));
-      }
-      if (near > 120) c = w;
+// A live coil scene: a mass-120 prey bot and a mass-3,000 coiler about `dist` away, in the default
+// arena with no food, power-ups or respawns. Returns { g, p, c, tick }: tick() advances 1/60 s,
+// steering the scripted coiler or letting the bot coiler think. Call it inside withArm.
+function coilScene({ seed = 1, coiler = 'bot', prey: level = 'expert', preyMass = 120, coilerMass = 3000, dist = 400, coilerReach = 1 } = {}) {
+  const g = new Game({ botCount: 30, difficulty: level }, null, { seed }); // the default arena
+  const rng = g.rng, d = DIFFICULTY[level];
+  g.food = []; g.powerups = []; g.specials = []; g.worms = []; g.respawnQueue = [];
+  g.foodTarget = 0; g.powerupTarget = 0; g.specialTarget = 0;
+  g.settings.botCount = 0; // no replacements
+  const rand = (a, b) => a + rng() * (b - a);
+  const ai = (o) => {
+    const skill = rand(d.skill[0], d.skill[1]);
+    return { skill, aggro: rand(d.aggro[0], d.aggro[1]), interval: 0.32 - 0.22 * skill, wx: 0, wy: 0, prey: null, huntUntil: 0, ...o };
+  };
+  // Random ids, so the tactics drawn from them vary between encounters as they do in play.
+  const id = () => 1 + Math.floor(rng() * 1e8);
+  const pa = rand(-Math.PI, Math.PI);
+  const p = new Worm({ id: id(), rng, name: 'Prey', skin: SKINS[0], mass: preyMass, x: 0, y: 0, angle: pa, worldR: g.R, ai: ai({}) });
+  // The coiler starts about `dist` from the prey, on its front half (its body trails behind it),
+  // heading roughly across its way, and clear of the prey's body.
+  const bot = coiler === 'bot';
+  let c = null;
+  for (let k = 0; k < 50 && !c; k++) {
+    const ba = pa + rand(-1.2, 1.2), cd = dist + rand(-30, 30);
+    const cx = Math.cos(ba) * cd, cy = Math.sin(ba) * cd;
+    const ca = ba + (rng() < 0.5 ? 1 : -1) * (Math.PI / 2) + rand(-0.4, 0.4);
+    const w = new Worm({ id: id(), rng, name: 'Coiler', skin: SKINS[1], mass: coilerMass, x: cx, y: cy, angle: ca, worldR: g.R,
+      ai: bot ? ai({ prey: null, huntUntil: 1e9 }) : null });
+    let near = Infinity;
+    for (let i = 0; i < w.sx.length; i++) {
+      for (let j = 0; j < p.sx.length; j++) near = Math.min(near, Math.hypot(w.sx[i] - p.sx[j], w.sy[i] - p.sy[j]));
     }
-    if (!c) throw new Error('no clear start for seed ' + seed);
-    // The bot coiler thinks here, not in g.update, so the arm's switches apply to the prey alone:
-    // the coiler keeps coilerReach (on by default, as Expert bots ship).
-    const cai = c.ai;
-    if (bot) { cai.prey = p; c.ai = null; }
-    let thinkT = 0;
-    const coilerThink = () => {
-      const sharp = DIFFICULTY[level].sharp, saved = sharp && sharp.reach;
-      if (sharp) sharp.reach = coilerReach;
-      c.ai = cai;
-      try { botThink(c, g); } finally { c.ai = null; if (sharp) sharp.reach = saved; }
-      thinkT = cai.interval * rand(0.8, 1.2);
-      if (sharp) thinkT = Math.max(0.04, thinkT * sharp.think);
-    };
-    g.worms.push(p, c);
-    g.rebuildSegGrid();
-    g.rebuildFoodGrid();
+    if (near > 120) c = w;
+  }
+  if (!c) throw new Error('no clear start for seed ' + seed);
+  // The bot coiler thinks here, not in g.update, so the arm's switches apply to the prey alone:
+  // the coiler keeps coilerReach (on by default, as Expert bots ship).
+  const cai = c.ai;
+  if (bot) { cai.prey = p; c.ai = null; }
+  let thinkT = 0;
+  const coilerThink = () => {
+    const sharp = DIFFICULTY[level].sharp, saved = sharp && sharp.reach;
+    if (sharp) sharp.reach = coilerReach;
+    c.ai = cai;
+    try { botThink(c, g); } finally { c.ai = null; if (sharp) sharp.reach = saved; }
+    thinkT = cai.interval * rand(0.8, 1.2);
+    if (sharp) thinkT = Math.max(0.04, thinkT * sharp.think);
+  };
+  g.worms.push(p, c);
+  g.rebuildSegGrid();
+  g.rebuildFoodGrid();
+  const st = {}, DT = 1 / 60;
+  const tick = () => {
+    if (!c.dead) {
+      if (!bot) scriptedSteer(c, p, st, g.time);
+      else if ((thinkT -= DT) <= 0) coilerThink();
+    }
+    g.update(DT);
+  };
+  return { g, p, c, tick };
+}
+
+// One encounter. Returns { outcome: 'prey' | 'coiler' | 'free' | 'held', loop: most sectors
+// closed, modes: Set of the prey's modes, moves: Set of its escape moves, secs }.
+function encounter({ arm = 'baseline', prey: level = 'expert', secs = 6, ...opts } = {}) {
+  return withArm(arm, level, () => {
+    const { g, p, c, tick } = coilScene({ prey: level, ...opts });
     let outcome = null, loop = 0;
-    const modes = new Set(), st = {};
+    const modes = new Set(), moves = new Set();
     g.on('death', (e) => {
       if (outcome) return;
       outcome = e.victim === p ? 'prey' : 'coiler';
     });
-    const DT = 1 / 60, steps = Math.round(secs * 60);
+    const steps = Math.round(secs * 60);
     for (let i = 0; i < steps && !outcome; i++) {
-      if (!bot) scriptedSteer(c, p, st, g.time);
-      else if ((thinkT -= DT) <= 0) coilerThink();
-      g.update(DT);
-      if (!p.dead) { modes.add(p.ai.mode); if (!c.dead) loop = Math.max(loop, sectors(c, p)); }
+      tick();
+      if (!p.dead) {
+        modes.add(p.ai.mode);
+        if (p.ai.escape) moves.add(p.ai.escape);
+        if (!c.dead) loop = Math.max(loop, sectors(c, p));
+      }
     }
     if (!outcome) {
       g.rebuildSegGrid();
       outcome = freedom(g, p, null, 0) > 0.5 ? 'free' : 'held';
     }
-    return { outcome, loop, modes, secs: g.time };
+    return { outcome, loop, modes, moves, secs: g.time };
   });
 }
 
-module.exports = { encounter, ARMS, scriptedSteer };
+module.exports = { encounter, coilScene, withArm, sectors, ARMS, scriptedSteer };
 
 if (require.main === module) {
   const args = {};
