@@ -12,7 +12,7 @@
 ## Goals / Non-Goals
 
 **Goals:**
-- Both tactics use only visible signals. Their random draws happen only for bots that know them, so Easy and Normal replay identically.
+- Shadowing uses only visible signals. Its random draws happen only for bots that know it, so Easy and Normal replay identically.
 - Shadowing is a careful attack: run alongside, cut in only when a reachable, clear, in-time cut exists, and never go head-on with a bigger worm.
 
 **Non-Goals:**
@@ -21,34 +21,15 @@
 
 ## Decisions
 
-### 1. "Visibly coiling" helper
-Split `coilCircle` into:
-- `turnCircle(o)`: `{ cx, cy, rho, dir }` from `turnRate`, speed and heading, or null.
-- `coilCircle(w, o)`: unchanged in behaviour, built on `turnCircle`.
+### 1–3. Coil the coiler (built, measured, removed)
+The first version added three things:
+- `knotOf(g, o)`: a worm's turn circle with the head of a worm of at most half its mass inside it.
+- A preference for such worms in `pickPrey`.
+- Circling the knot in `coilPrey`: centred on the coiler's circle, starting at `knot.rho + o.r + 2r + 20`, and shrinking at 0.85 per second down to the coiler's own circle.
 
-Add `knotOf(g, o)`: `o`'s turn circle, when the head of some other living worm with at most half `o`'s mass lies inside it (`< rho − o.r`). It returns the circle plus `victim`. It reads only mass, turning, speed and positions, never `o.ai`.
+It needed a 0.5 s hold on the knot. Without it, the coiler's wobbling turn restarted the circle at full size, and it never tightened. With the hold, scene tests showed the bot staying outside the knot and tightening.
 
-The scan over `g.worms` runs only for prey candidates or the current prey, so it costs little.
-
-### 2. Coil the coiler: prey preference
-In `pickPrey`, after the grudge choice and before `trap`: a bot that knows both `overcoil` and `coil` takes the nearest candidate that
-- is coilable (at most half our mass), and
-- has a knot, and
-- is one our body can circle (`lengthFor(w.mass) ≥ 2π·(knot.rho + o.r + 2r)·1.3`).
-
-No random draws are added.
-
-*Alternative:* a separate step that switches an ongoing hunt over to a coiler. Rejected: it would change prey mid-hunt and add another rule to reason about. The ordinary prey roll is frequent enough, and preferring a coiler there is the smallest change.
-
-### 3. Coil the coiler: circling the knot
-In `chasePrey`, when the prey has a knot (recomputed each think), the coil test uses the knot:
-- radius `R0 = knot.rho + o.r + 2r + 20`;
-- the length test with that `R0`;
-- distance from our head to the knot centre `< (coilDir ? 2.5·R0 : R0 + 350)`.
-
-`coilPrey` then circles the knot centre instead of `predictHead(o, 0.3)`, with the same steering formula, the same 0.85-per-second shrink and the same boost rule. The floor is `max(knot.rho, 2·o.r + 2·r)`: at that radius our body lies on the coiler's own circle, so it must turn inward onto its prey or cross us.
-
-`ai.coilKnot = true` marks it (not saved; `endHunt` clears it). The knot is held for 0.5 s after it was last seen (`ai.knot`, `ai.knotUntil`, like coil escape's hold). Without the hold, a wobble in the coiler's turning restarted the circle at full size, and it never tightened. After that, the next think falls back to the ordinary coil round the head. A wide coiler circle can make the knot too big for the bot's body; then it cuts the coiler off instead.
+In seeded Expert worlds (6 × 8 min), coilers killed while coiling by a coiling bot went from 11 to 8. With chances in only about 10% of coiling time, coils lasting about 6 s, and laps round a knot taking about 4 s, it can't show an effect. The owner chose to drop it, and the code and tests were removed.
 
 ### 4. Shadowing: picking a target
 A new step, `seekShadow(t)`, runs after `pickPrey` and before `chasePrey`. It runs only for a bot that knows `shadow`, with
@@ -96,22 +77,15 @@ Then it hands over to the existing cut-off: `ai.prey = o`, `ai.huntUntil = time 
 *Alternative:* a separate "shadow cut" steering. Rejected: the cut-off already handles prediction, pinning, flanking and learning.
 
 ### 7. Tactic table
-Append `overcoil` and `shadow` to `TACTICS` (indices 12, 13).
-
-| | Hard | Expert |
-|---|---|---|
-| `overcoil` | 0.3 (it needs `coil` too, 0.3, so about 9% of Hard bots can use it) | 1 |
-| `shadow` | 0.4 | 1 |
-
-A test pins `TACTICS.slice(0, 12)` and the earlier tactics' masks for ids 1–40.
+Append `shadow` to `TACTICS` (index 12). Shares: Hard 0.4, Expert 1, others 0. A test pins `TACTICS.slice(0, 12)` and the earlier tactics' masks for ids 1–40.
 
 ### 8. Measuring
 `tools/balance.js`:
-- `cause()` reports `overcoil` for a kill by a bot in `coil` mode with `coilKnot`, and `shadow` for a kill by a bot in `shadow` mode or with `fromShadow`;
+- `cause()` reports `shadow` for a kill by a bot in `shadow` mode or with `fromShadow`;
 - it adds one line: bots that died while shadowing.
 
-The PR shows the before/after report on the task-1 seed for every level. The ship gate is the spec's *Coiling coilers and shadowing work*:
-- on Expert, `overcoil` and `shadow` kills appear;
+The PR shows the before/after report on the task-1 seed for every level. The ship gate is the spec's *Shadowing works*:
+- on Hard and Expert, `shadow` kills appear;
 - bot deaths per minute stay within about ±10% of before;
 - easy and normal are identical apart from ms/tick.
 
@@ -121,8 +95,7 @@ If shadowers die clearly more, tune the side distance and the cut-in conditions 
 
 - [Shadowers get cut off by their big target] → the side offset, evasion first, giving up after 15 s, and the shadower-death line in the balance report.
 - [Big players feel hounded] → at most two shadowers per worm, a 15 s limit, a roll of `aggro × 0.1`, and cut-ins only when clear and in time. The stand-in player's deaths in the balance report show the effect, and a playtest decides.
-- [Overcoil makes huge pile-ups and remains] → it's limited by mass (prey at most half), length and the knot test. Watch top-bot mass and bot deaths per minute.
-- [Cost] → knot scans only for a few candidates per prey roll; the shadow pick only on its roll; following is one segment lookup and the cut test a handful of `hitAt` calls per think for shadowers.
+- [Cost] → the shadow pick runs only on its roll; following is one segment lookup and the cut test a handful of `hitAt` calls per think for shadowers.
 
 ## Migration Plan
 

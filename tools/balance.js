@@ -52,7 +52,7 @@ const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length 
 
 // What killed a worm: the wall, the stand-in player, the killer's tactic (cut, pin, flank,
 // trap, learn, coil, headOn) when it was after this victim, escape when a circled bot killed it,
-// shadow or overcoil (#150), or 'body' when it just was in the way.
+// shadow when a shadowing bot killed it (#150), or 'body' when it just was in the way.
 function cause(e) {
   const k = e.killer;
   if (!k) return 'wall';
@@ -60,7 +60,6 @@ function cause(e) {
   if (k.ai.mode === 'headOn') return 'headOn';
   if (k.ai.mode === 'escape') return 'escape'; // a circled bot's way out (#94)
   if (k.ai.mode === 'shadow' || k.ai.fromShadow) return 'shadow'; // shadowing a bigger worm, or cutting in from it (#150)
-  if (k.ai.mode === 'coil' && k.ai.coilKnot && k.ai.prey === e.victim) return 'overcoil'; // coiled round its own coil (#150)
   if (k.ai.prey !== e.victim) return 'body';
   return ['cut', 'pin', 'flank', 'trap', 'learn', 'coil'].includes(k.ai.mode) ? k.ai.mode : 'hunt'; // hunting it, doing something else this moment
 }

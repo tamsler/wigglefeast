@@ -11,14 +11,14 @@ Measured today: worms of mass 1,000+ die about 20 times a minute in a 30-bot Exp
 
 ## What Changes
 
-- **New tactic: coil the coiler** (`overcoil`, appended to the tactic list). A bot that knows it, and also knows how to coil, prefers a worm that is visibly coiling a smaller one when it picks prey. It then circles the whole knot (coiler and its prey) from outside and tightens, instead of circling the coiler's head. The coiler's own loop is inside the new one, so it runs out of room.
+- **Coil the coiler: built, measured, not shipped** (owner's decision). Bots preferred a worm visibly coiling a smaller one as prey and circled the whole knot. It worked in scene tests, but in seeded Expert worlds (48 min) coilers killed by a coiling bot went from 11 to 8. The chance is rare (about 10% of coiling time), coils are short (about 6 s), and a lap round a knot takes about 4 s. The numbers are on tamsler/wigglefeast#150.
 - **New tactic: shadowing** (`shadow`, appended). A bot that knows it may pick a nearby worm *bigger* than its prey limit, up to 4× its own mass, and run alongside its body.
   - It cuts in at the big worm's head when a cut-off is in reach along a path it can actually take, clear of bodies, and never head-on.
   - It gives up after a while, or when the target pulls away.
   - At most two bots shadow the same worm at once.
   - The player is shadowed like any other worm.
-- **Levels.** Hard: some bots know each tactic. Expert: every bot. Easy and Normal: none, and they play exactly as before.
-- **Measurement.** `tools/balance.js` reports kills by shadowing bots (`shadow`) and coilers killed by a bigger coiling bot. A seeded before/after run on every level goes in the PR.
+- **Levels.** Hard: 40% of bots shadow. Expert: every bot. Easy and Normal: none, and they play exactly as before.
+- **Measurement.** `tools/balance.js` reports kills by shadowing bots (`shadow`) and bots that died while shadowing. A seeded before/after run on every level goes in the PR.
 
 ## Out of scope
 
@@ -34,16 +34,15 @@ Measured today: worms of mass 1,000+ die about 20 times a minute in a 30-bot Exp
 <!-- none -->
 
 ### Modified Capabilities
-- `bots`: *Tactics by difficulty* adds the two tactics. *Fair information* lets bots know which worm another bot is shadowing, like hunting. New requirements cover coiling a coiler, shadowing, cutting in from a shadow, and the measured result.
+- `bots`: *Tactics by difficulty* adds shadowing. *Fair information* lets bots know which worm another bot is shadowing, like hunting. New requirements cover shadowing, cutting in from a shadow, and the measured result.
 
 ## Impact
 
 - `engine.js`:
-  - `TACTICS` gets `overcoil` and `shadow` appended, with their shares in `DIFFICULTY.hard` and `DIFFICULTY.expert`.
-  - In `botThink`: the prey choice (`pickPrey`) and coiling (`coilPrey`) handle coilers, and a new shadowing step picks and follows a big worm and hands over to the existing cut-off.
-  - A shared helper for "visibly coiling" (with `coilCircle`).
+  - `TACTICS` gets `shadow` appended, with its shares in `DIFFICULTY.hard` and `DIFFICULTY.expert`.
+  - In `botThink`, a new shadowing step picks and follows a big worm and hands over to the existing cut-off.
 - `tests/bots.test.js`: scene tests for each behaviour, fairness, limits, tactic order and unchanged levels.
-- `tools/balance.js`: new kill causes.
+- `tools/balance.js`: the `shadow` kill cause and deaths while shadowing.
 - `README.md`: difficulty paragraph.
 - `sw.js`: `VERSION` minor bump, no new game files.
 - Saves: no change; `tests/fixtures/save-v1.json` keeps loading.

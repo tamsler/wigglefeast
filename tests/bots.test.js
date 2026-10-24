@@ -2,8 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 require('../engine.js');
-const { Game, Worm, SKINS, DIFFICULTY, DIFFICULTIES, TACTICS, CFG, radiusFor, lengthFor, botThink, knowsTactic, predictHead, reachPath, reachAt, validateSnapshot, angleDiff, knotOf } = globalThis.WormEngine;
-const { coilScene, withArm, sectors } = require('../tools/coil.js');
+const { Game, Worm, SKINS, DIFFICULTY, DIFFICULTIES, TACTICS, CFG, radiusFor, botThink, knowsTactic, predictHead, reachPath, reachAt, validateSnapshot, angleDiff } = globalThis.WormEngine;
 const { clone, withFood, scene, sideOf, withTactics, hunt, ONLY, memo, pickPrey } = require('./helpers/engine.js');
 
 // --- Bot tactics (#78) --------------------------------------------------------
@@ -880,15 +879,14 @@ test('reachable paths change nothing on easy, normal and hard (#149)', () => {
   assert.notEqual(run('expert', 1), run('expert', 0), 'expert does change');
 });
 
-// --- Coil the coiler and shadowing (#150) --------------------------------------------
+// --- Shadowing bigger worms (#150) ---------------------------------------------------
 
-test('overcoil and shadow are appended: some hard bots, every expert bot; every bot keeps its other tactics (#150)', () => {
-  assert.deepEqual(TACTICS.slice(11), ['escape', 'overcoil', 'shadow']);
-  for (const level of ['easy', 'normal']) for (const k of ['overcoil', 'shadow']) assert.equal(DIFFICULTY[level].tactics[k], 0, `${level} ${k}`);
-  assert.equal(DIFFICULTY.hard.tactics.overcoil, 0.3);
+test('shadow is appended: some hard bots, every expert bot; every bot keeps its other tactics (#150)', () => {
+  assert.deepEqual(TACTICS.slice(11), ['escape', 'shadow']);
+  for (const level of ['easy', 'normal']) assert.equal(DIFFICULTY[level].tactics.shadow, 0, level);
   assert.equal(DIFFICULTY.hard.tactics.shadow, 0.4);
-  for (const k of ['overcoil', 'shadow']) assert.equal(DIFFICULTY.expert.tactics[k], 1);
-  // Each bot's first twelve tactics, as bits, for ids 1-40, recorded before these two were added.
+  assert.equal(DIFFICULTY.expert.tactics.shadow, 1);
+  // Each bot's first twelve tactics, as bits, for ids 1-40, recorded before shadow was added.
   const before = {
     hard: [2623, 571, 2135, 2775, 139, 2151, 2087, 19, 2591, 523, 559, 175, 27, 2111, 647, 2259, 725, 43, 527, 2203, 25, 2655, 2647, 2107, 627, 59, 2205, 2687, 247, 649, 2615, 179, 19, 141, 2627, 679, 655, 599, 79, 635],
     normal: [537, 521, 3, 516, 8, 1, 7, 17, 512, 0, 526, 5, 17, 19, 6, 19, 517, 1, 5, 2, 16, 5, 7, 27, 16, 0, 21, 17, 22, 8, 518, 18, 3, 5, 515, 512, 514, 530, 0, 19],
@@ -898,123 +896,6 @@ test('overcoil and shadow are appended: some hard bots, every expert bot; every 
     const now = masks.map((_, i) => TACTICS.slice(0, 12).reduce((m, k, j) => m | (knowsTactic({ id: i + 1 }, level, k) ? 1 << j : 0), 0));
     assert.deepEqual(now, masks, level);
   }
-});
-
-test('a worm visibly coiling a smaller one has a knot, from what it does alone (#150)', () => {
-  // Live coils: the scripted coiler's knot holds its prey at some point.
-  let knotted = 0;
-  for (let i = 0; i < 10; i++) {
-    withArm('baseline', 'expert', () => {
-      const { g, p, c, tick } = coilScene({ seed: 300 + i, coiler: 'scripted' });
-      for (let k = 0; k < 3 * 60 && !p.dead && !c.dead; k++) {
-        tick();
-        const kn = knotOf(g, c);
-        if (kn && kn.victim === p) { knotted++; break; }
-      }
-    });
-  }
-  assert.ok(knotted >= 8, `knot found in ${knotted} of 10 live coils`);
-  // A big worm circling with nobody inside, or a straight one, has none.
-  const { game, worms: [big, small] } = scene('expert', [
-    { name: 'Big', mass: 3000, x: 0, y: -150, angle: 0, turnRate: CFG.BASE_SPEED / 150 },
-    { name: 'Small', mass: 100, x: 900, y: 0, angle: 0 },
-  ]);
-  assert.equal(knotOf(game, big), null, 'nobody inside its circle');
-  small.sx[0] = 20; small.sy[0] = 0; // now inside
-  assert.equal(knotOf(game, big).victim, small);
-  big.turnRate = 0;
-  assert.equal(knotOf(game, big), null, 'not turning');
-  // The same shape gives the same answer whether it is a coiling bot, a bot doing something else
-  // or the player.
-  big.turnRate = CFG.BASE_SPEED / 150;
-  const asCoil = JSON.stringify(knotOf(game, big), (k, v) => (k === 'victim' ? v.name : v));
-  big.ai = { mode: 'wander', prey: null };
-  assert.equal(JSON.stringify(knotOf(game, big), (k, v) => (k === 'victim' ? v.name : v)), asCoil);
-  big.ai = null; big.isPlayer = true;
-  assert.equal(JSON.stringify(knotOf(game, big), (k, v) => (k === 'victim' ? v.name : v)), asCoil);
-});
-
-// A big bot at the origin free to pick prey (its roll always passes), a wandering worm 200 ahead,
-// and a coiler 450 away circling a small worm (radius 150, turnRate to match).
-function coilerScene(shares) {
-  return withTactics('expert', shares, () => {
-    const { game, worms } = scene('expert', [
-      { name: 'Hunter', mass: 3000, x: 0, y: 0, angle: 0, ai: { aggro: 1 } },
-      { name: 'Wanderer', mass: 500, x: 200, y: 60, angle: Math.PI / 2 },
-      { name: 'Coiler', mass: 600, x: 0, y: 300, angle: 0, turnRate: CFG.BASE_SPEED / 150 },
-      { name: 'Victim', mass: 100, x: 0, y: 450, angle: Math.PI },
-    ]);
-    game.rng = () => 0;
-    botThink(worms[0], game);
-    return worms[0];
-  });
-}
-
-test('a bot that coils coilers picks a coiler over a nearer worm; one that only coils does not (#150)', () => {
-  const both = coilerScene({ ...ONLY('overcoil'), coil: 1 });
-  assert.equal(both.ai.prey && both.ai.prey.name, 'Coiler');
-  const coilOnly = coilerScene(ONLY('coil'));
-  assert.equal(coilOnly.ai.prey && coilOnly.ai.prey.name, 'Wanderer');
-});
-
-test('a bot coiling a coiler circles outside the knot and tightens; with no knot it coils the head (#150)', () => {
-  let checked = 0;
-  for (let i = 0; i < 10; i++) {
-    withTactics('expert', { ...ONLY('overcoil'), coil: 1 }, () => {
-      const { g, p, c, tick } = coilScene({ seed: 400 + i, coiler: 'scripted', preyMass: 100, coilerMass: 600 });
-      let kn = null; // let the loop close round the prey first
-      for (let k = 0; k < 180 && !p.dead && !c.dead && !kn; k++) { tick(); if (sectors(c, p) >= 6) kn = knotOf(g, c); }
-      if (!kn || p.dead || c.dead) return;
-      // A big bot 550 from the knot's centre, heading round it, sent after the coiler, placed where
-      // no body is near its head.
-      const clearAt = (x, y) => g.worms.every((w) => w.sx.every((sx, j) => Math.hypot(sx - x, w.sy[j] - y) > 200));
-      let a = 0;
-      for (let k = 0; k < 24 && !clearAt(kn.cx + Math.cos(a) * 550, kn.cy + Math.sin(a) * 550); k++) a += Math.PI / 12;
-      const big = new Worm({ name: 'Big', rng: g.rng, skin: SKINS[0], mass: 5000, x: kn.cx + Math.cos(a) * 550, y: kn.cy + Math.sin(a) * 550, angle: a + Math.PI / 2, worldR: g.R,
-        ai: { skill: 1, aggro: 0, interval: 0.1, wx: 0, wy: 0, prey: c, huntUntil: 1e9 } });
-      g.worms.push(big);
-      g.rebuildSegGrid();
-      let knotted = 0, inside = 0, prevR = null, shrank = 0, grew = 0;
-      for (let k = 0; k < 120 && !p.dead && !c.dead && !big.dead; k++) {
-        tick();
-        const now = knotOf(g, c);
-        if (big.ai.mode !== 'coil' || !big.ai.coilKnot || !now) continue;
-        knotted++;
-        if (Math.hypot(big.sx[0] - now.cx, big.sy[0] - now.cy) < now.rho) inside++;
-        if (prevR !== null && big.ai.coilR < prevR) shrank++;
-        if (prevR !== null && big.ai.coilR > prevR) grew++; // only when the coiler's own circle widens
-        prevR = big.ai.coilR;
-      }
-      if (knotted < 30) return; // only a moment round the knot: nothing to judge
-      checked++;
-      assert.ok(inside <= knotted * 0.1, `seed ${400 + i}: inside the coiler's circle ${inside} of ${knotted} ticks`);
-      // It tightens, or it is already down at its floor, the coiler's own circle.
-      const atFloor = big.ai.knot && Math.abs(big.ai.coilR - Math.max(big.ai.knot.rho, 2 * c.r + 2 * big.r)) < 1;
-      assert.ok(shrank > 4 * grew || (grew === 0 && atFloor), `seed ${400 + i}: the circle tightens (shrank ${shrank} ticks, grew ${grew}, at floor ${atFloor})`);
-    });
-  }
-  // Seeded: in the rest, the small coil never closes or a worm dies first.
-  assert.ok(checked >= 3, `coiled a knot in ${checked} of 10 live coils`);
-  // When the coiler stops circling, the same bot coils it the ordinary way, round its head.
-  withTactics('expert', { ...ONLY('overcoil'), coil: 1 }, () => {
-    const { game, worms } = scene('expert', [
-      { name: 'Hunter', mass: 3000, x: 0, y: 0, angle: 0, ai: { huntUntil: 1e9 } },
-      { name: 'Coiler', mass: 600, x: 0, y: 300, angle: 0, turnRate: CFG.BASE_SPEED / 150 },
-      { name: 'Victim', mass: 100, x: 0, y: 450, angle: Math.PI },
-    ]);
-    const [h, co] = worms;
-    h.ai.prey = co;
-    botThink(h, game);
-    assert.equal(h.ai.mode, 'coil');
-    assert.equal(h.ai.coilKnot, true, 'round the knot');
-    co.turnRate = 0;
-    game.time += 1; // past the knot's hold
-    botThink(h, game);
-    assert.equal(h.ai.mode, 'coil');
-    assert.equal(h.ai.coilKnot, false, 'round the head again');
-    const snap = clone(game);
-    assert.deepEqual(Object.keys(snap.worms[0].ai).sort(), ['aggro', 'huntUntil', 'interval', 'prey', 'skill', 'wx', 'wy'], 'nothing new saved');
-  });
 });
 
 // A mass-300 bot at `at` heading `angle`, free to act (its rolls always pass), and a bigger worm with

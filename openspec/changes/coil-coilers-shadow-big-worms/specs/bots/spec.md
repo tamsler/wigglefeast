@@ -3,11 +3,11 @@
 ## MODIFIED Requirements
 
 ### Requirement: Tactics by difficulty
-Each bot SHALL know a set of tactics fixed for its lifetime and drawn from its difficulty. Easy bots SHALL use no tactics. On normal, some bots SHALL use turn prediction, head anticipation, evasion, scavenging, head-on awareness and reading other worms. On hard, at least half the bots SHALL use each of those, and some SHALL also coil, pin against the edge, trap, coil coilers and shadow bigger worms; half SHALL escape coils. On expert, every bot SHALL use every tactic, including flanking, escaping coils, coiling coilers, shadowing and learning the player's habits. Learning the player's habits SHALL be used on expert only. Adding a tactic SHALL NOT change which of the earlier tactics any bot knows.
+Each bot SHALL know a set of tactics fixed for its lifetime and drawn from its difficulty. Easy bots SHALL use no tactics. On normal, some bots SHALL use turn prediction, head anticipation, evasion, scavenging, head-on awareness and reading other worms. On hard, at least half the bots SHALL use each of those, and some SHALL also coil, pin against the edge, trap and shadow bigger worms; half SHALL escape coils. On expert, every bot SHALL use every tactic, including flanking, escaping coils, shadowing and learning the player's habits. Learning the player's habits SHALL be used on expert only. Adding a tactic SHALL NOT change which of the earlier tactics any bot knows.
 
 #### Scenario: Easy has no tactics
 - **WHEN** a world is created on easy
-- **THEN** no bot predicts turns, anticipates heads, evades, scavenges, seeks head-on contact, reads other worms, coils, pins, traps, flanks, escapes coils, coils coilers or shadows
+- **THEN** no bot predicts turns, anticipates heads, evades, scavenges, seeks head-on contact, reads other worms, coils, pins, traps, flanks, escapes coils or shadows
 
 #### Scenario: A bot keeps its tactics
 - **WHEN** a world with a bot is saved and loaded again
@@ -17,9 +17,9 @@ Each bot SHALL know a set of tactics fixed for its lifetime and drawn from its d
 - **WHEN** worlds are created on each level
 - **THEN** no bot escapes coils on easy or normal, about half the bots do on hard, and every bot does on expert
 
-#### Scenario: Coiling coilers and shadowing by level
+#### Scenario: Shadowing by level
 - **WHEN** worlds are created on each level
-- **THEN** no bot coils coilers or shadows on easy or normal, some bots do on hard, and every bot does on expert
+- **THEN** no bot shadows on easy or normal, some bots do on hard, and every bot does on expert
 
 #### Scenario: Earlier tactics kept
 - **WHEN** a bot with a given id is created before and after a tactic was added
@@ -44,26 +44,7 @@ Bots SHALL decide using only what a player could see: worms' positions, headings
 - **WHEN** a bot moves in to cut the player off and the player steers the other way, but their worm hasn't turned before the encounter ends
 - **THEN** the record counts the encounter as the player keeping straight
 
-#### Scenario: A coiler is known by what it does
-- **WHEN** two worms of the same size are near a bot that coils coilers, one circling a smaller worm and one wandering, and only the second is a bot in coil mode
-- **THEN** the bot treats the first one as the coiler
-
 ## ADDED Requirements
-
-### Requirement: Coiling a coiler
-A bot that coils coilers and can coil SHALL, when it picks prey, prefer a worm it can coil that is visibly coiling a smaller worm: turning steadily on a circle with that smaller worm's head inside it. Coiling such a worm, it SHALL circle the whole knot (the coiler's circle) from outside and tighten round it, rather than circling the coiler's head.
-
-#### Scenario: A coiler in reach
-- **WHEN** a bot that coils coilers has two worms in reach it could coil, the nearer one wandering and the farther one coiling a small worm
-- **THEN** it picks the coiler
-
-#### Scenario: Circling the knot
-- **WHEN** a bot is coiling a worm that is itself coiling a smaller worm
-- **THEN** it circles outside the coiler's circle, centred on that circle rather than on the coiler's head, and the circle it aims for shrinks over time
-
-#### Scenario: Bots that don't coil coilers
-- **WHEN** a bot that coils but doesn't coil coilers picks prey with the same two worms in reach
-- **THEN** it picks as before (the nearer one)
 
 ### Requirement: Shadowing a bigger worm
 A bot that shadows SHALL, when it isn't hunting or eating remains, sometimes pick a nearby worm heavier than its level's prey limit but at most four times its own mass, and run alongside that worm's body, a little behind its head and clear of it. It SHALL NOT shadow a worm that two other bots already shadow, SHALL give up after about 15 seconds or when the worm pulls away, and SHALL put getting out of danger first.
@@ -99,9 +80,9 @@ A shadowing bot SHALL cut in at its target's head only when the cut-off point is
 - **WHEN** a shadowing bot could only reach the cut-off point after the target's head has passed it, or its path there is blocked
 - **THEN** it keeps shadowing instead of cutting in
 
-### Requirement: Coiling coilers and shadowing work
-In seeded worlds on hard and expert, bots that coil coilers SHALL kill more coilers by coiling than before, and shadowing bots SHALL kill worms heavier than their prey limit, which no bot did before. Shadowing SHALL NOT make the bots that shadow die clearly more often than before.
+### Requirement: Shadowing works
+In seeded worlds on hard and expert, shadowing bots SHALL kill worms, including ones heavier than their prey limit, which no bot did before. Shadowing SHALL NOT make bots die clearly more often than before.
 
 #### Scenario: Same seed, before and after
-- **WHEN** the balance tool runs the same seeds on expert before and after this change
-- **THEN** coilers killed by a coiling bot go up, kills by shadowing bots appear, and bot deaths per minute stay within their usual range
+- **WHEN** the balance tool runs the same seeds on hard and expert before and after this change
+- **THEN** kills by shadowing bots appear, and bot deaths per minute stay within about a tenth of before
