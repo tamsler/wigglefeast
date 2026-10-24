@@ -878,3 +878,116 @@ test('reachable paths change nothing on easy, normal and hard (#149)', () => {
   for (const level of ['easy', 'normal', 'hard']) assert.equal(run(level, 1), run(level, 0), level);
   assert.notEqual(run('expert', 1), run('expert', 0), 'expert does change');
 });
+
+// --- Shadowing bigger worms (#150) ---------------------------------------------------
+
+test('shadow is appended: some hard bots, every expert bot; every bot keeps its other tactics (#150)', () => {
+  assert.deepEqual(TACTICS.slice(11), ['escape', 'shadow']);
+  for (const level of ['easy', 'normal']) assert.equal(DIFFICULTY[level].tactics.shadow, 0, level);
+  assert.equal(DIFFICULTY.hard.tactics.shadow, 0.4);
+  assert.equal(DIFFICULTY.expert.tactics.shadow, 1);
+  // Each bot's first twelve tactics, as bits, for ids 1-40, recorded before shadow was added.
+  const before = {
+    hard: [2623, 571, 2135, 2775, 139, 2151, 2087, 19, 2591, 523, 559, 175, 27, 2111, 647, 2259, 725, 43, 527, 2203, 25, 2655, 2647, 2107, 627, 59, 2205, 2687, 247, 649, 2615, 179, 19, 141, 2627, 679, 655, 599, 79, 635],
+    normal: [537, 521, 3, 516, 8, 1, 7, 17, 512, 0, 526, 5, 17, 19, 6, 19, 517, 1, 5, 2, 16, 5, 7, 27, 16, 0, 21, 17, 22, 8, 518, 18, 3, 5, 515, 512, 514, 530, 0, 19],
+    expert: Array(40).fill(4095),
+  };
+  for (const [level, masks] of Object.entries(before)) {
+    const now = masks.map((_, i) => TACTICS.slice(0, 12).reduce((m, k, j) => m | (knowsTactic({ id: i + 1 }, level, k) ? 1 << j : 0), 0));
+    assert.deepEqual(now, masks, level);
+  }
+});
+
+// A mass-300 bot at `at` heading `angle`, free to act (its rolls always pass), and a bigger worm with
+// its head at (300, 0) heading +y, its body trailing down along x = 300.
+function shadowScene(shares, { bigMass = 900, at = [0, 0], angle = 0, player = false, extra = [], level = 'expert' } = {}) {
+  return withTactics(level, shares, () => {
+    const s = scene(level, [
+      { name: 'Bot', mass: 300, x: at[0], y: at[1], angle, ai: { aggro: 1 } },
+      { name: 'Big', mass: bigMass, x: 300, y: 0, angle: Math.PI / 2 },
+      ...extra,
+    ]);
+    if (player) s.worms[1].isPlayer = true;
+    s.game.rng = () => 0;
+    return { ...s, bot: s.worms[0], big: s.worms[1], think: () => withTactics(level, shares, () => botThink(s.worms[0], s.game)) };
+  });
+}
+const SHADOW = ONLY('shadow');
+
+test('a bot shadows a worm too big to hunt, beside its body, within the limits (#150)', () => {
+  const s = shadowScene(SHADOW);
+  s.think();
+  assert.equal(s.bot.ai.shadow, s.big, 'shadows the worm three times its mass');
+  assert.equal(s.bot.ai.mode, 'shadow');
+  assert.ok(s.bot.targetAngle < 0, `heads for beside its body, behind its head (${s.bot.targetAngle.toFixed(2)})`);
+  const crowded = shadowScene(SHADOW, { extra: [{ name: 'S1', mass: 300, x: -3000, y: 0, angle: 0, ai: {} }, { name: 'S2', mass: 300, x: -3000, y: 900, angle: 0, ai: {} }] });
+  crowded.worms[2].ai.shadow = crowded.big; crowded.worms[3].ai.shadow = crowded.big;
+  crowded.think();
+  assert.ok(!crowded.bot.ai.shadow, 'two shadows already');
+  const huge = shadowScene(SHADOW, { bigMass: 1300 });
+  huge.think();
+  assert.ok(!huge.bot.ai.shadow, 'more than four times its mass');
+  const player = shadowScene(SHADOW, { player: true });
+  player.think();
+  assert.equal(player.bot.ai.shadow, player.big, 'the player like any worm');
+  // A bot that doesn't know the tactic draws exactly as many random numbers with a worm to shadow
+  // nearby as without one.
+  const draws = (bigAt) => {
+    const s2 = shadowScene(ONLY(null));
+    for (let i = 0; i < s2.big.sx.length; i++) s2.big.sx[i] += bigAt;
+    s2.big.updateBounds(); s2.game.rebuildSegGrid();
+    let n = 0;
+    s2.game.rng = () => { n++; return 0; };
+    s2.think();
+    return n;
+  };
+  assert.equal(draws(0), draws(5000));
+});
+
+test('a shadowing bot gives up after 15 seconds or when its worm gets far, and evades a threat first (#150)', () => {
+  const late = shadowScene(SHADOW);
+  late.think();
+  late.game.rng = () => 0.99; // no new pick
+  late.game.time += 16;
+  late.think();
+  assert.ok(!late.bot.ai.shadow, 'after 15 s');
+  const far = shadowScene(SHADOW);
+  far.think();
+  far.game.rng = () => 0.99;
+  for (let i = 0; i < far.big.sx.length; i++) far.big.sx[i] += 2000;
+  far.big.updateBounds(); far.game.rebuildSegGrid();
+  far.think();
+  assert.ok(!far.bot.ai.shadow, 'beyond 900');
+  // A head lining up to cut it off (as in the evasion test): it evades.
+  const threat = shadowScene({ ...SHADOW, evade: 1 }, { extra: [{ name: 'Cutter', mass: 100, x: 200, y: -150, angle: Math.atan2(150, 40) }] });
+  threat.think();
+  assert.equal(threat.bot.ai.mode, 'evade');
+});
+
+test('a shadow cuts in only with a clear, in-time cut from beside its worm, never from in front (#150)', () => {
+  // Shadowers on hard and expert all predict turns, which times the cut-off point ahead of the head.
+  const CUTTER = { ...SHADOW, predict: 1 };
+  // Beside the big worm's head, going its way: the cut is clear and in time.
+  const cut = shadowScene(CUTTER, { at: [230, 30], angle: Math.PI / 2 });
+  cut.bot.ai.shadow = cut.big; cut.bot.ai.shadowUntil = 1e9;
+  cut.think();
+  assert.equal(cut.bot.ai.prey, cut.big, 'hands over to a cut-off');
+  assert.equal(cut.bot.ai.fromShadow, true);
+  assert.ok(['cut', 'trap', 'flank', 'pin', 'learn'].includes(cut.bot.ai.mode), cut.bot.ai.mode);
+  // Far behind its head: too late, so it keeps shadowing.
+  const behind = shadowScene(CUTTER, { at: [230, -300], angle: Math.PI / 2 });
+  behind.bot.ai.shadow = behind.big; behind.bot.ai.shadowUntil = 1e9;
+  behind.think();
+  assert.ok(!behind.bot.ai.prey, 'not in time');
+  assert.equal(behind.bot.ai.mode, 'shadow');
+  // A body across the way to the cut: it keeps shadowing.
+  const blocked = shadowScene(CUTTER, { at: [230, 30], angle: Math.PI / 2, extra: [{ name: 'Wall', mass: 2000, x: 280, y: 110, angle: 0 }] }); // its body runs along y = 110, across the way
+  blocked.bot.ai.shadow = blocked.big; blocked.bot.ai.shadowUntil = 1e9;
+  blocked.think();
+  assert.ok(!blocked.bot.ai.prey, 'path blocked');
+  // In front of its head: that would be a head-on, so no cut.
+  const front = shadowScene(CUTTER, { at: [380, 120], angle: Math.PI / 2 });
+  front.bot.ai.shadow = front.big; front.bot.ai.shadowUntil = 1e9;
+  front.think();
+  assert.ok(!front.bot.ai.prey, 'never from in front');
+});

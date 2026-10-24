@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 require('../engine.js');
 const { Game, Worm, SKINS, DIFFICULTY, MAX_BOTS, arenaRadius, CFG, radiusFor, lengthFor, botThink, validateSnapshot } = globalThis.WormEngine;
-const { clone, fixture, simulate, withFood, scene, hunt } = require('./helpers/engine.js');
+const { clone, fixture, simulate, withFood, scene, hunt, withTactics } = require('./helpers/engine.js');
 
 test('a saved world restores and keeps running', () => {
   const { g } = simulate(30, 'normal', 30);
@@ -357,11 +357,12 @@ test('bots hunt only worms lighter than their difficulty allows (#16)', () => {
     for (let i = 0; i < 200 && !bot.ai.prey; i++) botThink(bot, game);
     return bot.ai.prey === other;
   };
-  for (const difficulty of ['easy', 'normal', 'hard']) {
+  // Shadowing (#150) is the one way a bot goes after a worm above the limit, so it is off here.
+  for (const difficulty of ['easy', 'normal', 'hard']) withTactics(difficulty, { shadow: 0 }, () => {
     const ratio = DIFFICULTY[difficulty].preyRatio;
     assert.equal(hunts(difficulty, 200 * ratio * 0.95), true, `${difficulty}: hunts a worm just under ${ratio}x`);
     assert.equal(hunts(difficulty, 200 * ratio * 1.05), false, `${difficulty}: leaves a worm just over ${ratio}x alone`);
-  }
+  });
   assert.ok(DIFFICULTY.easy.preyRatio <= 1, 'easy bots never chase worms heavier than themselves');
 });
 
