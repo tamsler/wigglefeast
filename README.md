@@ -108,7 +108,7 @@ No dependencies: Node 22+ and Google Chrome (set `CHROME_PATH` if it isn't in th
 
 CI splits the files into five parallel shards balanced by duration: `node tests/shard.js 2/5` runs shard 2 locally. Every file runs in exactly one shard, and a new file needs no setup. Add a slow one to `SECONDS` in `tests/shard.js` to keep the shards even.
 
-- `tests/engine.test.js` runs headlessly: the simulation on every difficulty and at 150 bots, save round trips and save validation, growth and shedding, and each bot tactic in a hand-built scene.
+- The engine tests run headlessly. `tests/simulation.test.js` runs whole worlds on every difficulty and at 150 bots. `tests/engine.test.js` covers save round trips and save validation, growth and shedding, food and power-ups. `tests/bots.test.js` tests each bot tactic in a hand-built scene, `tests/habits.test.js` learning the player's habits, and `tests/coil.test.js` coil escape. Shared helpers are in `tests/helpers/engine.js`.
 - `tests/browser/` drives headless Chrome through the DevTools protocol:
   - imports and stored-data safety, and one window at a time
   - real keyboard, mouse and touch input, and boosting
