@@ -530,7 +530,19 @@
       if (o === self || (o === other && si < otherSegs) || o.dead) return false;
       if (si < 3 && o.mass < headMass) return false;
       const dx = o.sx[si] - px, dy = o.sy[si] - py, rr = rad + o.r;
-      return dx * dx + dy * dy < rr * rr;
+      if (dx * dx + dy * dy >= rr * rr) return false;
+      return !(o.mass < self.mass && underBody(g, self, o.sx[si], o.sy[si])); // harmless under our body (#155)
+    });
+  }
+
+  // Is the point (x, y) under worm w's own body, not counting its head and neck? A smaller worm's
+  // body there is harmless to w: w lies on top of it, as it is drawn (#116, #155).
+  function underBody(g, w, x, y) {
+    const neck = Math.ceil((3 * w.r) / spacingFor(w.r)), gw = g.gridWorms, rr = w.r * w.r;
+    return g.segGrid.query(x, y, w.r, (oi, si) => {
+      if (gw[oi] !== w || si < neck) return false;
+      const dx = w.sx[si] - x, dy = w.sy[si] - y;
+      return dx * dx + dy * dy < rr;
     });
   }
 
@@ -1783,6 +1795,7 @@
           const dx = o.sx[si] - hx, dy = o.sy[si] - hy, rr = (r + o.r) * 0.78;
           if (dx * dx + dy * dy >= rr * rr) return false;
           if (si < 3 && w.mass >= o.mass) return false; // head-on: the bigger worm wins
+          if (o.mass < w.mass && underBody(this, w, o.sx[si], o.sy[si])) return false; // w lies on top there (#155)
           killer = o;
           return true;
         });
