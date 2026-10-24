@@ -29,7 +29,7 @@
 - [x] 4.1 Run `node tools/coil.js --n 300` for every arm against both coilers, with Expert prey and with Hard prey; verify the spec's *Coil escape works* outcome for Expert prey with 95% intervals that don't overlap the baseline (fewer prey deaths against both coilers), and record the Hard numbers. If it doesn't hold, stop and take the numbers to the owner (design decision 7) before going on
 - [x] 4.2 Tune the open values (head-shot margins and commitment, before its removal) only with `tools/coil.js`, re-running 4.1 after each change; verify the values tried and their numbers are recorded for the PR
 - [x] 4.3 Add a CI test to `tests/coil.test.js` that runs a small fixed-seed batch (sized to finish in a few seconds) for baseline and reach + escape against the scripted coiler, and asserts the escape arm has clearly fewer prey deaths than the baseline; verify it passes and finishes quickly
-- [ ] 4.4 Re-run `tools/balance.js` with the task 1.1 seed on all levels; verify easy and normal are identical apart from ms/tick, and record the hard and expert changes (player deaths per minute, coil kills, `escape` kills, top bot mass, ms/tick) for the PR
+- [x] 4.4 Re-run `tools/balance.js` with the task 1.1 seed on all levels; verify easy and normal are identical apart from ms/tick, and record the hard and expert changes (player deaths per minute, coil kills, `escape` kills, top bot mass, ms/tick) for the PR
 
 ## 5. Release
 
