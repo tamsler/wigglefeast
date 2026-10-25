@@ -186,7 +186,8 @@
           syncMusic();
           syncBoost(boostWanted);
         }
-        if (!quietOn && ac.state !== 'running') ac.resume(); // also after an interruption (iOS calls)
+        if (quietOn) { if (ac.state === 'running') ac.suspend(); } // first gesture while paused or hidden: stay quiet
+        else if (ac.state !== 'running') ac.resume(); // also after an interruption (iOS calls)
       } catch (e) { ac = null; } // no audio after all: stay silent
     },
     play(name, opts) {
@@ -225,6 +226,7 @@
       quiet: quietOn,
       musicPlaying: musicPlaying() && soundOn && !quietOn,
       boosting: !!boostNodes && soundOn && !quietOn,
+      context: ac ? ac.state : 'none',
     }),
   };
   root.WormAudio = api;

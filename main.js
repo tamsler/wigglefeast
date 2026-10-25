@@ -64,6 +64,7 @@
     }
     window.WormAudio.setSound(settings.sound);
     window.WormAudio.setMusic(settings.music);
+    syncSoundButtons(); // also when another window changed them and this one takes over (#45)
   }
   loadSettings();
 
@@ -1375,7 +1376,8 @@
     if (e.repeat) return; // holding a toggle key must not flip it back and forth (#49)
     switch (e.code) {
       case 'KeyP': case 'Escape': setPaused(mode === 'playing'); break;
-      case 'KeyM': // #9
+      case 'KeyM': // #9; Ctrl/Cmd/Alt+M belong to the browser or system
+        if (e.ctrlKey || e.metaKey || e.altKey) break;
         setAudio('sound', !settings.sound);
         if (mode === 'playing') feed(settings.sound ? '🔊 Sound on' : '🔇 Sound off', 'info');
         break;

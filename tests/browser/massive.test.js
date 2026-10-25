@@ -109,7 +109,8 @@ test('camera zoom follows worm size (#163)', async (t) => {
   page = await launch();
   await page.goto(gameUrl());
   await page.startRun();
-  await page.eval('window.__player.shield = 1e9');
+  // Shielded, and no power-ups to pick up: a zoom power-up would zoom out a further 38% (#173).
+  await page.eval(`(() => { const g = window.__game; window.__player.shield = 1e9; Object.assign(g, { powerups: [], powerupTarget: 0 }); })()`);
   const zoomOf = (r) => 1 / (1 + (r - 14) / 35);
   // The settled zoom (two readings 250 ms apart within 0.3%) and the radius at that moment.
   const settled = async () => {

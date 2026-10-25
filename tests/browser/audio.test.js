@@ -38,6 +38,27 @@ test('audio module', async (t) => {
   });
 });
 
+// Review of #172: the first real gesture can come while the game is quiet (here: paused); audio
+// must then start suspended, and run once the game resumes.
+test('unlocking while quiet stays quiet', async (t) => {
+  let page;
+  t.after(() => page && page.close());
+  page = await launch();
+  await page.goto(gameUrl());
+  await page.startRun(); // element.click(): no real gesture, so audio is still locked
+  await page.click('#pauseBtn');
+  await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'pause');
+  await page.waitFor('window.WormAudio.state().quiet', 'quiet while paused');
+  assert.equal((await page.eval('window.WormAudio.state()')).unlocked, false);
+  const [x, y] = await page.center('#pausedTitle');
+  await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+  assert.equal((await page.eval('window.WormAudio.state()')).unlocked, true);
+  await page.waitFor(`window.WormAudio.state().context === 'suspended'`, 'audio created suspended while paused');
+  await page.click('#resume');
+  await page.waitFor(`window.WormAudio.state().context === 'running'`, 'audio running after resume');
+});
+
 test('no Web Audio: the game still plays, silently', async (t) => {
   let page;
   t.after(() => page && page.close());
@@ -219,6 +240,14 @@ test('sound and music toggles', async (t) => {
     await page.press('KeyM');
     assert.equal((await state()).sound, true, 'typing m in the nickname leaves sound on');
     await page.eval(`document.getElementById('name').value = ''; document.getElementById('name').blur()`);
+  });
+
+  await t.test('Ctrl+M and Cmd+M leave sound alone', async () => {
+    for (const modifiers of [2, 4]) { // Ctrl, Meta
+      await page.send('Input.dispatchKeyEvent', { type: 'keyDown', code: 'KeyM', key: 'm', windowsVirtualKeyCode: 77, modifiers });
+      await page.send('Input.dispatchKeyEvent', { type: 'keyUp', code: 'KeyM', key: 'm', windowsVirtualKeyCode: 77, modifiers });
+    }
+    assert.equal((await state()).sound, true);
   });
 
   await t.test('M during play shows a short message', async () => {
