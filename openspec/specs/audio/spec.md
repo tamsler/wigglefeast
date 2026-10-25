@@ -42,6 +42,17 @@ Buttons in the menus SHALL make a short click, and starting a run SHALL make a r
 - **WHEN** the player presses Play
 - **THEN** the start swoosh plays
 
+### Requirement: Achievement fanfare
+Earning an achievement SHALL play a short, bright fanfare, distinct from the other sounds, following the same sound toggle and browser rules as every other effect.
+
+#### Scenario: Earning an achievement with sound on
+- **WHEN** the player earns an achievement during a run with sound on
+- **THEN** the achievement fanfare plays
+
+#### Scenario: Sound off
+- **WHEN** the player earns an achievement with sound off
+- **THEN** the pop-up shows and no fanfare plays
+
 ### Requirement: Background music
 A soft generated music loop SHALL play while a run is being played, and SHALL stop while the game is paused, after the player dies, in the menus, while another window has the game, and while the page is hidden.
 
