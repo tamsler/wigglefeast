@@ -97,3 +97,14 @@ test('food themes', async (t) => {
     assert.ok(['cherry', 'cookie', 'donut', 'cake slice'].every((n) => kinds.has(n)), `all four snack items appear: ${[...kinds]}`);
   });
 });
+
+// #163: food is drawn about a third larger, in every theme (drawing only).
+test('food drawn larger (#163)', async (t) => {
+  let page;
+  t.after(() => page && page.close());
+  page = await launch();
+  await page.goto(gameUrl());
+  const sizes = (themed) => page.eval(`window.wigglefeastDebug.foodSizes(10, ${themed})`);
+  assert.deepEqual(await sizes(true), { glow: 65, item: 54 }, 'themed: a radius-10 item 54 across on a 65 glow');
+  assert.deepEqual(await sizes(false), { glow: 65, item: 0 }, 'Classic: a radius-10 dot 65 across');
+});

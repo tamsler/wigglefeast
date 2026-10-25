@@ -343,6 +343,30 @@ test('x2 and x5 multiply natural food only, not food dropped by worms (#16)', ()
   assert.equal(eat(false), 4);
 });
 
+// #163 draws food a third larger; how close a head must get stays the same: eaten within
+// r * 0.9 + f.r * 0.4, pulled in from up to 2.2 r + 24, left alone beyond that.
+test('food pickup distance is unchanged by its drawn size (#163)', () => {
+  const at = (d) => {
+    const game = new Game({ botCount: 5 });
+    game.powerups = [];
+    const w = new Worm({ name: 'Eater', skin: SKINS[0], mass: 100, x: 0, y: 0, angle: 0, worldR: game.R, shield: 1e9 });
+    game.worms = [w];
+    // Straight above the head, so the worm's heading doesn't matter.
+    game.food = [{ x: w.sx[0], y: w.sy[0] - d, v: 4, r: 10, c: '#fff', life: Infinity, ph: 0, dead: false, natural: true }];
+    game.rebuildFoodGrid();
+    game.eatFood(1 / 60);
+    const f = game.food[0];
+    return { eaten: f.dead, moved: Math.hypot(f.x - w.sx[0], f.y - w.sy[0]) < d - 0.01 };
+  };
+  const r = radiusFor(100), eat = r * 0.9 + 10 * 0.4, reach = r * 2.2 + 24;
+  assert.equal(at(eat - 0.5).eaten, true, 'eaten just inside the pickup distance');
+  const near = at(eat + 2);
+  assert.equal(near.eaten, false, 'not eaten just outside it');
+  assert.equal(near.moved, true, 'but pulled toward the head');
+  const far = at(reach + 5);
+  assert.deepEqual(far, { eaten: false, moved: false }, 'left alone beyond the pull reach');
+});
+
 test('bots hunt only worms lighter than their difficulty allows (#16)', () => {
   // A very aggressive bot thinks repeatedly next to one other worm: it may pick that worm
   // as prey only when the worm is lighter than preyRatio times the bot's mass.

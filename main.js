@@ -285,31 +285,52 @@
 
   // ---------------------------------------------------------------------------
   // Pre-rendered sprites
+  // The arena floor (#163): big flat-top hexagons (FLOOR_S from centre to corner) with dark grooves
+  // and a faint light edge, a soft shadow toward each edge, and a fine honeycomb texture (FLOOR_S / 8)
+  // inside. One tile, drawn once, filled in world space so it moves and scales with the camera.
+  const FLOOR_S = 80, FLOOR_W = 3 * FLOOR_S, FLOOR_H = 139; // FLOOR_H ~ sqrt(3) * FLOOR_S, whole pixels
   function makeHexPattern() {
-    const s = 46, w = 3 * s, h = 80;
+    const S = FLOOR_S, W = FLOOR_W, H = FLOOR_H, K = 8;
     const c = document.createElement('canvas');
-    c.width = w; c.height = h;
+    c.width = W; c.height = H;
     const g = c.getContext('2d');
-    g.fillStyle = '#0d1322';
-    g.fillRect(0, 0, w, h);
-    const hex = (cx, cy) => {
+    g.fillStyle = '#0e1424';
+    g.fillRect(0, 0, W, H);
+    const ry = H / 2 / 0.866; // vertical radius, stretched a hair so the tile repeats exactly
+    const path = (cx, cy, s, k = 1) => {
       g.beginPath();
-      for (let k = 0; k < 6; k++) {
-        const a = (k * Math.PI) / 3;
-        const x = cx + Math.cos(a) * s * 0.9, y = cy + Math.sin(a) * (h / 2 / 0.866) * 0.9;
-        k ? g.lineTo(x, y) : g.moveTo(x, y);
+      for (let i = 0; i < 6; i++) {
+        const a = (i * Math.PI) / 3, x = cx + Math.cos(a) * s * k, y = cy + Math.sin(a) * ry * (s / S) * k;
+        i ? g.lineTo(x, y) : g.moveTo(x, y);
       }
       g.closePath();
-      g.fillStyle = '#121a2e';
-      g.fill();
-      g.strokeStyle = '#18213a';
-      g.lineWidth = 2;
-      g.stroke();
     };
-    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-      hex(i * w, j * h);
-      hex(i * w + 1.5 * s, j * h + h / 2);
-    }
+    // Every hexagon of size s whose centre lands on or near the tile (columns w apart, rows h apart).
+    const grid = (s, w, h, fn) => {
+      for (let i = -1; i <= W / w + 1; i++) for (let j = -1; j <= H / h + 1; j++) { fn(i * w, j * h); fn(i * w + 1.5 * s, j * h + h / 2); }
+    };
+    const s2 = S / K; // fine honeycomb; K divides both tile sides, so it tiles seamlessly
+    g.strokeStyle = 'rgba(120,140,190,0.12)';
+    g.lineWidth = 1;
+    grid(s2, W / K, H / K, (x, y) => { path(x, y, s2, 0.92); g.stroke(); });
+    grid(S, W, H, (x, y) => {
+      const gr = g.createRadialGradient(x, y, S * 0.4, x, y, S);
+      gr.addColorStop(0, 'rgba(0,0,0,0)');
+      gr.addColorStop(1, 'rgba(0,0,0,0.28)');
+      path(x, y, S);
+      g.fillStyle = gr;
+      g.fill();
+    });
+    grid(S, W, H, (x, y) => {
+      path(x, y, S);
+      g.strokeStyle = '#070b15';
+      g.lineWidth = 7;
+      g.stroke();
+      path(x, y, S, 0.955);
+      g.strokeStyle = 'rgba(140,160,210,0.10)';
+      g.lineWidth = 1.5;
+      g.stroke();
+    });
     return ctx.createPattern(c, 'repeat');
   }
   const bgPattern = makeHexPattern();
@@ -1329,7 +1350,8 @@
   // ---------------------------------------------------------------------------
   // Camera
   const baseZoom = () => Math.sqrt(W * H) / 1150;
-  const targetZoom = (p) => baseZoom() / (1 + (p.r - 14) / 55) * (p.pw.zoom > 0 ? 0.62 : 1);
+  // Zooms out as the worm thickens (#163: divisor 35, was 55); the zoom power-up adds a further 0.62.
+  const targetZoom = (p) => baseZoom() / (1 + (p.r - 14) / 35) * (p.pw.zoom > 0 ? 0.62 : 1);
   function updateCamera(dt) {
     const base = baseZoom();
     let tx = cam.x, ty = cam.y, tz = cam.z, k = 6;
@@ -1407,6 +1429,8 @@
     boostArrows: () => boostArrowsDrawn,
     headRepaints: () => headRepaints, // #161
     previewSkin: () => previewName, // #161
+    foodSizes: (r, themed) => foodSizes(r, 1, themed), // #163
+    floorTile: () => ({ w: FLOOR_W, h: FLOOR_H, s: FLOOR_S }), // #163
     previewFrames: () => previewFrames,
     learningCues: () => learningAlpha.size, // #138
     learningCue: (id) => learningAlpha.get(id) || 0,
@@ -1552,6 +1576,12 @@
     ctx.globalAlpha = 1;
   }
 
+  // Drawn food sizes, in world units across (#163: about a third larger than before, drawing only).
+  // Classic draws just the glowing dot; a themed arena draws an item on a softer glow.
+  function foodSizes(r, pulse, themed) {
+    return { glow: r * 6.5 * pulse, item: themed ? r * 5.4 * pulse : 0 };
+  }
+
   function render(t) {
     const z = cam.z;
     boostArrowsDrawn = 0;
@@ -1594,12 +1624,11 @@
     for (const f of game.food) {
       if (f.x < view.x0 || f.x > view.x1 || f.y < view.y0 || f.y > view.y1) continue;
       const pulse = 1 + 0.12 * Math.sin(t * 3 + f.ph), a = f.life < 3 ? Math.max(0, f.life / 3) : 1;
+      const { glow: G, item: D } = foodSizes(f.r, pulse, themed);
       if (!themed) {
-        const D = f.r * 5 * pulse;
         ctx.globalAlpha = a;
-        ctx.drawImage(foodSprite(f.c), f.x - D / 2, f.y - D / 2, D, D);
+        ctx.drawImage(foodSprite(f.c), f.x - G / 2, f.y - G / 2, G, G);
       } else {
-        const G = f.r * 4.8 * pulse, D = f.r * 4 * pulse; // items drawn a bit larger than dots so small ones read
         ctx.globalAlpha = a * 0.55;
         ctx.drawImage(foodSprite(f.c), f.x - G / 2, f.y - G / 2, G, G);
         ctx.globalAlpha = a;

@@ -95,3 +95,41 @@ test('massive worms', async (t) => {
     assert.ok(z100 < z50 * 0.95, `100,000 keeps zooming out (${z50.toFixed(3)} -> ${z100.toFixed(3)})`);
   });
 });
+
+// #163: the camera zooms out faster with thickness: zoom = base / (1 + (r - 14) / 35). Relative to a
+// new worm (mass 15) that is about 0.74 at mass 1,000, 0.54 at 10,000 and 0.41 at 50,000; the zoom
+// power-up multiplies by 0.62. The worm eats as it goes, so readings are checked against its radius.
+test('camera zoom follows worm size (#163)', async (t) => {
+  let page;
+  t.after(() => page && page.close());
+  page = await launch();
+  await page.goto(gameUrl());
+  await page.startRun();
+  await page.eval('window.__player.shield = 1e9');
+  const zoomOf = (r) => 1 / (1 + (r - 14) / 35);
+  // The settled zoom (two readings 250 ms apart within 0.3%) and the radius at that moment.
+  const settled = async () => {
+    let prev = await page.eval(ZOOM);
+    for (let i = 0; i < 60; i++) {
+      await sleep(250);
+      const z = await page.eval(ZOOM);
+      if (i >= 3 && Math.abs(z - prev) / prev < 0.003) return { z, r: await page.eval('window.__player.r') };
+      prev = z;
+    }
+    return { z: prev, r: await page.eval('window.__player.r') };
+  };
+  const s0 = await settled(), base = s0.z / zoomOf(s0.r); // the zoom a radius-14 worm would get
+  const radiusFor = (m) => page.eval(`window.WormEngine.radiusFor(${m})`);
+  for (const [mass, want] of [[1000, 0.74], [10000, 0.54], [50000, 0.41]]) {
+    await page.eval(`window.__player.mass = ${mass}`);
+    const s = await settled();
+    assert.ok(Math.abs(s.z / base - zoomOf(s.r)) / zoomOf(s.r) < 0.02, `zoom at ${mass} follows the radius: ${(s.z / base).toFixed(3)} vs ${zoomOf(s.r).toFixed(3)}`);
+    const fromNew = zoomOf(await radiusFor(mass)) / zoomOf(await radiusFor(15));
+    assert.ok(Math.abs(fromNew - want) <= 0.01, `relative to a new worm at ${mass}: ${fromNew.toFixed(3)}, want about ${want}`);
+  }
+  await page.eval('window.__player.mass = 1000');
+  const plain = await settled();
+  await page.eval('window.__player.pw.zoom = 60');
+  const zoomed = await settled();
+  assert.ok(Math.abs(zoomed.z / plain.z - 0.62) <= 0.02, `zoom power-up: ${(zoomed.z / plain.z).toFixed(3)}x`);
+});
