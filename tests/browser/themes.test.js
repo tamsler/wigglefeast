@@ -108,3 +108,27 @@ test('food drawn larger (#163)', async (t) => {
   assert.deepEqual(await sizes(true), { glow: 65, item: 54 }, 'themed: a radius-10 item 54 across on a 65 glow');
   assert.deepEqual(await sizes(false), { glow: 65, item: 0 }, 'Classic: a radius-10 dot 65 across');
 });
+
+// Review of #168: a big piece of food just off screen is still drawn while its glow reaches in.
+test('big food just off screen is drawn while its glow reaches in (#163)', async (t) => {
+  let page;
+  t.after(() => page && page.close());
+  page = await launch();
+  await page.goto(gameUrl());
+  await page.startRun();
+  await page.press('KeyP');
+  await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'the game to pause');
+  // One radius-20 piece, a given distance left of the screen's left edge (glow radius about 73).
+  const drawnAt = async (beyond) => {
+    await page.eval(`(() => {
+      const g = window.__game, m = document.getElementById('game').getContext('2d').getTransform();
+      const left = (0 - m.e) / m.a, y = (innerHeight * devicePixelRatio / 2 - m.f) / m.d;
+      g.food = [{ x: left - ${beyond}, y, v: 50, r: 20, c: '#ffca3a', life: Infinity, ph: 0, dead: false, natural: true }];
+      g.rebuildFoodGrid();
+    })()`);
+    await page.frames(2);
+    return page.eval('window.wigglefeastDebug.foodDrawn()');
+  };
+  assert.equal(await drawnAt(60), 1, 'drawn 60 units off screen: its glow reaches in');
+  assert.equal(await drawnAt(120), 0, 'culled 120 units off screen');
+});

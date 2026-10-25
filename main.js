@@ -1375,6 +1375,7 @@
   // Boost arrows (#37, #41): two chevrons just in front of a boosting worm's head,
   // pointing where it is going, pulsing from back to front.
   let boostArrowsDrawn = 0; // worms whose arrows were drawn in the last frame
+  let foodDrawn = 0; // pieces of food drawn in the last frame (#163)
   let headRepaints = 0; // heads repainted over another body in the last frame (#102, #161)
   function drawBoostArrows(w, t, alpha) {
     const r = w.r, a = w.angle, arm = r * 1.05, spread = Math.PI / 4;
@@ -1431,6 +1432,7 @@
     previewSkin: () => previewName, // #161
     foodSizes: (r, themed) => foodSizes(r, 1, themed), // #163
     floorTile: () => ({ w: FLOOR_W, h: FLOOR_H, s: FLOOR_S }), // #163
+    foodDrawn: () => foodDrawn,
     previewFrames: () => previewFrames,
     learningCues: () => learningAlpha.size, // #138
     learningCue: (id) => learningAlpha.get(id) || 0,
@@ -1621,8 +1623,12 @@
 
     // Food: a glow in the food's colour, plus the theme's item unless the theme is Classic (#64)
     const themed = activeTheme !== 'classic';
+    foodDrawn = 0;
     for (const f of game.food) {
-      if (f.x < view.x0 || f.x > view.x1 || f.y < view.y0 || f.y > view.y1) continue;
+      // Culled by its drawn size, so a big piece's glow doesn't pop in at the screen edge (#163).
+      const m = f.r * 3.7 - 40; // glow radius at the peak of its pulse, beyond the view's own margin
+      if (f.x < view.x0 - m || f.x > view.x1 + m || f.y < view.y0 - m || f.y > view.y1 + m) continue;
+      foodDrawn++;
       const pulse = 1 + 0.12 * Math.sin(t * 3 + f.ph), a = f.life < 3 ? Math.max(0, f.life / 3) : 1;
       const { glow: G, item: D } = foodSizes(f.r, pulse, themed);
       if (!themed) {
