@@ -84,7 +84,7 @@ The main menu SHALL show a preview of a worm wearing the selected skin, larger t
 - **THEN** the preview fits the menu's width without sideways scrolling
 
 ### Requirement: Hidden skins stay compatible
-Rainbow and Lavender SHALL be unlockable rewards: not offered in the picker until unlocked, and never given to new bots. Skins SHALL keep their position in the skin list, so a saved world or remembered setting that refers to any skin SHALL keep loading. A locked reward SHALL NOT be worn: when the chosen skin is locked (on load, after Reset stats, after importing a save, or when another window takes over), the choice SHALL fall back to the first free skin, Cherry Pop, and a run in progress in a locked skin SHALL continue in it (#178).
+Rainbow and Lavender SHALL be unlockable rewards: not offered in the picker until unlocked, and never given to new bots. Skins SHALL keep their position in the skin list, so a saved world or remembered setting that refers to any skin SHALL keep loading. A locked reward SHALL NOT be worn: when the chosen skin is locked (on load, after Reset stats, after importing a save, or when another window takes over), the choice SHALL fall back to the first free skin, Cherry Pop, and a run in progress in a locked skin SHALL continue in that free skin (#178).
 
 #### Scenario: Old save with a hidden skin
 - **WHEN** a world saved with a Rainbow bot or player is loaded
