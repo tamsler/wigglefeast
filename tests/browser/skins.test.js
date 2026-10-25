@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { launch, gameUrl } = require('../helpers/browser');
 
+const KILLER = JSON.stringify({ v: 1, totals: { games: 1, kills: 1, time: 30, eaten: 10, best: 100, bestByDiff: { easy: 0, normal: 100, hard: 0 } }, top: [], recent: [] }); // has eaten a worm: First Bite unlocks Lavender (#14)
 const NEW = ['Aurora', 'Sunset Drive', 'Synthwave', 'Toxic', 'Gold Rush', 'Chrome', 'Ladybug', 'Leopard', 'Viper', 'Galaxy', 'Magma', 'Abyss'];
 // A cheap fingerprint of the arena canvas.
 const HASH = `(() => { const c = document.getElementById('game'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
@@ -34,12 +35,12 @@ test('skins', async (t) => {
     assert.equal(await page.eval(`document.querySelector('#skins button.on').title`), 'Galaxy');
   });
 
-  await t.test('a remembered hidden skin still loads and plays', async () => {
-    await page.eval(`localStorage.removeItem('wormarena.world');
+  await t.test('a remembered Lavender still loads and plays once First Bite is earned', async () => {
+    await page.eval(`localStorage.removeItem('wormarena.world'); localStorage.setItem('wormarena.profile', ${JSON.stringify(KILLER)});
       localStorage.setItem('wormarena.settings', JSON.stringify({ name: 'Old', skin: 8, botCount: 30, difficulty: 'normal' }))`);
     await page.reload();
     assert.equal(await page.eval(`document.getElementById('skinName').textContent`), 'Lavender');
-    assert.equal(await page.eval(`document.querySelectorAll('#skins button.on').length`), 0, 'no swatch selected');
+    assert.equal(await page.eval(`document.querySelector('#skins button.on').title`), 'Lavender');
     await page.startRun('Old');
     assert.equal(await page.eval('window.__player.skin.name'), 'Lavender');
   });
@@ -118,8 +119,8 @@ test('skin preview', async (t) => {
     await page.send('Emulation.setEmulatedMedia', { features: [] });
   });
 
-  await t.test('a remembered hidden skin shows in the preview', async () => {
-    await page.eval(`localStorage.removeItem('wormarena.world');
+  await t.test('a remembered, unlocked Lavender shows in the preview', async () => {
+    await page.eval(`localStorage.removeItem('wormarena.world'); localStorage.setItem('wormarena.profile', ${JSON.stringify(KILLER)});
       localStorage.setItem('wormarena.settings', JSON.stringify({ name: 'Old', skin: 8, botCount: 30, difficulty: 'normal' }))`);
     await page.reload();
     await page.frames(2);

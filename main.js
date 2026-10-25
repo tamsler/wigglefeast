@@ -224,6 +224,18 @@
     return earned;
   }
   const isUnlocked = (skin) => !skin.unlock || !!profile.ach[skin.unlock];
+  // A locked reward can't be worn (#178): after Reset stats, on load, after an import or when another
+  // window takes over, a locked chosen skin falls back to the first free one, and a run in progress
+  // in a locked skin continues in that free skin.
+  function dropLockedSkin() {
+    if (!isUnlocked(SKINS[settings.skin])) {
+      settings.skin = 0;
+      if (isActive()) store.set('settings', settings);
+      refreshMenu();
+    }
+    const p = game && game.player;
+    if (p && !isUnlocked(p.skin)) p.skin = SKINS[settings.skin];
+  }
   // What the stats can't see until a run ends: special food eaten and whether the player led (#14).
   const freshRun = () => ({ specials: 0, first: false });
   let liveRun = freshRun();
@@ -372,6 +384,7 @@
     refreshMenu();
     const saved = loadWorld();
     if (!saved || !restoreWorld(saved)) { newGame(); showMenu(); }
+    dropLockedSkin();
   }
   function goStandby() {
     active = false;
@@ -1055,6 +1068,7 @@
 
   function startPlaying() {
     liveRun = freshRun();
+    dropLockedSkin(); // never start a run in a locked skin (#178)
     settings.name = $('name').value.trim().slice(0, 16);
     if (isActive()) store.set('settings', settings);
     activeTheme = resolveTheme();
@@ -1210,6 +1224,7 @@
       profile = newProfile;
       checkAchievements(null, { merge: false }); // whatever its stats prove (#14)
       saveProfile();
+      dropLockedSkin();
       saveWorld();
       if (mode === 'menu') showStats();
     };
@@ -1383,6 +1398,7 @@
     if (!confirm('Reset all stats and high scores? This cannot be undone (export a save first if you want a backup).') || !isActive()) return;
     profile = emptyProfile();
     saveProfile();
+    dropLockedSkin(); // the rewards are locked again (#178)
     Object.assign(habits, freshHabits()); // the bots forget the player's habits too (#135)
     store.set('habits', habits);
     showStats();
@@ -2228,5 +2244,6 @@
     newGame(); // a world to show behind the panel; never saved
     goStandby();
   }
+  dropLockedSkin(); // a remembered or resumed locked skin (#178)
   requestAnimationFrame(frame);
 })();

@@ -72,8 +72,8 @@ The main menu SHALL show a preview of a worm wearing the selected skin, larger t
 - **THEN** the preview immediately shows a Leopard worm, spots and eyes included
 
 #### Scenario: Remembered hidden skin
-- **WHEN** the menu opens with a remembered hidden skin such as Lavender
-- **THEN** the preview shows a Lavender worm even though no swatch is selected
+- **WHEN** the menu opens with a remembered Lavender that the player has unlocked
+- **THEN** the preview shows a Lavender worm
 
 #### Scenario: Reduced motion
 - **WHEN** the player's system is set to reduce motion
@@ -84,7 +84,7 @@ The main menu SHALL show a preview of a worm wearing the selected skin, larger t
 - **THEN** the preview fits the menu's width without sideways scrolling
 
 ### Requirement: Hidden skins stay compatible
-Rainbow and Lavender SHALL be unlockable rewards: not offered in the picker until unlocked, and never given to new bots. Skins SHALL keep their position in the skin list, so a saved world or remembered setting that refers to any skin, hidden, locked or not, SHALL keep loading with that skin.
+Rainbow and Lavender SHALL be unlockable rewards: not offered in the picker until unlocked, and never given to new bots. Skins SHALL keep their position in the skin list, so a saved world or remembered setting that refers to any skin SHALL keep loading. A locked reward SHALL NOT be worn: when the chosen skin is locked (on load, after Reset stats, after importing a save, or when another window takes over), the choice SHALL fall back to the first free skin, Cherry Pop, and a run in progress in a locked skin SHALL continue in it (#178).
 
 #### Scenario: Old save with a hidden skin
 - **WHEN** a world saved with a Rainbow bot or player is loaded
@@ -92,7 +92,11 @@ Rainbow and Lavender SHALL be unlockable rewards: not offered in the picker unti
 
 #### Scenario: Remembered hidden skin
 - **WHEN** the player's remembered skin is Lavender and they haven't unlocked it
-- **THEN** their worm keeps Lavender until they pick another skin, and the picker shows no swatch selected
+- **THEN** the menu shows Cherry Pop selected, and the next run is in Cherry Pop
+
+#### Scenario: Reset stats with a reward chosen
+- **WHEN** the player has Rainbow chosen and resets their stats
+- **THEN** Rainbow is locked again, Cherry Pop is chosen instead, and the next run is in Cherry Pop
 
 ### Requirement: New unlockable skins
 The game SHALL have four new skins, each unlocked by an achievement: Dragon (scales: dark red with gold diamonds), Thunder (neon: near-black with a yellow glow and running lights), Royal (metallic: purple with a moving gold shine) and Cosmic (galaxy: magenta with twinkling stars). Each SHALL have a bright accent and food colours like the other skins.

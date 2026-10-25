@@ -181,13 +181,28 @@ test('locked skins in the picker', async (t) => {
     assert.equal(await page.eval(`document.querySelector('#skins button[title="Rainbow"]').classList.contains('locked')`), false);
   });
 
-  await t.test('a remembered locked skin still loads', async () => {
+  await t.test('a remembered locked skin falls back to a free one (#178)', async () => {
     await page.eval(`localStorage.clear(); localStorage.setItem('wormarena.settings', JSON.stringify({ name: 'Old', skin: 8, botCount: 30, difficulty: 'normal' }))`);
     await page.reload();
-    assert.equal(await skinName(), 'Lavender');
-    assert.equal(await page.eval(`document.querySelectorAll('#skins button.on').length`), 0, 'no swatch selected');
+    assert.equal(await skinName(), 'Cherry Pop');
+    assert.equal(await page.eval(`document.querySelector('#skins button.on').title`), 'Cherry Pop');
+    assert.equal(JSON.parse(await page.eval(`localStorage.getItem('wormarena.settings')`)).skin, 0, 'and is remembered');
     await page.startRun('Old');
-    assert.equal(await page.eval('window.__player.skin.name'), 'Lavender');
+    assert.equal(await page.eval('window.__player.skin.name'), 'Cherry Pop');
+  });
+
+  await t.test('a run resumed in a skin that is now locked continues in a free one (#178)', async () => {
+    await page.press('KeyP');
+    await page.click('#endRun');
+    await startWith(page, profile({ best: 6000, bestByDiff: { easy: 0, normal: 6000, hard: 0 } }));
+    await page.click('#skins button[title="Rainbow"]');
+    await page.startRun();
+    assert.equal(await page.eval('window.__player.skin.name'), 'Rainbow');
+    // Another device's stats without Rainbow, then reopen: the saved run resumes, Rainbow is locked.
+    await page.eval(`localStorage.setItem('wormarena.profile', ${JSON.stringify(JSON.stringify(profile()))})`);
+    await page.reload();
+    await page.waitFor('window.__player && !window.__player.dead', 'run resumed');
+    assert.equal(await page.eval('window.__player.skin.name'), 'Cherry Pop');
   });
 });
 
@@ -259,7 +274,10 @@ test('achievements in exports, imports and reset', async (t) => {
     assert.deepEqual(await ach(page), {});
     await page.click('#closeStats');
     assert.equal(await page.eval(`document.querySelector('#skins button[title="Rainbow"]').classList.contains('locked')`), true);
-    assert.equal(await page.eval(`document.getElementById('skinName').textContent`), 'Rainbow', 'a picked reward stays worn until another skin is picked');
+    assert.equal(await page.eval(`document.getElementById('skinName').textContent`), 'Cherry Pop', 'a picked reward is swapped for a free skin (#178)');
+    assert.equal(JSON.parse(await page.eval(`localStorage.getItem('wormarena.settings')`)).skin, 0);
+    await page.startRun();
+    assert.equal(await page.eval('window.__player.skin.name'), 'Cherry Pop', 'and the next run is in it');
   });
 });
 
