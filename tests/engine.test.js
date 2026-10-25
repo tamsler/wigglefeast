@@ -367,6 +367,29 @@ test('food pickup distance is unchanged by its drawn size (#163)', () => {
   assert.deepEqual(far, { eaten: false, moved: false }, 'left alone beyond the pull reach');
 });
 
+// #9: the eating sound listens for 'eat', emitted for the player's worm only.
+test('eating food emits eat for the player only (#9)', () => {
+  const game = new Game({ botCount: 5 });
+  game.powerups = []; game.specials = [];
+  const p = new Worm({ name: 'Me', skin: SKINS[0], mass: 100, x: 0, y: 0, angle: 0, worldR: game.R, shield: 1e9, isPlayer: true });
+  const b = new Worm({ name: 'Bot', skin: SKINS[0], mass: 100, x: 1000, y: 0, angle: 0, worldR: game.R, shield: 1e9 });
+  game.worms = [p, b];
+  const food = (x, y, r) => ({ x, y, v: 4, r, c: '#fff', life: Infinity, ph: 0, dead: false, natural: true });
+  game.food = [food(p.sx[0], p.sy[0], 5), food(p.sx[0] + 2, p.sy[0], 9), food(b.sx[0], b.sy[0], 7)];
+  game.rebuildFoodGrid();
+  const eats = [], specials = [];
+  game.on('eat', (e) => eats.push(e));
+  game.on('special', (e) => specials.push(e));
+  game.eatFood(1 / 60);
+  assert.ok(game.food.every((f) => f.dead), 'all three pieces eaten');
+  assert.deepEqual(eats.map((e) => [e.worm.name, e.r]).sort(), [['Me', 5], ['Me', 9]], 'one eat per piece the player ate, none for the bot');
+  game.specials = [{ x: p.sx[0], y: p.sy[0], kind: 'nova', life: 10, ph: 0, dead: false }];
+  eats.length = 0;
+  game.eatSpecials(1 / 60);
+  assert.equal(specials.length, 1, 'special food emits special');
+  assert.equal(eats.length, 0, 'and not eat');
+});
+
 test('bots hunt only worms lighter than their difficulty allows (#16)', () => {
   // A very aggressive bot thinks repeatedly next to one other worm: it may pick that worm
   // as prey only when the worm is lighter than preyRatio times the bot's mass.

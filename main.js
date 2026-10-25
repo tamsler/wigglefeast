@@ -51,7 +51,7 @@
   // Rebuilt from checked fields: a corrupted stored value must not stop startup (#26).
   const settings = {};
   function loadSettings() {
-    Object.assign(settings, { name: '', skin: 0, botCount: 30, difficulty: 'normal', theme: 'auto' });
+    Object.assign(settings, { name: '', skin: 0, botCount: 30, difficulty: 'normal', theme: 'auto', sound: true, music: true });
     const s = store.get('settings', null);
     if (s && typeof s === 'object') {
       if (typeof s.name === 'string') settings.name = s.name.slice(0, 16);
@@ -59,9 +59,47 @@
       if (Number.isInteger(s.botCount) && s.botCount >= MIN_BOTS && s.botCount <= MAX_BOTS) settings.botCount = s.botCount;
       if (DIFFICULTIES.includes(s.difficulty)) settings.difficulty = s.difficulty;
       if (['auto', 'classic', 'halloween', 'christmas', 'snacks', 'tech'].includes(s.theme)) settings.theme = s.theme; // #64
+      if (typeof s.sound === 'boolean') settings.sound = s.sound; // #9: older settings have neither, so both stay on
+      if (typeof s.music === 'boolean') settings.music = s.music;
     }
+    window.WormAudio.setSound(settings.sound);
+    window.WormAudio.setMusic(settings.music);
   }
   loadSettings();
+
+  // ---------------------------------------------------------------------------
+  // Sound (#9): audio.js makes the sounds; this file says what happened. Browsers only let audio
+  // start after a user gesture, so the first click, tap or key press unlocks it.
+  const sound = window.WormAudio;
+  for (const ev of ['pointerdown', 'touchstart', 'keydown']) window.addEventListener(ev, () => sound.unlock(), { capture: true, passive: true });
+  // Sound and music toggles (#9): corner buttons on the main menu and pause panels, and the M key.
+  // Saved at once (by the window that has the game, #45), not only when a run starts.
+  function syncSoundButtons() {
+    document.querySelectorAll('.audioToggles button').forEach((b) => {
+      const on = settings[b.dataset.toggle];
+      b.setAttribute('aria-pressed', String(on));
+      b.classList.toggle('off', !on);
+      b.classList.toggle('muted', b.dataset.toggle === 'music' && !settings.sound);
+    });
+  }
+  function setAudio(key, on) {
+    settings[key] = on;
+    if (key === 'sound') sound.setSound(on);
+    else sound.setMusic(on);
+    if (isActive()) store.set('settings', settings);
+    syncSoundButtons();
+  }
+  document.querySelectorAll('.audioToggles button').forEach((b) => b.addEventListener('click', (e) => {
+    e.stopPropagation(); // no click sound for the toggles themselves
+    setAudio(b.dataset.toggle, !settings[b.dataset.toggle]);
+  }));
+  syncSoundButtons();
+  // Menu buttons click; starting a run swooshes instead.
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('.overlay button');
+    if (!b) return;
+    sound.play(b.id === 'play' || b.id === 'again' ? 'start' : 'click');
+  });
 
   // ---------------------------------------------------------------------------
   // Profile: lifetime totals, top runs and recent runs. Kept separate from the
@@ -898,14 +936,18 @@
     game.on('death', onDeath);
     game.on('powerup', onPowerup);
     game.on('special', onSpecial);
+    game.on('eat', onEat); // #9
     spectate = game.leaderboard[0] || null;
     if (spectate) { cam.x = spectate.x; cam.y = spectate.y; }
   }
 
   function onDeath({ victim, killer, cause }) {
     // killer.isPlayer, not game.player: the player may have died in the same tick (#47).
-    if (killer && killer.isPlayer) feed(`You ate ${victim.name}! (+${Math.round(victim.mass * 0.8)})`, 'good');
-    else if (victim.isPlayer) {
+    if (killer && killer.isPlayer) {
+      feed(`You ate ${victim.name}! (+${Math.round(victim.mass * 0.8)})`, 'good');
+      sound.play('kill');
+    } else if (victim.isPlayer) {
+      if (cause !== 'quit') sound.play('death');
       // Another window took over in the meantime: its last save wins, so this run isn't kept (#45).
       if (!isActive()) return;
       const isBest = recordRun(victim, killer, cause);
@@ -919,11 +961,20 @@
   }
 
   function onPowerup({ worm, type }) {
-    if (worm === game.player) feed(`${POWERUP_INFO[type].icon} ${POWERUP_INFO[type].label}!`, 'info');
+    if (worm !== game.player) return;
+    feed(`${POWERUP_INFO[type].icon} ${POWERUP_INFO[type].label}!`, 'info');
+    sound.play('powerup');
   }
 
   function onSpecial({ worm, kind, value }) {
-    if (worm === game.player) feed(`${SPECIAL_INFO[kind].icon} ${SPECIAL_INFO[kind].label} +${value}`, 'good');
+    if (worm !== game.player) return;
+    feed(`${SPECIAL_INFO[kind].icon} ${SPECIAL_INFO[kind].label} +${value}`, 'good');
+    sound.play('special');
+  }
+
+  // Eating pop (#9), higher for small food: food radii run from 3 to 20 (foodRadius in engine.js).
+  function onEat({ worm, r }) {
+    if (worm === game.player) sound.play('eat', { size: Math.min(1, Math.max(0, (r - 3) / 17)) });
   }
 
   function startPlaying() {
@@ -1324,6 +1375,10 @@
     if (e.repeat) return; // holding a toggle key must not flip it back and forth (#49)
     switch (e.code) {
       case 'KeyP': case 'Escape': setPaused(mode === 'playing'); break;
+      case 'KeyM': // #9
+        setAudio('sound', !settings.sound);
+        if (mode === 'playing') feed(settings.sound ? '🔊 Sound on' : '🔇 Sound off', 'info');
+        break;
       case 'Enter': if (mode === 'dead' && !$('death').classList.contains('hidden')) startPlaying(); break;
     }
   });
@@ -1430,6 +1485,8 @@
     boostArrows: () => boostArrowsDrawn,
     headRepaints: () => headRepaints, // #161
     previewSkin: () => previewName, // #161
+    sounds: () => sound.log().map((e) => e.name), // #9
+    audioState: () => sound.state(),
     foodSizes: (r, themed) => foodSizes(r, 1, themed), // #163
     floorTile: () => ({ w: FLOOR_W, h: FLOOR_H, s: FLOOR_S }), // #163
     foodDrawn: () => foodDrawn,
@@ -1887,6 +1944,16 @@
   // ---------------------------------------------------------------------------
   // Main loop: variable step split into ≤1/60s sub-steps so 120Hz displays stay smooth.
   let last = performance.now();
+  // The boost whoosh follows the player's boost, the music plays during a run, and everything goes
+  // quiet while paused, standing by for another window (#45), or hidden (#9).
+  function syncAudio() {
+    const p = game && game.player, playing = mode === 'playing' && p && !p.dead;
+    sound.boost(playing && p.boosting);
+    sound.music(playing);
+    sound.quiet(mode === 'paused' || mode === 'standby' || document.hidden);
+  }
+  document.addEventListener('visibilitychange', syncAudio); // frames stop while hidden
+
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
@@ -1899,6 +1966,7 @@
     }
     render(now / 1000);
     drawSkinPreview(now);
+    syncAudio();
     if (mode !== 'menu' && mode !== 'standby') renderMinimap();
     updateHud(dt);
     syncUpdateBanner();

@@ -41,6 +41,10 @@
   <!-- Main menu -->
   <div id="menu" class="overlay">
     <div class="panel">
+      <div class="audioToggles">
+        <button data-toggle="sound" aria-label="Sound" title="Sound (M)"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M4 9h4l5-4v14l-5-4H4z"/><path class="on" d="M16 8.5a4.5 4.5 0 0 1 0 7M18.5 6a8 8 0 0 1 0 12"/><path class="cross" d="M16 9l6 6M22 9l-6 6"/></svg></button>
+        <button data-toggle="music" aria-label="Music" title="Music"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M9 17.5a2.5 2.5 0 1 1-1-2V5l11-2v12.5a2.5 2.5 0 1 1-1-2V6.2L9 7.8z"/><path class="cross" d="M4 4l16 16"/></svg></button>
+      </div>
       <h1>Wiggle<span>feast</span></h1>
       <p class="tag">Eat. Grow. Outsmart the bots.</p>
       <input id="name" maxlength="16" placeholder="Your nickname" autocomplete="off" spellcheck="false">
@@ -62,7 +66,7 @@
       <button id="openStats" class="ghost">📊 Stats &amp; high scores</button>
       <div class="help">
         <div class="desk"><kbd>Mouse</kbd> steer · <kbd>Hold click</kbd> / <kbd>Space</kbd> boost</div>
-        <div class="desk"><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> keyboard steer · <kbd>P</kbd> pause</div>
+        <div class="desk"><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> keyboard steer · <kbd>P</kbd> pause · <kbd>M</kbd> sound</div>
         <div class="touch">Drag to steer · hold the boost button to boost</div>
       </div>
       <div id="best"></div>
@@ -88,6 +92,10 @@
 
   <div id="paused" class="overlay hidden">
     <div class="panel small">
+      <div class="audioToggles">
+        <button data-toggle="sound" aria-label="Sound" title="Sound (M)"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M4 9h4l5-4v14l-5-4H4z"/><path class="on" d="M16 8.5a4.5 4.5 0 0 1 0 7M18.5 6a8 8 0 0 1 0 12"/><path class="cross" d="M16 9l6 6M22 9l-6 6"/></svg></button>
+        <button data-toggle="music" aria-label="Music" title="Music"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M9 17.5a2.5 2.5 0 1 1-1-2V5l11-2v12.5a2.5 2.5 0 1 1-1-2V6.2L9 7.8z"/><path class="cross" d="M4 4l16 16"/></svg></button>
+      </div>
       <h2 id="pausedTitle">Paused</h2>
       <p id="pausedText">Press <kbd>P</kbd> or <kbd>Esc</kbd> to resume</p>
       <button id="resume" class="primary">Resume</button>
@@ -133,6 +141,7 @@
   </div>
 
   <script src="engine.js"></script>
+  <script src="audio.js"></script>
   <script src="main.js"></script>
 </body>
 </html>
