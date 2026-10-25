@@ -12,6 +12,9 @@ test('massive worms', async (t) => {
   t.after(() => page && page.close());
   page = await launch();
   await page.goto(gameUrl());
+  // A real click first, so audio unlocks and the frame-time check runs with music playing (#9).
+  await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: 5, y: 5, button: 'left', clickCount: 1 });
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 5, y: 5, button: 'left', clickCount: 1 });
   await page.startRun();
   await page.eval('window.__player.shield = 1e9');
 
@@ -54,6 +57,7 @@ test('massive worms', async (t) => {
   await t.test('frames stay fast with the player at 50,000 mass', async (st) => {
     await page.eval('window.__player.mass = 50000');
     await sleep(1500); // the body grows to its new length
+    assert.equal(await page.eval('window.wigglefeastDebug.audioState().musicPlaying'), true, 'measured with music playing');
     const m = await page.eval(`new Promise((resolve) => {
       const g = window.__game, orig = g.update;
       let engine = 0;
@@ -105,7 +109,8 @@ test('camera zoom follows worm size (#163)', async (t) => {
   page = await launch();
   await page.goto(gameUrl());
   await page.startRun();
-  await page.eval('window.__player.shield = 1e9');
+  // Shielded, and no power-ups to pick up: a zoom power-up would zoom out a further 38% (#173).
+  await page.eval(`(() => { const g = window.__game; window.__player.shield = 1e9; Object.assign(g, { powerups: [], powerupTarget: 0 }); })()`);
   const zoomOf = (r) => 1 / (1 + (r - 14) / 35);
   // The settled zoom (two readings 250 ms apart within 0.3%) and the radius at that moment.
   const settled = async () => {

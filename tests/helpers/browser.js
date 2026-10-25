@@ -210,7 +210,7 @@ class Page {
   click(selector) { return this.eval(`document.querySelector(${JSON.stringify(selector)}).click()`); }
 
   key(type, code) {
-    const keys = { Space: [' ', 32], KeyW: ['w', 87], KeyA: ['a', 65], KeyP: ['p', 80], ArrowLeft: ['ArrowLeft', 37], ArrowUp: ['ArrowUp', 38] };
+    const keys = { Space: [' ', 32], KeyW: ['w', 87], KeyA: ['a', 65], KeyP: ['p', 80], KeyM: ['m', 77], ArrowLeft: ['ArrowLeft', 37], ArrowUp: ['ArrowUp', 38] };
     const [key, vk] = keys[code];
     return this.send('Input.dispatchKeyEvent', { type, code, key, windowsVirtualKeyCode: vk });
   }

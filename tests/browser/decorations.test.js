@@ -11,6 +11,16 @@ test('decorations of a long worm', async (t) => {
   await page.goto(gameUrl());
   await page.startRun();
   await page.eval('window.__player.shield = 1e9');
+  // A new run eases the camera in from the menu's wider view; let it settle before pausing, or a busy
+  // machine freezes it zoomed out with more of the long worm on screen (#171).
+  const zoom = `document.getElementById('game').getContext('2d').getTransform().a`;
+  let prev = await page.eval(zoom);
+  for (let i = 0; i < 40; i++) {
+    await sleep(150);
+    const z = await page.eval(zoom);
+    if (i >= 3 && Math.abs(z - prev) / prev < 0.003) break;
+    prev = z;
+  }
   await page.press('KeyP');
   await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'the game to pause');
   // Record every arc drawn on the game canvas, with its radius.

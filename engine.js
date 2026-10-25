@@ -1704,6 +1704,7 @@
             // nothing, and the worm that ate a big corpse with x5 grew without limit (#16).
             w.mass = Math.min(MAX_MASS, w.mass + f.v * (f.natural ? mult : 1));
             w.eaten++;
+            if (w.isPlayer) this.emit('eat', { worm: w, r: f.r }); // for the eating sound (#9); bots stay silent
           } else {
             const step = Math.min(d, (700 + 900 * (1 - d / A)) * dt);
             f.x += (dx / d) * step;
