@@ -55,7 +55,8 @@ test('massive worms', async (t) => {
   });
 
   await t.test('frames stay fast with the player at 50,000 mass', async (st) => {
-    await page.eval('window.__player.mass = 50000');
+    // In the most expensive reward finish (#180): only the player can wear one.
+    await page.eval(`window.__player.mass = 50000; window.__player.skin = window.WormEngine.SKINS.find((s) => s.name === 'Inferno')`);
     await sleep(1500); // the body grows to its new length
     assert.equal(await page.eval('window.wigglefeastDebug.audioState().musicPlaying'), true, 'measured with music playing');
     const m = await page.eval(`new Promise((resolve) => {
