@@ -943,6 +943,9 @@
 
   // Reward finishes (#180): animated looks only rewards have. Bright marks and glows are drawn with
   // additive blending; every animation follows game time t, so it stops while paused.
+  // Travelling effects (bolts, shooting stars, the Holo shine) stay within this many segments of the head,
+  // so on a very long worm they still happen where the player is looking.
+  const NEAR_HEAD = 120;
   const lighter = (g, fn) => { const op = g.globalCompositeOperation; g.globalCompositeOperation = 'lighter'; try { fn(); } finally { g.globalCompositeOperation = op; } };
   const glowUnder = (color, k, w) => (g, sx, sy, r, skin, t) => lighter(g, () => {
     const a0 = g.globalAlpha; g.globalAlpha = a0 * k * (0.75 + 0.25 * Math.sin(t * 3));
@@ -962,8 +965,8 @@
       color: (skin, a, n, t) => mix(skin.colors[0], skin.colors[1], 0.5 + 0.5 * Math.sin(a * 0.3 - t * 2)),
       under: glowUnder('#ff4d00', 0.22, 0.9),
       marks(g, sx, sy, r, skin, t) {
-        const n = sx.length, levels = [new Path2D(), new Path2D(), new Path2D()], [i0, i1] = stepRange(1, 1, n - 2);
-        for (let i = i0; i <= i1; i += 2) {
+        const n = sx.length, levels = [new Path2D(), new Path2D(), new Path2D()], [i0, i1] = stepRange(1, 2, n - 2);
+        for (let i = i0; i <= i1; i += 2) { // stepRange with the same step, so cracks stay on fixed segments
           const b = 0.5 + 0.5 * Math.sin(i * 0.35 - t * 4);
           if (b < 0.35) continue;
           crack(levels[Math.min(2, Math.floor(b * 3))], sx, sy, r, i, i, 0.9);
@@ -990,7 +993,7 @@
     holo: {
       color: (skin, a, n, t) => `hsl(${(a * 9 + t * 90) % 360}, 85%, 64%)`,
       marks(g, sx, sy, r, skin, t) {
-        const n = sx.length, p = ((t * 28) % (n + 30)) - 15, a0 = g.globalAlpha;
+        const n = sx.length, p = ((t * 28) % (Math.min(n, NEAR_HEAD) + 30)) - 15, a0 = g.globalAlpha;
         const from = Math.max(0, Math.min(n - 1, Math.round(p + 3))), to = Math.max(0, Math.min(n - 1, Math.round(p - 3)));
         if (from > to) lighter(g, () => { g.globalAlpha = a0 * 0.45; g.strokeStyle = '#ffffff'; g.lineWidth = r * 1.3; traceOn(g, sx, sy, from, to); g.stroke(); g.globalAlpha = a0; });
         const stars = new Path2D(), [s0, s1] = stepRange(0, 4, n - 1);
@@ -1012,7 +1015,7 @@
         for (let k = 0; k < 4; k++) {
           const phase = t * 3.1 + k * 0.27, id = Math.floor(phase), local = phase - id;
           if (local > 0.55) continue;
-          const start = 1 + Math.floor(hash01(id * 7 + k) * (n - 9)), path = new Path2D();
+          const start = 1 + Math.floor(hash01(id * 7 + k) * (Math.min(n - 9, NEAR_HEAD) - 0)), path = new Path2D();
           for (let i = start, m = 0; i < start + 7; i++, m++) {
             const [, , nx, ny] = normalAt(sx, sy, i), off = (hash01(id * 31 + m * 3 + k) - 0.5) * 1.3 * r;
             m ? path.lineTo(sx[i] + nx * off, sy[i] + ny * off) : path.moveTo(sx[i] + nx * off, sy[i] + ny * off);
@@ -1065,7 +1068,7 @@
           }
           const phase = t / 2.5, id = Math.floor(phase), local = phase - id;
           if (local < 0.3 && n > 14) {
-            const p = Math.floor(local / 0.3 * (n - 12)), [, , nx, ny] = normalAt(sx, sy, p), off = (hash01(id) - 0.5) * r;
+            const p = Math.floor(local / 0.3 * (Math.min(n, NEAR_HEAD + 12) - 12)), [, , nx, ny] = normalAt(sx, sy, p), off = (hash01(id) - 0.5) * r;
             g.globalAlpha = a0 * 0.9; g.strokeStyle = '#ffffff'; g.lineWidth = r * 0.1;
             g.beginPath(); g.moveTo(sx[p] + nx * off, sy[p] + ny * off); g.lineTo(sx[p + 8] + nx * off, sy[p + 8] + ny * off); g.stroke();
           }
