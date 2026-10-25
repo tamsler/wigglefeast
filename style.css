@@ -155,6 +155,20 @@ html, body {
 .panel h3 { margin: 18px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; opacity: .6; text-align: left; }
 .grid.four { grid-template-columns: repeat(4, 1fr); }
 .grid.four b { font-size: 20px; }
+/* Achievements on the stats screen (#14) */
+#statsTabs { margin: 4px 0 12px; }
+#statsTabs button { flex: 1; }
+#achList { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; text-align: left; }
+#achList .ach { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 10px; background: rgba(255,255,255,.04); }
+#achList .ach.earned { background: rgba(255, 214, 10, .08); }
+#achList b { display: block; font-size: 13.5px; }
+#achList small { display: block; font-size: 11.5px; opacity: .6; }
+#achList .reward { display: block; font-size: 11px; color: #ffd60a; }
+#achList .prog { text-align: right; min-width: 96px; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+#achList .bar { display: block; height: 6px; border-radius: 3px; background: rgba(255,255,255,.1); overflow: hidden; margin-bottom: 3px; }
+#achList .bar i { display: block; height: 100%; background: linear-gradient(90deg, #ff2e88, #ff9f1c); }
+#achList .done { color: #ffd60a; }
+@media (max-width: 560px) { #achList { grid-template-columns: 1fr; } }
 table.runs { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
 table.runs th { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .5; font-weight: 600; padding: 4px 6px; }
 table.runs td { padding: 5px 6px; border-top: 1px solid rgba(255,255,255,.06); white-space: nowrap; }
@@ -206,7 +220,7 @@ h2 { margin: 0 0 14px; font-size: 26px; }
   background: #0d1322; box-shadow: inset 0 0 0 2px rgba(0,0,0,.35);
 }
 @media (max-width: 420px) { #skinPreview { height: 56px; } }
-#skins { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+#skins { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; } /* 30 skins in 3 rows (#14) */
 #skins button {
   aspect-ratio: 1; border-radius: 50%; border: 3px solid transparent; cursor: pointer; padding: 0;
   overflow: hidden; background: #0d1322; box-shadow: inset 0 0 0 2px rgba(0,0,0,.35);
@@ -215,6 +229,12 @@ h2 { margin: 0 0 14px; font-size: 26px; }
 /* Narrow phones: fewer, bigger swatches so each stays an easy touch target (#58). */
 @media (max-width: 420px) { #skins { grid-template-columns: repeat(6, 1fr); } }
 #skins button.on { border-color: #fff; transform: scale(1.08); }
+/* Locked rewards (#14): dimmed, with a padlock. */
+#skins button { position: relative; }
+#skins button.locked canvas { opacity: .35; filter: grayscale(.6); }
+#skins button .lock { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; font-size: 15px; pointer-events: none; }
+#skins button.locked .lock { display: flex; }
+#skinName.hint { color: #ff9f1c; }
 
 /* Food theme picker (#64): one compact row of six item buttons. */
 #themes { display: flex; gap: 6px; } /* five or six buttons sharing the row (#67) */
@@ -325,7 +345,7 @@ kbd {
   h1 { font-size: 30px; }
   .tag { font-size: 13px; margin-bottom: 6px; }
   #skinPreview { height: 40px; }
-  #skins { gap: 4px; }
+  #skins { gap: 4px; grid-template-columns: repeat(8, 1fr); } /* 30 skins in 4 rows, not 5 (#14) */
   .panel { padding: 14px 16px 12px; }
   .label { margin: 6px 0 4px; }
 }
@@ -348,3 +368,17 @@ kbd {
   .grid div { padding: 6px 4px; }
   .grid b { font-size: 18px; }
 }
+
+/* Achievement pop-up (#14): top centre, above the HUD, never catching taps. */
+#achToast {
+  position: fixed; top: calc(14px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 30;
+  display: flex; gap: 10px; align-items: center; padding: 10px 16px 10px 12px; pointer-events: none;
+  background: rgba(20, 16, 40, .92); border: 1px solid rgba(255, 214, 10, .55); border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.45); color: #fff; max-width: calc(100vw - 32px);
+}
+#achToast.hidden { display: none; }
+#achToast .trophy { font-size: 26px; }
+#achToast b { display: block; font-size: 15px; }
+#achToast span:not(.trophy) { display: block; font-size: 12.5px; color: #ffd60a; }
+#achToast.pop { animation: achPop .35s ease-out; }
+@keyframes achPop { from { transform: translateX(-50%) scale(.8); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }

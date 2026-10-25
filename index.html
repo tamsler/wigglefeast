@@ -19,6 +19,9 @@
   <canvas id="game"></canvas>
 
   <!-- In-game HUD -->
+  <!-- Achievement pop-up (#14) -->
+  <div id="achToast" class="hidden" role="status" aria-live="polite"><span class="trophy">🏆</span><div><b id="achToastName"></b><span id="achToastSkin"></span></div></div>
+
   <div id="hud" class="hidden">
     <div id="stats">
       <div class="score"><span id="score">0</span><small>score</small><span id="boostBadge" class="hidden">Boost</span></div>
@@ -116,13 +119,22 @@
   <div id="statsScreen" class="overlay hidden">
     <div class="panel wide">
       <h2>Stats &amp; high scores</h2>
-      <div class="grid four" id="totals"></div>
-      <h3>Best by difficulty</h3>
-      <div class="grid four" id="bestByDiff"></div>
-      <h3>Top runs</h3>
-      <table class="runs" id="topRuns"></table>
-      <h3>Recent games</h3>
-      <table class="runs" id="recentRuns"></table>
+      <div class="seg" id="statsTabs" role="tablist">
+        <button data-tab="statsPane" role="tab" aria-selected="true" class="on">Stats</button>
+        <button data-tab="achPane" role="tab" aria-selected="false" id="achTitle">Achievements</button>
+      </div>
+      <div id="statsPane" role="tabpanel">
+        <div class="grid four" id="totals"></div>
+        <h3>Best by difficulty</h3>
+        <div class="grid four" id="bestByDiff"></div>
+        <h3>Top runs</h3>
+        <table class="runs" id="topRuns"></table>
+        <h3>Recent games</h3>
+        <table class="runs" id="recentRuns"></table>
+      </div>
+      <div id="achPane" role="tabpanel" class="hidden">
+        <div id="achList"></div>
+      </div>
       <div class="buttons">
         <button id="exportSave" class="ghost">⬇ Export save</button>
         <button id="importSave" class="ghost">⬆ Import save</button>

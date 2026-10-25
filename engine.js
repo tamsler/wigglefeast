@@ -94,12 +94,12 @@
     { name: 'Cherry Pop', colors: ['#ff595e', '#ffca3a'] },
     { name: 'Lagoon', colors: ['#4cc9f0', '#4361ee', '#3a0ca3'] },
     { name: 'Lime Ocean', colors: ['#8ac926', '#1982c4'] },
-    { name: 'Rainbow', colors: ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93'], hidden: true },
+    { name: 'Rainbow', colors: ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93'], hidden: true, unlock: 'noodle' },
     { name: 'Candy Cane', colors: ['#ffffff', '#ef233c'] },
     { name: 'Bumblebee', colors: ['#2b2b2b', '#ffd60a'] },
     { name: 'Neon Night', colors: ['#f72585', '#7209b7', '#3a0ca3', '#4361ee', '#4cc9f0'] },
     { name: 'Mint', colors: ['#2ec4b6', '#cbf3f0'] },
-    { name: 'Lavender', colors: ['#ffd6ff', '#e7c6ff', '#c8b6ff', '#b8c0ff'], hidden: true },
+    { name: 'Lavender', colors: ['#ffd6ff', '#e7c6ff', '#c8b6ff', '#b8c0ff'], hidden: true, unlock: 'firstbite' },
     { name: 'Sailor', colors: ['#e63946', '#f1faee', '#a8dadc', '#457b9d'] },
     { name: 'Tangerine', colors: ['#ff9f1c', '#ffbf69', '#fff3e0'] },
     { name: 'Emerald', colors: ['#06d6a0', '#118ab2'] },
@@ -108,6 +108,7 @@
     // Saves store a skin by its position: only ever append, never remove or reorder (#58).
     // finish: how the body is drawn (main.js). colors: that finish's colours. accent: minimap
     // dot and boost arrows. food: what the worm drops. hidden: not offered or given to new bots.
+    // unlock: the achievement that makes a hidden skin pickable (#14).
     { name: 'Aurora', finish: 'gradient', colors: ['#00f5d4', '#00bbf9', '#9b5de5', '#f15bb5'] },
     { name: 'Sunset Drive', finish: 'gradient', colors: ['#ffbe0b', '#fb5607', '#ff006e', '#8338ec'] },
     { name: 'Synthwave', finish: 'neon', colors: ['#160b2e', '#ff2e88', '#2de2e6'], accent: '#ff2e88', food: ['#ff2e88', '#2de2e6'] },
@@ -120,6 +121,11 @@
     { name: 'Galaxy', finish: 'galaxy', colors: ['#0b1030', '#5a189a', '#ffffff'], accent: '#b98cff', food: ['#b98cff', '#ffffff', '#7b6cff'] },
     { name: 'Magma', finish: 'pulse', colors: ['#2b0b05', '#ff7a00'], accent: '#ff7a00', food: ['#ff7a00', '#ffb347'] },
     { name: 'Abyss', finish: 'pulse', colors: ['#041c32', '#00e5ff'], accent: '#00e5ff', food: ['#00e5ff', '#7df9ff'] },
+    // Rewards (#14): hidden from the picker and from bots until the achievement in `unlock` is earned.
+    { name: 'Dragon', finish: 'scales', colors: ['#9b1d12', '#ffb703', '#3d0a05'], accent: '#ff7b00', food: ['#ff7b00', '#ffb703'], hidden: true, unlock: 'hunter' },
+    { name: 'Thunder', finish: 'neon', colors: ['#15140a', '#ffe14d', '#fffbe0'], accent: '#ffe14d', food: ['#ffe14d', '#fffbe0'], hidden: true, unlock: 'marathon' },
+    { name: 'Royal', finish: 'metallic', colors: ['#5b2a86', '#ffd86b', '#2a0f40'], accent: '#c99aff', food: ['#c99aff', '#ffd86b'], hidden: true, unlock: 'titan' },
+    { name: 'Cosmic', finish: 'galaxy', colors: ['#1a0526', '#c2187a', '#ffd1f0'], accent: '#ff6ec7', food: ['#ff6ec7', '#ffd1f0'], hidden: true, unlock: 'expert' },
   ];
   for (const skin of SKINS) {
     skin.finish = skin.finish || 'stripes';

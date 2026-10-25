@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 require('../engine.js');
-const { Game, Worm, SKINS, DIFFICULTY, MAX_BOTS, arenaRadius, CFG, radiusFor, lengthFor, botThink, validateSnapshot } = globalThis.WormEngine;
+const { Game, Worm, SKINS, PICKABLE_SKINS, DIFFICULTY, MAX_BOTS, arenaRadius, CFG, radiusFor, lengthFor, botThink, validateSnapshot } = globalThis.WormEngine;
 const { clone, fixture, simulate, withFood, scene, hunt, withTactics } = require('./helpers/engine.js');
 
 test('a saved world restores and keeps running', () => {
@@ -274,13 +274,13 @@ test('skins: originals keep their place, new skins are complete, hidden ones are
     assert.equal(SKINS[i].finish, 'stripes', `${name} finish`);
     assert.deepEqual(SKINS[i].food, colors, `${name} drops its own colours, as before`);
   });
-  assert.deepEqual(SKINS.slice(14).map((s) => s.name), ['Aurora', 'Sunset Drive', 'Synthwave', 'Toxic', 'Gold Rush', 'Chrome', 'Ladybug', 'Leopard', 'Viper', 'Galaxy', 'Magma', 'Abyss']);
+  assert.deepEqual(SKINS.slice(14).map((s) => s.name), ['Aurora', 'Sunset Drive', 'Synthwave', 'Toxic', 'Gold Rush', 'Chrome', 'Ladybug', 'Leopard', 'Viper', 'Galaxy', 'Magma', 'Abyss', 'Dragon', 'Thunder', 'Royal', 'Cosmic']); // rewards appended (#14)
   const hex = /^#[0-9a-f]{6}$/i;
   for (const s of SKINS) {
     assert.ok(['stripes', 'gradient', 'neon', 'metallic', 'spots', 'scales', 'galaxy', 'pulse'].includes(s.finish), `${s.name} finish`);
     assert.ok([...s.colors, s.accent, ...s.food].every((c) => hex.test(c)), `${s.name} colours are #rrggbb`);
   }
-  assert.deepEqual(SKINS.filter((s) => s.hidden).map((s) => s.name), ['Rainbow', 'Lavender']);
+  assert.deepEqual(SKINS.filter((s) => s.hidden).map((s) => s.name), ['Rainbow', 'Lavender', 'Dragon', 'Thunder', 'Royal', 'Cosmic']); // the rewards (#14)
   assert.equal(PICKABLE_SKINS.length, 24);
 
   const game = new Game({ botCount: 5 });
@@ -388,6 +388,24 @@ test('eating food emits eat for the player only (#9)', () => {
   game.eatSpecials(1 / 60);
   assert.equal(specials.length, 1, 'special food emits special');
   assert.equal(eats.length, 0, 'and not eat');
+});
+
+// #14: skins are saved by position, so rewards are appended; bots pick only the 24 free skins.
+test('unlockable skins are appended and never worn by bots (#14)', () => {
+  const before = ['Cherry Pop', 'Lagoon', 'Lime Ocean', 'Rainbow', 'Candy Cane', 'Bumblebee', 'Neon Night', 'Mint', 'Lavender', 'Sailor',
+    'Tangerine', 'Emerald', 'Grape', 'Lava', 'Aurora', 'Sunset Drive', 'Synthwave', 'Toxic', 'Gold Rush', 'Chrome', 'Ladybug', 'Leopard',
+    'Viper', 'Galaxy', 'Magma', 'Abyss'];
+  assert.deepEqual(SKINS.slice(0, before.length).map((s) => s.name), before, 'every existing skin keeps its position');
+  assert.deepEqual(SKINS.slice(before.length).map((s) => s.name), ['Dragon', 'Thunder', 'Royal', 'Cosmic']);
+  const rewards = Object.fromEntries(SKINS.filter((s) => s.unlock).map((s) => [s.name, s.unlock]));
+  assert.deepEqual(rewards, { Rainbow: 'noodle', Lavender: 'firstbite', Dragon: 'hunter', Thunder: 'marathon', Royal: 'titan', Cosmic: 'expert' });
+  assert.ok(SKINS.filter((s) => s.unlock).every((s) => s.hidden), 'rewards are hidden until unlocked');
+  assert.equal(PICKABLE_SKINS.length, 24);
+  assert.ok(PICKABLE_SKINS.every((s) => !s.unlock && !s.hidden));
+  const game = new Game({ botCount: 150 });
+  assert.ok(game.worms.every((w) => !w.skin.unlock), 'no bot wears an unlockable skin');
+  for (let i = 0; i < 300; i++) game.spawnBot(false);
+  assert.ok(game.worms.every((w) => !w.skin.unlock), 'nor do respawned bots');
 });
 
 test('bots hunt only worms lighter than their difficulty allows (#16)', () => {
