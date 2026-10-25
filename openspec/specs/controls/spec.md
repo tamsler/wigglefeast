@@ -1,7 +1,7 @@
 # controls Specification
 
 ## Purpose
-How the player steers, boosts and pauses on desktop and touch devices.
+How the player steers, boosts, pauses and toggles sound on desktop and touch devices.
 
 ## Requirements
 
@@ -34,6 +34,17 @@ P or Esc SHALL pause and resume during play. On touch screens, tapping the on-sc
 #### Scenario: Pause button
 - **WHEN** on a touch screen the player taps the pause button during play
 - **THEN** the game pauses and shows the pause panel, and Resume continues the run
+
+### Requirement: Sound toggle key
+Pressing M SHALL turn all sound off or on, in the menus and during play, and SHALL briefly confirm the new state on screen during play. It SHALL NOT act while the player is typing in a text field, such as the nickname.
+
+#### Scenario: Muting during play
+- **WHEN** the player presses M during a run with sound on
+- **THEN** sound turns off and a short "Sound off" message shows
+
+#### Scenario: Typing a nickname
+- **WHEN** the player types an "m" in the nickname field
+- **THEN** the letter is typed and sound is unchanged
 
 ### Requirement: On-screen touch buttons
 On devices whose main pointer is coarse (a touch screen), the HUD SHALL show the boost and pause buttons only while a run is being played: not in the menu, on the death screen, or while paused. On devices whose main pointer is fine (mouse or trackpad) the buttons SHALL never show. Hiding the buttons SHALL stop any boost they were giving.
