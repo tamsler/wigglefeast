@@ -18,6 +18,20 @@ const CHROME_CANDIDATES = [
 // player as window.__game / window.__player so tests can inspect and steer state.
 // Covers new worlds, worlds restored from saves, and players spawned later.
 const HOOK = `(() => {
+  // Belt and braces with --mute-audio (#9): every audio context's output goes through a gain of 0,
+  // so a test run can never be heard, whatever the browser does with the flag. Audio state and the
+  // game's sound log are unaffected.
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (Ctx) {
+    class MutedContext extends Ctx {
+      get destination() {
+        if (!this.__mute) { this.__mute = this.createGain(); this.__mute.gain.value = 0; this.__mute.connect(super.destination); }
+        return this.__mute;
+      }
+    }
+    window.AudioContext = MutedContext;
+    if (window.webkitAudioContext) window.webkitAudioContext = MutedContext;
+  }
   let engine;
   Object.defineProperty(window, 'WormEngine', {
     configurable: true,
@@ -57,8 +71,10 @@ async function launch({ width = 1280, height = 800, mobile = false, profile } = 
   if (!chrome) throw new Error('Chrome not found; set CHROME_PATH');
   const ownProfile = !profile;
   const userDataDir = profile || fs.mkdtempSync(path.join(os.tmpdir(), 'wigglefeast-chrome-'));
-  // --mute-audio: the game makes sound (#9); test runs must never play it through the speakers.
-  const args = ['--headless=new', '--disable-gpu', '--mute-audio', '--remote-debugging-port=0', `--user-data-dir=${userDataDir}`,
+  // The game makes sound (#9). --disable-audio-output gives every test browser a fake audio device, so
+  // test runs never open the Mac's real audio output (hundreds of them left coreaudiod stuck and the
+  // owner's audio crackling); --mute-audio as well, in case a build ignores the first.
+  const args = ['--headless=new', '--disable-gpu', '--disable-audio-output', '--mute-audio', '--remote-debugging-port=0', `--user-data-dir=${userDataDir}`,
     `--window-size=${width},${height}`, '--no-first-run', '--no-default-browser-check'];
   if (process.env.CI) args.push('--no-sandbox', '--disable-dev-shm-usage');
   args.push('about:blank');
