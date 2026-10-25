@@ -19,7 +19,7 @@ test('skins', async (t) => {
     const names = await page.eval(`[...document.querySelectorAll('#skins button')].map((b) => b.title)`);
     assert.equal(names.length, 30);
     assert.ok(NEW.every((n) => names.slice(0, 24).includes(n)), 'all free skins are offered first');
-    assert.deepEqual(names.slice(24), ['Rainbow', 'Lavender', 'Dragon', 'Thunder', 'Royal', 'Cosmic'], 'then the rewards (#14)');
+    assert.deepEqual(names.slice(24), ['Holo', 'Ghost', 'Inferno', 'Storm', 'Crystal', 'Galaxy Prime'], 'then the rewards (#14, #180)');
     const locked = await page.eval(`[...document.querySelectorAll('#skins button.locked')].map((b) => b.title)`);
     assert.deepEqual(locked, names.slice(24), 'rewards are locked on a fresh profile');
     assert.equal(await page.eval(`document.querySelectorAll('#skins button canvas').length`), 30, 'each swatch is a drawn canvas');
@@ -35,14 +35,14 @@ test('skins', async (t) => {
     assert.equal(await page.eval(`document.querySelector('#skins button.on').title`), 'Galaxy');
   });
 
-  await t.test('a remembered Lavender still loads and plays once First Bite is earned', async () => {
+  await t.test('a remembered Ghost still loads and plays once First Bite is earned', async () => {
     await page.eval(`localStorage.removeItem('wormarena.world'); localStorage.setItem('wormarena.profile', ${JSON.stringify(KILLER)});
       localStorage.setItem('wormarena.settings', JSON.stringify({ name: 'Old', skin: 8, botCount: 30, difficulty: 'normal' }))`);
     await page.reload();
-    assert.equal(await page.eval(`document.getElementById('skinName').textContent`), 'Lavender');
-    assert.equal(await page.eval(`document.querySelector('#skins button.on').title`), 'Lavender');
+    assert.equal(await page.eval(`document.getElementById('skinName').textContent`), 'Ghost');
+    assert.equal(await page.eval(`document.querySelector('#skins button.on').title`), 'Ghost');
     await page.startRun('Old');
-    assert.equal(await page.eval('window.__player.skin.name'), 'Lavender');
+    assert.equal(await page.eval('window.__player.skin.name'), 'Ghost');
   });
 
   await t.test('every skin renders in the arena without errors', async () => {
@@ -119,12 +119,12 @@ test('skin preview', async (t) => {
     await page.send('Emulation.setEmulatedMedia', { features: [] });
   });
 
-  await t.test('a remembered, unlocked Lavender shows in the preview', async () => {
+  await t.test('a remembered, unlocked Ghost shows in the preview', async () => {
     await page.eval(`localStorage.removeItem('wormarena.world'); localStorage.setItem('wormarena.profile', ${JSON.stringify(KILLER)});
       localStorage.setItem('wormarena.settings', JSON.stringify({ name: 'Old', skin: 8, botCount: 30, difficulty: 'normal' }))`);
     await page.reload();
     await page.frames(2);
-    assert.equal(await preview(), 'Lavender');
+    assert.equal(await preview(), 'Ghost');
   });
 
   await t.test('is not drawn while playing', async () => {
@@ -133,5 +133,79 @@ test('skin preview', async (t) => {
     const n = await page.eval('window.wigglefeastDebug.previewFrames()');
     await page.frames(10);
     assert.equal(await page.eval('window.wigglefeastDebug.previewFrames()'), n);
+  });
+});
+
+// Reward skins (#180): six animated finishes that only rewards have.
+const REWARDS = ['Holo', 'Ghost', 'Inferno', 'Storm', 'Crystal', 'Galaxy Prime'];
+test('reward skins', async (t) => {
+  let page;
+  t.after(() => page && page.close());
+  page = await launch();
+  await page.goto(gameUrl());
+  await page.startRun();
+  await page.eval(`window.__player.shield = 1e9`);
+  await page.press('KeyP');
+  await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'pause');
+  await page.eval(`document.getElementById('paused').classList.add('hidden')`);
+  // The player alone, straight, heading right, in the given skin; returns a row of pixels along its body.
+  const bodyPixels = async (name) => {
+    await page.eval(`(() => {
+      const g = window.__game, p = window.__player, { radiusFor, SKINS } = window.WormEngine;
+      Object.assign(g, { worms: [p], respawnQueue: [], food: [], powerups: [], specials: [] }); g.rebuildFoodGrid();
+      p.skin = SKINS.find((s) => s.name === ${JSON.stringify(name)});
+      p.mass = 500; p.r = radiusFor(500); p.shield = 0;
+      p.sx = p.sx.map((_, i) => p.x - i * p.r * 0.42); p.sy = p.sy.map(() => p.y);
+      p.angle = p.targetAngle = 0; p.updateBounds(); g.rebuildSegGrid();
+    })()`);
+    await page.frames(4);
+    return page.eval(`(() => {
+      const p = window.__player, c = document.getElementById('game'), g = c.getContext('2d'), m = g.getTransform();
+      const x1 = Math.round(m.a * (p.x - 2 * p.r) + m.e), x0 = Math.round(m.a * (p.x - 7 * p.r) + m.e), y = Math.round(m.d * p.y + m.f);
+      return Array.from(g.getImageData(x0, y - 6, x1 - x0, 12).data);
+    })()`);
+  };
+  const chroma = (d) => { let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) > 40) n++; return n; };
+
+  await t.test('every reward draws a coloured body that differs from the others', async () => {
+    const seen = new Set();
+    for (const name of REWARDS) {
+      const d = await bodyPixels(name);
+      // Ghost is pale grey-cyan, so only the others must be colourful; all must differ from the bare floor.
+      assert.ok(d.length > 0 && (name === 'Ghost' || chroma(d) > 20), `${name}: coloured pixels along the body`);
+      seen.add(String(d.slice(0, 600)));
+    }
+    assert.equal(seen.size, REWARDS.length, 'six different looks');
+  });
+
+  await t.test('Ghost is see-through: much dimmer than a solid pale skin, but not dark', async () => {
+    const mean = (a) => { let sum = 0; for (let i = 0; i < a.length; i += 4) sum += 0.2126 * a[i] + 0.7152 * a[i + 1] + 0.0722 * a[i + 2]; return sum / (a.length / 4); };
+    const ghost = mean(await bodyPixels('Ghost')), crystal = mean(await bodyPixels('Crystal'));
+    assert.ok(ghost < crystal * 0.95, `Ghost (${ghost.toFixed(0)}) is dimmer than the solid pale Crystal (${crystal.toFixed(0)})`);
+    assert.ok(ghost > 60, `but it glows rather than vanishing (${ghost.toFixed(0)})`);
+  });
+
+  await t.test('animated rewards freeze while paused', async () => {
+    for (const name of ['Inferno', 'Storm', 'Galaxy Prime', 'Holo']) {
+      const a = await bodyPixels(name);
+      await page.frames(10);
+      const b = await page.eval(`(() => {
+        const p = window.__player, c = document.getElementById('game'), g = c.getContext('2d'), m = g.getTransform();
+        const x1 = Math.round(m.a * (p.x - 2 * p.r) + m.e), x0 = Math.round(m.a * (p.x - 7 * p.r) + m.e), y = Math.round(m.d * p.y + m.f);
+        return Array.from(g.getImageData(x0, y - 6, x1 - x0, 12).data);
+      })()`);
+      assert.deepEqual(b, a, `${name} stands still while paused`);
+    }
+  });
+
+  await t.test('each reward swatch shows its own finish, and locked ones are dimmed', async () => {
+    const swatches = await page.eval(`(() => [...document.querySelectorAll('#skins button')].filter((b) => ${JSON.stringify(REWARDS)}.includes(b.title)).map((b) => {
+      const c = b.querySelector('canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      let h = 0; for (let i = 0; i < d.length; i += 11) h = (h * 31 + d[i]) | 0;
+      return { title: b.title, hash: h, locked: b.classList.contains('locked') };
+    }))()`);
+    assert.equal(swatches.length, 6);
+    assert.equal(new Set(swatches.map((s) => s.hash)).size, 6, 'six different swatches');
+    assert.ok(swatches.every((s) => s.locked), 'locked on a fresh profile');
   });
 });

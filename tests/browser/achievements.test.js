@@ -117,7 +117,7 @@ test('achievement pop-ups', async (t) => {
   page = await launch();
   await page.goto(gameUrl());
 
-  await t.test('two at once show one after the other; Big Noodle says Rainbow unlocked', async () => {
+  await t.test('two at once show one after the other; Big Noodle says Holo unlocked', async () => {
     await startWith(page, profile());
     await unlockAudio(page);
     await page.startRun();
@@ -126,7 +126,7 @@ test('achievement pop-ups', async (t) => {
     assert.deepEqual(await toasts(page), ['snack'], 'one at a time');
     await page.waitFor(`window.wigglefeastDebug.toasts().length === 2`, 'second pop-up', 6000);
     assert.deepEqual(await toasts(page), ['snack', 'noodle']);
-    assert.equal(await page.eval(`document.getElementById('achToastSkin').textContent`), 'Rainbow unlocked!');
+    assert.equal(await page.eval(`document.getElementById('achToastSkin').textContent`), 'Holo unlocked!');
   });
 
   await t.test('with sound off the pop-up shows but no fanfare plays', async () => {
@@ -150,21 +150,21 @@ test('locked skins in the picker', async (t) => {
   await t.test('tapping a locked skin keeps the current one and says what unlocks it', async () => {
     await startWith(page, profile());
     assert.equal(await page.eval(`document.querySelectorAll('#skins button.locked').length`), 6);
-    assert.equal(await page.eval(`document.querySelector('#skins button[title="Cosmic"]').getAttribute('aria-label')`), 'Cosmic (locked)');
+    assert.equal(await page.eval(`document.querySelector('#skins button[title="Galaxy Prime"]').getAttribute('aria-label')`), 'Galaxy Prime (locked)');
     const before = await skinName();
-    await page.click('#skins button[title="Cosmic"]');
-    assert.equal(await skinName(), 'Reach 10,000 on Hard to unlock Cosmic'); // Expert became Hard (#177)
+    await page.click('#skins button[title="Galaxy Prime"]');
+    assert.equal(await skinName(), 'Reach 10,000 on Hard to unlock Galaxy Prime'); // Expert became Hard (#177)
     assert.equal(await page.eval(`JSON.parse(localStorage.getItem('wormarena.settings') || '{}').skin ?? 0`), 0);
     await page.waitFor(`document.getElementById('skinName').textContent === ${JSON.stringify(before)}`, 'name back', 6000);
   });
 
   await t.test('an earned reward can be picked and worn', async () => {
     await startWith(page, profile({ best: 6000, bestByDiff: { easy: 0, normal: 6000, hard: 0, expert: 0 } }));
-    assert.equal(await page.eval(`document.querySelector('#skins button[title="Rainbow"]').classList.contains('locked')`), false);
-    await page.click('#skins button[title="Rainbow"]');
-    assert.equal(await skinName(), 'Rainbow');
+    assert.equal(await page.eval(`document.querySelector('#skins button[title="Holo"]').classList.contains('locked')`), false);
+    await page.click('#skins button[title="Holo"]');
+    assert.equal(await skinName(), 'Holo');
     await page.startRun();
-    assert.equal(await page.eval('window.__player.skin.name'), 'Rainbow');
+    assert.equal(await page.eval('window.__player.skin.name'), 'Holo');
   });
 
   await t.test('a reward earned during a run is unlocked back at the menu', async () => {
@@ -178,7 +178,7 @@ test('locked skins in the picker', async (t) => {
     await page.press('KeyP');
     await page.click('#endRun');
     await page.waitFor(`!document.getElementById('menu').classList.contains('hidden')`, 'menu');
-    assert.equal(await page.eval(`document.querySelector('#skins button[title="Rainbow"]').classList.contains('locked')`), false);
+    assert.equal(await page.eval(`document.querySelector('#skins button[title="Holo"]').classList.contains('locked')`), false);
   });
 
   await t.test('a remembered locked skin falls back to a free one (#178)', async () => {
@@ -195,10 +195,10 @@ test('locked skins in the picker', async (t) => {
     await page.press('KeyP');
     await page.click('#endRun');
     await startWith(page, profile({ best: 6000, bestByDiff: { easy: 0, normal: 6000, hard: 0 } }));
-    await page.click('#skins button[title="Rainbow"]');
+    await page.click('#skins button[title="Holo"]');
     await page.startRun();
-    assert.equal(await page.eval('window.__player.skin.name'), 'Rainbow');
-    // Another device's stats without Rainbow, then reopen: the saved run resumes, Rainbow is locked.
+    assert.equal(await page.eval('window.__player.skin.name'), 'Holo');
+    // Another device's stats without Holo, then reopen: the saved run resumes, Holo is locked.
     await page.eval(`localStorage.setItem('wormarena.profile', ${JSON.stringify(JSON.stringify(profile()))})`);
     await page.reload();
     await page.waitFor('window.__player && !window.__player.dead', 'run resumed');
@@ -220,7 +220,7 @@ test('achievements on the stats screen', async (t) => {
   assert.equal(await page.eval(`document.getElementById('achTitle').textContent`), '🏆 Achievements 1 / 14', 'Snack Time is earned');
   const noodle = await row('noodle');
   assert.match(noodle, /3,200 \/ 5,000/);
-  assert.match(noodle, /Unlocks Rainbow/);
+  assert.match(noodle, /Unlocks Holo/);
   assert.match(await row('snack'), /Earned/);
   assert.match(await row('hang'), /30s \/ 5m/, 'time goals show as durations');
 });
@@ -267,13 +267,13 @@ test('achievements in exports, imports and reset', async (t) => {
 
   await t.test('reset stats clears achievements and locks the rewards again', async () => {
     await startWith(page, profile({ best: 6000, bestByDiff: { easy: 0, normal: 6000, hard: 0, expert: 0 } }));
-    await page.click('#skins button[title="Rainbow"]');
+    await page.click('#skins button[title="Holo"]');
     await page.click('#openStats');
     await page.click('#resetStats');
     await page.frames(3);
     assert.deepEqual(await ach(page), {});
     await page.click('#closeStats');
-    assert.equal(await page.eval(`document.querySelector('#skins button[title="Rainbow"]').classList.contains('locked')`), true);
+    assert.equal(await page.eval(`document.querySelector('#skins button[title="Holo"]').classList.contains('locked')`), true);
     assert.equal(await page.eval(`document.getElementById('skinName').textContent`), 'Cherry Pop', 'a picked reward is swapped for a free skin (#178)');
     assert.equal(JSON.parse(await page.eval(`localStorage.getItem('wormarena.settings')`)).skin, 0);
     await page.startRun();
@@ -299,10 +299,10 @@ test('Hard Survivor', async (t) => {
   page = await launch();
   await page.goto(gameUrl());
 
-  await t.test('earned as Expert Survivor, it shows as Hard Survivor and Cosmic stays unlocked', async () => {
+  await t.test('earned as Expert Survivor, it shows as Hard Survivor and Galaxy Prime stays unlocked', async () => {
     await startWith(page, profile({}, { ach: { expert: 1700000000123 } }));
     assert.equal((await ach(page)).expert, 1700000000123);
-    assert.equal(await page.eval(`document.querySelector('#skins button[title="Cosmic"]').classList.contains('locked')`), false);
+    assert.equal(await page.eval(`document.querySelector('#skins button[title="Galaxy Prime"]').classList.contains('locked')`), false);
     await page.click('#openStats');
     await page.click('#achTitle');
     const row = await page.eval(`document.querySelector('#achList .ach[data-id="expert"]').textContent`);

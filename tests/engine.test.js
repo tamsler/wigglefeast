@@ -262,25 +262,26 @@ test('skins: originals keep their place, new skins are complete, hidden ones are
   // Saves store skins by position, so the original 14 must never move or change.
   const ORIGINAL = [
     ['Cherry Pop', ['#ff595e', '#ffca3a']], ['Lagoon', ['#4cc9f0', '#4361ee', '#3a0ca3']], ['Lime Ocean', ['#8ac926', '#1982c4']],
-    ['Rainbow', ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93']], ['Candy Cane', ['#ffffff', '#ef233c']],
+    ['Holo', null], ['Candy Cane', ['#ffffff', '#ef233c']], // Rainbow's slot, now a reward (#180)
     ['Bumblebee', ['#2b2b2b', '#ffd60a']], ['Neon Night', ['#f72585', '#7209b7', '#3a0ca3', '#4361ee', '#4cc9f0']],
-    ['Mint', ['#2ec4b6', '#cbf3f0']], ['Lavender', ['#ffd6ff', '#e7c6ff', '#c8b6ff', '#b8c0ff']],
+    ['Mint', ['#2ec4b6', '#cbf3f0']], ['Ghost', null], // Lavender's slot, now a reward (#180)
     ['Sailor', ['#e63946', '#f1faee', '#a8dadc', '#457b9d']], ['Tangerine', ['#ff9f1c', '#ffbf69', '#fff3e0']],
     ['Emerald', ['#06d6a0', '#118ab2']], ['Grape', ['#6a4c93', '#f15bb5']], ['Lava', ['#d00000', '#ffba08', '#dc2f02']],
   ];
   ORIGINAL.forEach(([name, colors], i) => {
     assert.equal(SKINS[i].name, name, `skin ${i}`);
+    if (!colors) return; // the two reward slots: new look, same position
     assert.deepEqual(SKINS[i].colors, colors, `${name} colours`);
     assert.equal(SKINS[i].finish, 'stripes', `${name} finish`);
     assert.deepEqual(SKINS[i].food, colors, `${name} drops its own colours, as before`);
   });
-  assert.deepEqual(SKINS.slice(14).map((s) => s.name), ['Aurora', 'Sunset Drive', 'Synthwave', 'Toxic', 'Gold Rush', 'Chrome', 'Ladybug', 'Leopard', 'Viper', 'Galaxy', 'Magma', 'Abyss', 'Dragon', 'Thunder', 'Royal', 'Cosmic']); // rewards appended (#14)
+  assert.deepEqual(SKINS.slice(14).map((s) => s.name), ['Aurora', 'Sunset Drive', 'Synthwave', 'Toxic', 'Gold Rush', 'Chrome', 'Ladybug', 'Leopard', 'Viper', 'Galaxy', 'Magma', 'Abyss', 'Inferno', 'Storm', 'Crystal', 'Galaxy Prime']); // rewards appended (#14, renamed #180)
   const hex = /^#[0-9a-f]{6}$/i;
   for (const s of SKINS) {
-    assert.ok(['stripes', 'gradient', 'neon', 'metallic', 'spots', 'scales', 'galaxy', 'pulse'].includes(s.finish), `${s.name} finish`);
+    assert.ok(['stripes', 'gradient', 'neon', 'metallic', 'spots', 'scales', 'galaxy', 'pulse', 'holo', 'ghost', 'inferno', 'storm', 'crystal', 'galaxyprime'].includes(s.finish), `${s.name} finish`);
     assert.ok([...s.colors, s.accent, ...s.food].every((c) => hex.test(c)), `${s.name} colours are #rrggbb`);
   }
-  assert.deepEqual(SKINS.filter((s) => s.hidden).map((s) => s.name), ['Rainbow', 'Lavender', 'Dragon', 'Thunder', 'Royal', 'Cosmic']); // the rewards (#14)
+  assert.deepEqual(SKINS.filter((s) => s.hidden).map((s) => s.name), ['Holo', 'Ghost', 'Inferno', 'Storm', 'Crystal', 'Galaxy Prime']); // the rewards (#14, #180)
   assert.equal(PICKABLE_SKINS.length, 24);
 
   const game = new Game({ botCount: 5 });
@@ -392,13 +393,13 @@ test('eating food emits eat for the player only (#9)', () => {
 
 // #14: skins are saved by position, so rewards are appended; bots pick only the 24 free skins.
 test('unlockable skins are appended and never worn by bots (#14)', () => {
-  const before = ['Cherry Pop', 'Lagoon', 'Lime Ocean', 'Rainbow', 'Candy Cane', 'Bumblebee', 'Neon Night', 'Mint', 'Lavender', 'Sailor',
+  const before = ['Cherry Pop', 'Lagoon', 'Lime Ocean', 'Holo', 'Candy Cane', 'Bumblebee', 'Neon Night', 'Mint', 'Ghost', 'Sailor',
     'Tangerine', 'Emerald', 'Grape', 'Lava', 'Aurora', 'Sunset Drive', 'Synthwave', 'Toxic', 'Gold Rush', 'Chrome', 'Ladybug', 'Leopard',
     'Viper', 'Galaxy', 'Magma', 'Abyss'];
   assert.deepEqual(SKINS.slice(0, before.length).map((s) => s.name), before, 'every existing skin keeps its position');
-  assert.deepEqual(SKINS.slice(before.length).map((s) => s.name), ['Dragon', 'Thunder', 'Royal', 'Cosmic']);
+  assert.deepEqual(SKINS.slice(before.length).map((s) => s.name), ['Inferno', 'Storm', 'Crystal', 'Galaxy Prime']);
   const rewards = Object.fromEntries(SKINS.filter((s) => s.unlock).map((s) => [s.name, s.unlock]));
-  assert.deepEqual(rewards, { Rainbow: 'noodle', Lavender: 'firstbite', Dragon: 'hunter', Thunder: 'marathon', Royal: 'titan', Cosmic: 'expert' });
+  assert.deepEqual(rewards, { Holo: 'noodle', Ghost: 'firstbite', Inferno: 'hunter', Storm: 'marathon', Crystal: 'titan', 'Galaxy Prime': 'expert' });
   assert.ok(SKINS.filter((s) => s.unlock).every((s) => s.hidden), 'rewards are hidden until unlocked');
   assert.equal(PICKABLE_SKINS.length, 24);
   assert.ok(PICKABLE_SKINS.every((s) => !s.unlock && !s.hidden));

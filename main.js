@@ -941,6 +941,140 @@
     pulse: { color: (skin, a, n, t) => mix(skin.colors[0], skin.colors[1], Math.max(0, Math.sin(a * 0.19 - t * 5)) ** 2) },
   };
 
+  // Reward finishes (#180): animated looks only rewards have. Bright marks and glows are drawn with
+  // additive blending; every animation follows game time t, so it stops while paused.
+  const lighter = (g, fn) => { const op = g.globalCompositeOperation; g.globalCompositeOperation = 'lighter'; try { fn(); } finally { g.globalCompositeOperation = op; } };
+  const glowUnder = (color, k, w) => (g, sx, sy, r, skin, t) => lighter(g, () => {
+    const a0 = g.globalAlpha; g.globalAlpha = a0 * k * (0.75 + 0.25 * Math.sin(t * 3));
+    g.strokeStyle = color; g.lineWidth = 2 * r + r * w; traceOn(g, sx, sy, sx.length - 1, 0); g.stroke(); g.globalAlpha = a0;
+  });
+  // A jagged line across the body at segment i: from one side to the other, zigzagging.
+  function crack(path, sx, sy, r, i, seed, along = 0.5) {
+    const [tx, ty, nx, ny] = normalAt(sx, sy, i), steps = 5;
+    for (let k = 0; k <= steps; k++) {
+      const u = -0.75 + (1.5 * k) / steps, j = (hash01(seed * 13 + k) - 0.5) * r * along;
+      const x = sx[i] + nx * u * r + tx * j, y = sy[i] + ny * u * r + ty * j;
+      k ? path.lineTo(x, y) : path.moveTo(x, y);
+    }
+  }
+  Object.assign(FINISH, {
+    inferno: {
+      color: (skin, a, n, t) => mix(skin.colors[0], skin.colors[1], 0.5 + 0.5 * Math.sin(a * 0.3 - t * 2)),
+      under: glowUnder('#ff4d00', 0.22, 0.9),
+      marks(g, sx, sy, r, skin, t) {
+        const n = sx.length, levels = [new Path2D(), new Path2D(), new Path2D()], [i0, i1] = stepRange(1, 1, n - 2);
+        for (let i = i0; i <= i1; i += 2) {
+          const b = 0.5 + 0.5 * Math.sin(i * 0.35 - t * 4);
+          if (b < 0.35) continue;
+          crack(levels[Math.min(2, Math.floor(b * 3))], sx, sy, r, i, i, 0.9);
+        }
+        // Two molten veins winding along the body.
+        for (const side of [-1, 1]) {
+          const vein = new Path2D();
+          let started = false;
+          for (let i = i0; i <= i1; i++) {
+            const [, , nx, ny] = normalAt(sx, sy, i), off = side * r * (0.35 + 0.25 * Math.sin(i * 0.4 + side * 1.3 - t * 1.5));
+            const x = sx[i] + nx * off, y = sy[i] + ny * off;
+            started ? vein.lineTo(x, y) : (vein.moveTo(x, y), started = true);
+          }
+          levels[1].addPath(vein);
+        }
+        lighter(g, () => levels.forEach((p, lv) => {
+          const a0 = g.globalAlpha;
+          g.globalAlpha = a0 * (0.35 + 0.3 * lv); g.strokeStyle = '#ff6a00'; g.lineWidth = r * 0.24; g.stroke(p);
+          g.strokeStyle = '#ffd36a'; g.lineWidth = r * 0.08; g.stroke(p);
+          g.globalAlpha = a0;
+        }));
+      },
+    },
+    holo: {
+      color: (skin, a, n, t) => `hsl(${(a * 9 + t * 90) % 360}, 85%, 64%)`,
+      marks(g, sx, sy, r, skin, t) {
+        const n = sx.length, p = ((t * 28) % (n + 30)) - 15, a0 = g.globalAlpha;
+        const from = Math.max(0, Math.min(n - 1, Math.round(p + 3))), to = Math.max(0, Math.min(n - 1, Math.round(p - 3)));
+        if (from > to) lighter(g, () => { g.globalAlpha = a0 * 0.45; g.strokeStyle = '#ffffff'; g.lineWidth = r * 1.3; traceOn(g, sx, sy, from, to); g.stroke(); g.globalAlpha = a0; });
+        const stars = new Path2D(), [s0, s1] = stepRange(0, 4, n - 1);
+        for (let i = s0; i <= s1; i += 4) {
+          const tw = Math.sin(t * 5 + i), [, , nx, ny] = normalAt(sx, sy, i);
+          if (tw < 0.4) continue;
+          const off = (hash01(i) - 0.5) * 1.2 * r, x = sx[i] + nx * off, y = sy[i] + ny * off, q = r * 0.22 * tw;
+          stars.moveTo(x - q, y); stars.lineTo(x + q, y); stars.moveTo(x, y - q); stars.lineTo(x, y + q);
+        }
+        lighter(g, () => { g.strokeStyle = '#ffffff'; g.lineWidth = r * 0.07; g.stroke(stars); });
+      },
+    },
+    storm: {
+      color: (skin, a, n, t) => mix(skin.colors[0], skin.colors[1], 0.5 + 0.5 * Math.sin(a * 0.21 + t)),
+      under: glowUnder('#3ab8ff', 0.14, 0.7),
+      marks(g, sx, sy, r, skin, t) {
+        const n = sx.length;
+        if (n < 10) return;
+        for (let k = 0; k < 4; k++) {
+          const phase = t * 3.1 + k * 0.27, id = Math.floor(phase), local = phase - id;
+          if (local > 0.55) continue;
+          const start = 1 + Math.floor(hash01(id * 7 + k) * (n - 9)), path = new Path2D();
+          for (let i = start, m = 0; i < start + 7; i++, m++) {
+            const [, , nx, ny] = normalAt(sx, sy, i), off = (hash01(id * 31 + m * 3 + k) - 0.5) * 1.3 * r;
+            m ? path.lineTo(sx[i] + nx * off, sy[i] + ny * off) : path.moveTo(sx[i] + nx * off, sy[i] + ny * off);
+          }
+          const a0 = g.globalAlpha, f = 1 - local / 0.55;
+          lighter(g, () => {
+            g.globalAlpha = a0 * 0.6 * f; g.strokeStyle = '#46c8ff'; g.lineWidth = r * 0.3; g.stroke(path);
+            g.globalAlpha = a0 * f; g.strokeStyle = '#ffffff'; g.lineWidth = r * 0.09; g.stroke(path);
+            g.globalAlpha = a0;
+          });
+        }
+      },
+    },
+    crystal: {
+      color: (skin, a) => mix(skin.colors[0], skin.colors[1], 0.15 + 0.7 * hash01(a * 1.3)),
+      marks(g, sx, sy, r, skin, t) {
+        const n = sx.length, a0 = g.globalAlpha, facets = new Path2D(), L = r * 0.62, Wd = r * 0.55, [c0, c1] = stepRange(3, 3, n - 2);
+        for (let i = c0; i <= c1; i += 3) {
+          const [tx, ty, nx, ny] = normalAt(sx, sy, i), x = sx[i], y = sy[i];
+          facets.moveTo(x + tx * L, y + ty * L); facets.lineTo(x + nx * Wd, y + ny * Wd); facets.lineTo(x - tx * L, y - ty * L); facets.lineTo(x - nx * Wd, y - ny * Wd); facets.closePath();
+        }
+        g.globalAlpha = a0 * 0.5; g.strokeStyle = '#ffffff'; g.lineWidth = r * 0.07; g.stroke(facets); g.globalAlpha = a0;
+        const sparks = new Path2D(), [s0, s1] = stepRange(0, 2, n - 1);
+        for (let i = s0; i <= s1; i += 2) {
+          const tw = Math.sin(t * 4 + i * 1.7);
+          if (tw < 0.75) continue;
+          const [, , nx, ny] = normalAt(sx, sy, i), side = hash01(i + 5) < 0.5 ? -1 : 1, x = sx[i] + nx * side * r * 0.7, y = sy[i] + ny * side * r * 0.7, q = r * 0.35 * (tw - 0.75) * 4;
+          sparks.moveTo(x - q, y); sparks.lineTo(x + q, y); sparks.moveTo(x, y - q); sparks.lineTo(x, y + q);
+        }
+        lighter(g, () => { g.strokeStyle = '#ffffff'; g.lineWidth = r * 0.08; g.stroke(sparks); });
+      },
+    },
+    ghost: {
+      alpha: 0.38,
+      color: (skin, a, n, t) => mix(skin.colors[0], skin.colors[1], 0.5 + 0.5 * Math.sin(a * 0.2 - t * 2)),
+      under: glowUnder('#7ff8ff', 0.3, 1.2),
+    },
+    galaxyprime: {
+      soft: true,
+      color: (skin, a, n, t) => along(['#14062e', '#4b0f6e', '#0f2a6b', '#14062e'], (Math.sin(a * 0.06 + t * 0.4) + 1) / 2),
+      under: glowUnder('#b46cff', 0.14, 0.8),
+      marks(g, sx, sy, r, skin, t) {
+        FINISH.galaxy.marks(g, sx, sy, r, skin, t);
+        const n = sx.length, a0 = g.globalAlpha, [b0, b1] = stepRange(0, 5, n - 1);
+        lighter(g, () => {
+          for (let i = b0; i <= b1; i += 5) {
+            const [, , nx, ny] = normalAt(sx, sy, i), off = Math.sin(t * 0.8 + i * 0.4) * 0.45 * r;
+            g.globalAlpha = a0 * 0.16; g.fillStyle = i % 10 ? '#ff5fd2' : '#4fd8ff';
+            g.beginPath(); g.arc(sx[i] + nx * off, sy[i] + ny * off, r * 0.7, 0, TAU); g.fill();
+          }
+          const phase = t / 2.5, id = Math.floor(phase), local = phase - id;
+          if (local < 0.3 && n > 14) {
+            const p = Math.floor(local / 0.3 * (n - 12)), [, , nx, ny] = normalAt(sx, sy, p), off = (hash01(id) - 0.5) * r;
+            g.globalAlpha = a0 * 0.9; g.strokeStyle = '#ffffff'; g.lineWidth = r * 0.1;
+            g.beginPath(); g.moveTo(sx[p] + nx * off, sy[p] + ny * off); g.lineTo(sx[p + 8] + nx * off, sy[p + 8] + ny * off); g.stroke();
+          }
+          g.globalAlpha = a0;
+        });
+      },
+    },
+  });
+
   // Ridges (#161): the body reads as a stack of thin round discs, one per segment, laid from the
   // tail to the head. Each disc hides most of the one behind it, so all that shows of a disc is
   // the back part of its edge: a curved ridge line. The body is stroked as a smooth tube (in runs
@@ -950,8 +1084,11 @@
   // Paints a body: the finish's glow under it, the tube, ridges and a soft highlight, then the
   // finish's markings. px: screen pixels per world unit.
   function paintBody(g, sx, sy, r, skin, t, px) {
-    const f = FINISH[skin.finish], n = sx.length, last = n - 1, a0 = g.globalAlpha;
+    const f = FINISH[skin.finish], n = sx.length, last = n - 1, aOuter = g.globalAlpha;
     if (f.under) f.under(g, sx, sy, r, skin, t);
+    // A see-through finish (Ghost, #180) draws the body, ridges and markings at its own alpha.
+    const a0 = aOuter * (f.alpha || 1);
+    g.globalAlpha = a0;
     g.lineWidth = 2 * r;
     for (let c = Math.ceil(last / 3) - 1; c >= 0; c--) {
       const a = c * 3, b = Math.min(last, a + 3);
@@ -1009,6 +1146,7 @@
       g.globalAlpha = a0;
     }
     if (f.marks) f.marks(g, sx, sy, r, skin, t);
+    g.globalAlpha = aOuter;
   }
 
   // ---------------------------------------------------------------------------
