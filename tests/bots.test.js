@@ -7,35 +7,34 @@ const { clone, withFood, scene, sideOf, withTactics, hunt, ONLY, memo, pickPrey 
 
 // --- Bot tactics (#78) --------------------------------------------------------
 
-test('every level has a full tactic table: none on easy, all on expert (#78)', () => {
-  assert.deepEqual(DIFFICULTIES, ['easy', 'normal', 'hard', 'expert']);
+test('every level has a full tactic table: none on easy, all on hard (#78, #177)', () => {
+  assert.deepEqual(DIFFICULTIES, ['easy', 'normal', 'hard']);
   for (const level of DIFFICULTIES) assert.deepEqual(Object.keys(DIFFICULTY[level].tactics).sort(), TACTICS.slice().sort(), level);
   assert.ok(TACTICS.every((k) => DIFFICULTY.easy.tactics[k] === 0), 'easy knows nothing');
-  assert.ok(TACTICS.every((k) => DIFFICULTY.expert.tactics[k] === 1), 'expert knows everything');
+  assert.ok(TACTICS.every((k) => DIFFICULTY.hard.tactics[k] === 1), 'hard knows everything');
   assert.equal(DIFFICULTY.normal.tactics.coil + DIFFICULTY.normal.tactics.flank, 0, 'normal bots never coil or flank');
-  assert.equal(DIFFICULTY.hard.tactics.flank, 0, 'flanking is expert-only');
   const masses = [];
-  for (let i = 0; i < 6; i++) masses.push(...new Game({ botCount: 60, difficulty: 'expert' }).worms.map((w) => w.mass));
+  for (let i = 0; i < 6; i++) masses.push(...new Game({ botCount: 60, difficulty: 'hard' }).worms.map((w) => w.mass));
   const big = masses.filter((m) => m >= 400).length / masses.length;
-  assert.ok(Math.abs(big - DIFFICULTY.expert.bigShare) < 0.08, `${(big * 100).toFixed(0)}% of expert bots start big`);
-  assert.ok(Math.max(...masses) <= DIFFICULTY.expert.bigMax);
+  assert.ok(Math.abs(big - DIFFICULTY.hard.bigShare) < 0.08, `${(big * 100).toFixed(0)}% of hard bots start big`);
+  assert.ok(Math.max(...masses) <= DIFFICULTY.hard.bigMax);
 });
 
 test('a bot keeps its tactics for life, and levels hand them out in their shares (#78)', () => {
-  const g = new Game({ botCount: 40, difficulty: 'hard' });
-  const known = (w) => TACTICS.filter((k) => knowsTactic(w, 'hard', k)).join();
+  const g = new Game({ botCount: 40, difficulty: 'normal' });
+  const known = (w) => TACTICS.filter((k) => knowsTactic(w, 'normal', k)).join();
   const before = new Map(g.worms.map((w) => [w.id, known(w)]));
   const g2 = new Game(null, clone(g));
   for (const w of g2.worms) assert.equal(known(w), before.get(w.id), `bot ${w.name} kept its tactics`);
   // Over 600 ids, the share knowing each tactic is near the table value.
   for (const k of TACTICS) {
-    const share = DIFFICULTY.hard.tactics[k];
+    const share = DIFFICULTY.normal.tactics[k];
     let n = 0;
-    for (let id = 1; id <= 600; id++) if (knowsTactic({ id }, 'hard', k)) n++;
-    assert.ok(Math.abs(n / 600 - share) < 0.07, `hard ${k}: ${(n / 6).toFixed(0)}% know it, table says ${share * 100}%`);
+    for (let id = 1; id <= 600; id++) if (knowsTactic({ id }, 'normal', k)) n++;
+    assert.ok(Math.abs(n / 600 - share) < 0.07, `normal ${k}: ${(n / 6).toFixed(0)}% know it, table says ${share * 100}%`);
   }
   assert.equal(knowsTactic({ id: 7 }, 'easy', 'evade'), false);
-  assert.equal(knowsTactic({ id: 7 }, 'expert', 'flank'), true);
+  assert.equal(knowsTactic({ id: 7 }, 'hard', 'flank'), true);
 });
 
 test('worms track how they turn, and predictions follow the turning, not the steering target (#78)', () => {
@@ -57,7 +56,7 @@ test('worms track how they turn, and predictions follow the turning, not the ste
 });
 
 test('the game remembers remains while their food lasts, without saving them (#78, #122)', () => {
-  const g = new Game({ botCount: 5, difficulty: 'expert' });
+  const g = new Game({ botCount: 5, difficulty: 'hard' });
   const victim = g.worms[0];
   g.kill(victim, null);
   const t0 = g.time;
@@ -71,7 +70,7 @@ test('the game remembers remains while their food lasts, without saving them (#7
 
 test('remains count while their food lies there, by what is left of it (#122)', () => {
   // A lone big worm dies; nothing else is around to eat its remains.
-  const { game, worms: [big] } = scene('expert', [{ name: 'Big', mass: 2000, x: 0, y: 0, angle: 0 }], 30);
+  const { game, worms: [big] } = scene('hard', [{ name: 'Big', mass: 2000, x: 0, y: 0, angle: 0 }], 30);
   game.kill(big, null);
   const dropped = Math.max(10, 2000 * 0.8);
   const total = () => game.recentDeaths.reduce((a, d) => a + d.value, 0);
@@ -103,7 +102,7 @@ test('anticipating bots avoid the path a head is about to cross; others do not s
     botThink(bot, game);
     return bot;
   };
-  const sees = withTactics('expert', { evade: 0 }, () => run('expert'));
+  const sees = withTactics('hard', { evade: 0 }, () => run('hard'));
   assert.equal(sees.ai.mode, 'food');
   assert.ok(Math.abs(sees.targetAngle) > 0.2, `anticipating bot turns off the line (${sees.targetAngle.toFixed(2)})`);
   const blind = run('easy');
@@ -111,7 +110,7 @@ test('anticipating bots avoid the path a head is about to cross; others do not s
 });
 
 test('evading bots turn away from a head lining up to cut them off (#78)', () => {
-  const { game, worms: [bot, threat] } = scene('expert', withFood([
+  const { game, worms: [bot, threat] } = scene('hard', withFood([
     { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
     { name: 'Cutter', mass: 100, x: 200, y: 150, angle: Math.atan2(-150, 40) },
   ], [{ x: 400, y: 0 }]));
@@ -130,7 +129,7 @@ test('evading bots turn away from a head lining up to cut them off (#78)', () =>
 });
 
 test('head-on aware bots meet smaller heads and keep away from bigger ones (#78)', () => {
-  const meet = (otherMass) => scene('expert', [
+  const meet = (otherMass) => scene('hard', [
     { name: 'Bot', mass: 400, x: 0, y: 0, angle: 0, ai: {} },
     { name: 'Other', mass: otherMass, x: 180, y: 10, angle: Math.PI },
   ]);
@@ -153,13 +152,13 @@ test('head-on aware bots meet smaller heads and keep away from bigger ones (#78)
 
 test('predicting hunters aim where a turning prey is going, not straight ahead of it (#78)', () => {
   // The prey heads +y and has been turning toward -x (its +1 side), toward the hunter.
-  const aimAngle = (level) => withTactics('expert', ONLY('predict'), () => {
+  const aimAngle = (level) => withTactics('hard', ONLY('predict'), () => {
     const { game, worms: [h] } = hunt(level, { mass: 400, x: 0, y: 0, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2, turnRate: 1.5 });
     botThink(h, game);
     assert.equal(h.ai.mode, 'cut');
     return { angle: Math.atan2(h.ai.aim.y, h.ai.aim.x), aim: h.ai.aim };
   });
-  const predicted = aimAngle('expert'), straight = aimAngle('easy');
+  const predicted = aimAngle('hard'), straight = aimAngle('easy');
   assert.ok(Math.abs(straight.aim.x - 300) < 1e-6, 'without prediction: straight ahead of the prey');
   assert.ok(predicted.aim.x < 300 - 40, `with prediction: on the prey's curve (x ${predicted.aim.x.toFixed(0)})`);
   assert.ok(predicted.angle > straight.angle + 0.15, 'so the hunter aims further round');
@@ -179,13 +178,13 @@ test('trapping hunters prefer the prey boxed in by other bodies (#78)', () => {
     for (let i = 0; i < 300 && !h.ai.prey; i++) botThink(h, game);
     return h.ai.prey && h.ai.prey.name;
   };
-  assert.equal(pick('expert'), 'Boxed');
+  assert.equal(pick('hard'), 'Boxed');
   assert.equal(pick('easy'), 'Open');
 });
 
 test('pinning hunters cut in on the arena side of a prey running along the wall (#78)', () => {
-  const s = withTactics('expert', ONLY('pin'), () => {
-    const s = hunt('expert', { mass: 400, x: 1500, y: -150, angle: Math.PI / 2 }, { mass: 100, x: 1850, y: 0, angle: Math.PI / 2 });
+  const s = withTactics('hard', ONLY('pin'), () => {
+    const s = hunt('hard', { mass: 400, x: 1500, y: -150, angle: Math.PI / 2 }, { mass: 100, x: 1850, y: 0, angle: Math.PI / 2 });
     botThink(s.worms[0], s.game);
     return s;
   });
@@ -194,8 +193,8 @@ test('pinning hunters cut in on the arena side of a prey running along the wall 
   assert.ok(Math.hypot(h.ai.aim.x, h.ai.aim.y) < Math.hypot(prey.x, prey.y) - prey.r, 'aims inside the prey, on the arena side');
   assert.ok(h.ai.aim.y > prey.y, 'ahead of the prey');
   // The same chase away from the wall is a plain cut-off.
-  const mid = withTactics('expert', ONLY('pin'), () => {
-    const m = hunt('expert', { mass: 400, x: -350, y: -150, angle: Math.PI / 2 }, { mass: 100, x: 0, y: 0, angle: Math.PI / 2 });
+  const mid = withTactics('hard', ONLY('pin'), () => {
+    const m = hunt('hard', { mass: 400, x: -350, y: -150, angle: Math.PI / 2 }, { mass: 100, x: 0, y: 0, angle: Math.PI / 2 });
     botThink(m.worms[0], m.game);
     return m.worms[0].ai.mode;
   });
@@ -204,8 +203,8 @@ test('pinning hunters cut in on the arena side of a prey running along the wall 
 
 test('flanking hunters cut in from the side opposite another hunter (#78)', () => {
   // The prey heads +y. Another bot already hunts it from its +1 side (-x).
-  const s = withTactics('expert', ONLY('flank'), () => {
-    const s = hunt('expert', { mass: 400, x: 500, y: -200, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2 },
+  const s = withTactics('hard', ONLY('flank'), () => {
+    const s = hunt('hard', { mass: 400, x: 500, y: -200, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2 },
       [{ name: 'First', mass: 400, x: 150, y: 50, angle: Math.PI / 2, ai: { huntUntil: 1e9 } }]);
     s.worms[2].ai.prey = s.worms[1];
     botThink(s.worms[0], s.game);
@@ -218,8 +217,8 @@ test('flanking hunters cut in from the side opposite another hunter (#78)', () =
 });
 
 test('coiling hunters circle a small worm and close the loop; short ones cannot (#78)', () => {
-  const { game, worms: [h, prey] } = withTactics('expert', ONLY('coil'), () =>
-    hunt('expert', { mass: 3000, x: 600, y: 200, angle: 0 }, { mass: 100, x: 600, y: 0, angle: 0 }, [], 30));
+  const { game, worms: [h, prey] } = withTactics('hard', ONLY('coil'), () =>
+    hunt('hard', { mass: 3000, x: 600, y: 200, angle: 0 }, { mass: 100, x: 600, y: 0, angle: 0 }, [], 30));
   let died = false;
   game.on('death', (e) => { if (e.victim === prey) died = true; });
   const modes = new Set();
@@ -232,7 +231,7 @@ test('coiling hunters circle a small worm and close the loop; short ones cannot 
     return sectors.size;
   };
   let best = 0;
-  withTactics('expert', ONLY('coil'), () => {
+  withTactics('hard', ONLY('coil'), () => {
     for (let i = 0; i < 4 * 60 && !died; i++) {
       game.update(1 / 60);
       modes.add(h.ai.mode);
@@ -244,8 +243,8 @@ test('coiling hunters circle a small worm and close the loop; short ones cannot 
   assert.ok(best >= 6, `the loop closes around the prey (sectors covered: ${best}, prey died: ${died})`);
   assert.equal(h.dead, false);
 
-  const short = withTactics('expert', ONLY('coil'), () => {
-    const s = hunt('expert', { mass: 300, x: 0, y: 200, angle: 0 }, { mass: 100, x: 0, y: 0, angle: 0 });
+  const short = withTactics('hard', ONLY('coil'), () => {
+    const s = hunt('hard', { mass: 300, x: 0, y: 200, angle: 0 }, { mass: 100, x: 0, y: 0, angle: 0 });
     botThink(s.worms[0], s.game);
     return s.worms[0].ai.mode;
   });
@@ -263,7 +262,7 @@ test('scavenging bots head for the remains of a big worm that just died (#78)', 
     botThink(bot, game);
     return { bot, game };
   };
-  const { bot, game } = think('expert');
+  const { bot, game } = think('hard');
   assert.equal(bot.ai.mode, 'scavenge');
   const toward = game.recentDeaths.some((d) => Math.abs(Math.atan2(d.y, d.x) - bot.targetAngle) < 0.3);
   assert.ok(toward, 'heads for the remains');
@@ -277,7 +276,7 @@ test('scavenging bots head for the remains of a big worm that just died (#78)', 
       { name: 'Small', mass: 400, x: 300, y: 300, angle: 0 },
     ];
     if (withRival) worms.push({ name: 'Rival', mass: 100, x: -50, y: 330, angle: Math.PI });
-    const { game, worms: [b, small, rival] } = scene('expert', worms, 30);
+    const { game, worms: [b, small, rival] } = scene('hard', worms, 30);
     game.kill(small, null);
     if (rival) for (const d of game.recentDeaths) assert.ok(Math.hypot(rival.x - d.x, rival.y - d.y) < Math.hypot(d.x, d.y), 'rival is closer to every point');
     game.rebuildFoodGrid();
@@ -294,15 +293,15 @@ test('the read tactic is appended, so existing bots keep their other tactics (#8
   assert.deepEqual(TACTICS.slice(0, 9), ['predict', 'anticipate', 'evade', 'headOn', 'scavenge', 'trap', 'pin', 'coil', 'flank']);
   assert.equal(TACTICS[9], 'read');
   assert.deepEqual(TACTICS.map((k) => DIFFICULTY.easy.tactics[k]), TACTICS.map(() => 0), 'easy knows nothing');
-  for (let id = 1; id <= 200; id++) assert.equal(knowsTactic({ id }, 'expert', 'read'), true);
-  let hard = 0;
-  for (let id = 1; id <= 600; id++) if (knowsTactic({ id }, 'hard', 'read')) hard++;
-  assert.ok(Math.abs(hard / 600 - 0.5) < 0.07, `${(hard / 6).toFixed(0)}% of hard bots read`);
+  for (let id = 1; id <= 200; id++) assert.equal(knowsTactic({ id }, 'hard', 'read'), true);
+  let normal = 0;
+  for (let id = 1; id <= 600; id++) if (knowsTactic({ id }, 'normal', 'read')) normal++;
+  assert.ok(Math.abs(normal / 600 - 0.2) < 0.07, `${(normal / 6).toFixed(0)}% of normal bots read`);
 });
 
-// A reading bot (expert), a killer and its victim, laid out by distance from the bot.
+// A reading bot (hard), a killer and its victim, laid out by distance from the bot.
 function killScene(victimAt, extra = []) {
-  const s = scene('expert', [
+  const s = scene('hard', [
     { name: 'Reader', mass: 400, x: 0, y: 0, angle: 0, ai: {} },
     { name: 'Killer', mass: 300, x: victimAt + 60, y: 200, angle: Math.PI, ai: {} },
     { name: 'Victim', mass: 100, x: victimAt, y: 200, angle: 0 },
@@ -332,7 +331,7 @@ test('readers remember kills they saw, and a grudge for a kill right next to the
 });
 
 test("a bot's memory stays small (#83)", () => {
-  const { game, worms: [reader] } = scene('expert', [{ name: 'Reader', mass: 400, x: 0, y: 0, angle: 0, ai: {} }], 30);
+  const { game, worms: [reader] } = scene('hard', [{ name: 'Reader', mass: 400, x: 0, y: 0, angle: 0, ai: {} }], 30);
   for (let i = 0; i < 25; i++) {
     const [k, v] = ['K', 'V'].map((n, j) => new Worm({ name: n + i, skin: SKINS[0], mass: 100, x: 200 + j * 60, y: 100, angle: 0, worldR: game.R }));
     game.worms.push(k, v);
@@ -343,7 +342,7 @@ test("a bot's memory stays small (#83)", () => {
 });
 
 test('readers hold a grudge against a worm that tried to cut them off, once a second at most (#83)', () => {
-  const s = scene('expert', withFood([
+  const s = scene('hard', withFood([
     { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
     { name: 'Cutter', mass: 100, x: 200, y: 150, angle: Math.atan2(-150, 40) },
   ], [{ x: 400, y: 0 }]));
@@ -402,8 +401,8 @@ test('one real kill keeps a reader wary for about half a minute (#83)', () => {
 
 test('one real cut-off is enough to retaliate, for about 20 seconds (#83)', () => {
   // The cutter from the evasion scene, then a later prey choice among it and a nearer worm.
-  const run = (seconds) => withTactics('expert', { ...ONLY('read'), evade: 1 }, () => {
-    const s = scene('expert', [
+  const run = (seconds) => withTactics('hard', { ...ONLY('read'), evade: 1 }, () => {
+    const s = scene('hard', [
       { name: 'Bot', mass: 400, x: 0, y: 0, angle: 0, ai: { aggro: 1 } },
       { name: 'Cutter', mass: 100, x: 200, y: 150, angle: Math.atan2(-150, 40) },
     ], 30);
@@ -429,7 +428,7 @@ test('readers retaliate against a worm they hold a grudge against, two at most (
   const r = pickPrey({ mass: 300 }, { mass: 300 }, (s) => memo(s, 'Far', 0, 2));
   assert.equal(r.prey, 'Far', 'Cut off, then retaliates (over a nearer worm)');
   assert.equal(r.retaliating, 'Far');
-  // Bigger culprit: too heavy to hunt (expert prey limit 2x), so not prey.
+  // Bigger culprit: too heavy to hunt (hard prey limit 2x), so not prey.
   assert.equal(pickPrey({ mass: 300 }, { mass: 900 }, (s) => memo(s, 'Far', 0, 2)).prey, 'Near', 'Bigger culprit');
   // No gang-ups: two other bots already retaliate against Far.
   const crowd = [1, 2].map((i) => ({ name: 'Other' + i, mass: 400, x: -900, y: 900 * i, angle: 0, ai: {} }));
@@ -442,14 +441,14 @@ test('readers retaliate against a worm they hold a grudge against, two at most (
   // A hunt that ends clears the retaliation.
   const [h] = r.s.worms;
   r.s.game.time = h.ai.huntUntil + 1;
-  withTactics('expert', ONLY('read'), () => botThink(h, r.s.game));
+  withTactics('hard', ONLY('read'), () => botThink(h, r.s.game));
   assert.ok(!h.ai.retaliating || h.ai.retaliating === h.ai.prey, 'retaliation ends with the hunt');
 });
 
 test('readers evade worms they are wary of from farther away (#83)', () => {
   // A head 470 away, beyond the usual evade range (400 at skill 1), crossing our path ahead.
-  // On hard: expert bots sense threats from farther anyway (#110).
-  const run = (otherMass, setup) => withTactics('hard', { ...ONLY('read'), evade: 1 }, () => {
+  // Without Hard sharpness, which senses threats from farther anyway (#110).
+  const run = (otherMass, setup) => withSharp(NO_SHARP, () => withTactics('hard', { ...ONLY('read'), evade: 1 }, () => {
     const s = scene('hard', [
       { name: 'Bot', mass: 400, x: 0, y: 0, angle: 0, ai: {} },
       { name: 'Other', mass: otherMass, x: 400, y: 250, angle: Math.atan2(-250, -150) },
@@ -457,18 +456,21 @@ test('readers evade worms they are wary of from farther away (#83)', () => {
     setup(s);
     botThink(s.worms[0], s.game);
     return s.worms[0].ai.mode;
-  });
+  }));
   assert.notEqual(run(100, () => {}), 'evade', 'an unknown worm at that distance is ignored');
   assert.equal(run(100, (s) => memo(s, 'Other', 1, 0)), 'evade', 'a seen killer is evaded from farther');
   assert.equal(run(1000, (s) => memo(s, 'Other', 0, 1)), 'evade', 'a bigger culprit is kept away from');
 });
 
-// --- Expert sharpness (#110) ---------------------------------------------------
+// --- Hard sharpness (#110; Expert sharpness until #177) --------------------------
 function withSharp(patch, fn) {
-  const saved = { ...DIFFICULTY.expert.sharp };
-  Object.assign(DIFFICULTY.expert.sharp, patch);
-  try { return fn(); } finally { Object.assign(DIFFICULTY.expert.sharp, saved); }
+  const saved = { ...DIFFICULTY.hard.sharp };
+  Object.assign(DIFFICULTY.hard.sharp, patch);
+  try { return fn(); } finally { Object.assign(DIFFICULTY.hard.sharp, saved); }
 }
+// Every sharpness setting at its "off" value: a hard bot that plays like one of the same skill
+// without sharpness (what the old Hard level was for these tests).
+const NO_SHARP = { think: 1, look: 1, dense: 0, headings: 1, sense: 1, heads: 8, escape: 0, reach: 0 };
 // Re-plans of each bot over `secs`: its think timer jumps up whenever it re-plans.
 function replans(game, bots, secs) {
   const n = new Map(bots.map((b) => [b, 0])), prev = new Map(bots.map((b) => [b, b.thinkT]));
@@ -479,27 +481,28 @@ function replans(game, bots, secs) {
   return n;
 }
 
-test('only expert is sharp, and only expert starts with more and bigger large bots (#110)', () => {
-  assert.deepEqual(Object.keys(DIFFICULTY.expert.sharp).sort(), ['dense', 'escape', 'headings', 'heads', 'look', 'reach', 'sense', 'think']);
-  for (const level of ['easy', 'normal', 'hard']) assert.equal(DIFFICULTY[level].sharp, undefined, level);
+test('only hard is sharp, and only hard starts with more and bigger large bots (#110, #177)', () => {
+  assert.deepEqual(Object.keys(DIFFICULTY.hard.sharp).sort(), ['dense', 'escape', 'headings', 'heads', 'look', 'reach', 'sense', 'think']);
+  assert.deepEqual(Object.keys(NO_SHARP).sort(), Object.keys(DIFFICULTY.hard.sharp).sort(), 'NO_SHARP covers every setting');
+  for (const level of ['easy', 'normal']) assert.equal(DIFFICULTY[level].sharp, undefined, level);
   const big = DIFFICULTIES.map((l) => [DIFFICULTY[l].bigShare, DIFFICULTY[l].bigMax]);
-  assert.deepEqual(big, [[0.1, 1200], [0.15, 2000], [0.2, 2500], [0.35, 5000]]);
+  assert.deepEqual(big, [[0.1, 1200], [0.15, 2000], [0.35, 5000]]);
   const masses = [];
-  for (let seed = 1; seed <= 6; seed++) masses.push(...new Game({ botCount: 60, difficulty: 'expert' }, null, { seed }).worms.map((w) => w.mass));
+  for (let seed = 1; seed <= 6; seed++) masses.push(...new Game({ botCount: 60, difficulty: 'hard' }, null, { seed }).worms.map((w) => w.mass));
   const share = masses.filter((m) => m >= 400).length / masses.length;
   assert.ok(Math.abs(share - 0.35) < 0.08, `${(share * 100).toFixed(0)}% start large`);
   assert.ok(Math.max(...masses) <= 5000 && Math.max(...masses) > 3000, `largest ${Math.round(Math.max(...masses))}`);
 });
 
-test('expert bots re-plan more often than hard bots of the same skill; the saved interval is unchanged (#110)', () => {
-  const count = (level) => {
-    const { game, worms: [bot] } = scene(level, [{ name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} }]);
+test('sharp bots re-plan more often than bots of the same skill without sharpness; the saved interval is unchanged (#110)', () => {
+  const count = (sharp) => withSharp(sharp, () => {
+    const { game, worms: [bot] } = scene('hard', [{ name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} }]);
     return replans(game, [bot], 10).get(bot);
-  };
-  const hard = count('hard'), expert = count('expert');
-  assert.ok(expert > hard * 1.25, `expert ${expert} vs hard ${hard} re-plans in 10 s`);
-  // A loaded expert world re-plans at the sharp rate too, from the unchanged saved interval.
-  const g = new Game({ botCount: 10, difficulty: 'expert' }, null, { seed: 3 });
+  });
+  const plain = count(NO_SHARP), sharp = count({});
+  assert.ok(sharp > plain * 1.25, `sharp ${sharp} vs plain ${plain} re-plans in 10 s`);
+  // A loaded hard world re-plans at the sharp rate too, from the unchanged saved interval.
+  const g = new Game({ botCount: 10, difficulty: 'hard' }, null, { seed: 3 });
   for (let i = 0; i < 60; i++) g.update(1 / 60);
   const snap = JSON.parse(JSON.stringify(g.toJSON()));
   for (const d of snap.worms.filter((d) => d.ai)) assert.ok(Math.abs(d.ai.interval - (0.32 - 0.22 * d.ai.skill)) < 0.01, 'saved interval is the base one');
@@ -515,8 +518,8 @@ test('expert bots re-plan more often than hard bots of the same skill; the saved
   }
 });
 
-test('expert bots see a thin body that slips between a hard bot\'s look-ahead points (#110)', () => {
-  const r = radiusFor(100), hardL = 320 + 3 * r, expertL = 320 * DIFFICULTY.expert.sharp.look + 3 * r;
+test('sharp bots see a thin body that slips between a plain bot\'s look-ahead points (#110)', () => {
+  const r = radiusFor(100), plainL = 320 + 3 * r, sharpL = 320 * DIFFICULTY.hard.sharp.look + 3 * r;
   // A thin worm's body across the path at x, ahead of the bot heading for food along +x.
   const run = (level, x, sharp = {}) => withSharp(sharp, () => withTactics(level, ONLY(null), () => {
     const { game, worms: [bot] } = scene(level, withFood([
@@ -526,18 +529,18 @@ test('expert bots see a thin body that slips between a hard bot\'s look-ahead po
     botThink(bot, game);
     return bot.targetAngle;
   }));
-  // Midway between a hard bot's last two points: the hard bot doesn't see it, the expert does.
-  const gapH = hardL * 0.81;
-  assert.ok(Math.abs(run('hard', gapH)) < 0.02, 'hard bot keeps its line');
-  assert.ok(Math.abs(run('expert', gapH)) > 0.05, 'expert bot turns off its line');
-  // Midway between an expert bot's own last two sparse points: only the close check finds it.
-  const gapE = expertL * 0.81;
-  assert.ok(Math.abs(run('expert', gapE, { dense: 0 })) < 0.02, 'sparse points alone miss it');
-  assert.ok(Math.abs(run('expert', gapE)) > 0.05, 'the close check of the winning heading finds it');
+  // Midway between a plain bot's last two points: the plain bot doesn't see it, the sharp one does.
+  const gapP = plainL * 0.81;
+  assert.ok(Math.abs(run('hard', gapP, NO_SHARP)) < 0.02, 'plain bot keeps its line');
+  assert.ok(Math.abs(run('hard', gapP)) > 0.05, 'sharp bot turns off its line');
+  // Midway between a sharp bot's own last two sparse points: only the close check finds it.
+  const gapS = sharpL * 0.81;
+  assert.ok(Math.abs(run('hard', gapS, { dense: 0 })) < 0.02, 'sparse points alone miss it');
+  assert.ok(Math.abs(run('hard', gapS)) > 0.05, 'the close check of the winning heading finds it');
 });
 
-test('expert bots notice a cutter from farther than a hard bot of the same skill (#110)', () => {
-  // A head 470 away (hard evade range at skill 1: 400), crossing ahead.
+test('sharp bots notice a cutter from farther than a plain bot of the same skill (#110)', () => {
+  // A head 470 away (plain evade range at skill 1: 400), crossing ahead.
   const run = (level, sharp = {}) => withSharp(sharp, () => withTactics(level, ONLY('evade'), () => {
     const s = scene(level, [
       { name: 'Bot', mass: 400, x: 0, y: 0, angle: 0, ai: {} },
@@ -546,13 +549,13 @@ test('expert bots notice a cutter from farther than a hard bot of the same skill
     botThink(s.worms[0], s.game);
     return s.worms[0].ai.mode;
   }));
-  assert.notEqual(run('hard'), 'evade');
-  assert.equal(run('expert'), 'evade');
-  assert.notEqual(run('expert', { sense: 1 }), 'evade', 'it is the wider sensing');
+  assert.notEqual(run('hard', NO_SHARP), 'evade');
+  assert.equal(run('hard'), 'evade');
+  assert.notEqual(run('hard', { sense: 1 }), 'evade', 'it is the wider sensing');
 });
 
-test('expert bots steer clear of two cutters at once (#110)', () => {
-  const { game, worms: [bot, a, b] } = scene('expert', withFood([
+test('hard bots steer clear of two cutters at once (#110)', () => {
+  const { game, worms: [bot, a, b] } = scene('hard', withFood([
     { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
     { name: 'A', mass: 100, x: 200, y: 150, angle: Math.atan2(-150, 40) },
     { name: 'B', mass: 100, x: -250, y: -150, angle: Math.PI / 3 },
@@ -574,11 +577,11 @@ test('expert bots steer clear of two cutters at once (#110)', () => {
 });
 
 test('sharpness comes only from a level\'s own settings (#110)', () => {
-  // Byte-identical easy/normal/hard runs against the previous engine are checked with seeded
+  // Byte-identical easy/normal runs against the previous engine are checked with seeded
   // balance reports (see the #110 PR); here: a level without a sharp block gets no sharpness,
-  // and the same block given to hard does change how its bots play.
+  // and the same block given to normal does change how its bots play.
   const run = () => {
-    const g = new Game({ botCount: 12, difficulty: 'hard' }, null, { seed: 77 });
+    const g = new Game({ botCount: 12, difficulty: 'normal' }, null, { seed: 77 });
     g.spawnPlayer('You', 0);
     for (let i = 0; i < 60 * 20; i++) g.update(1 / 60);
     const snap = g.toJSON();
@@ -586,13 +589,13 @@ test('sharpness comes only from a level\'s own settings (#110)', () => {
     return JSON.stringify(snap);
   };
   const plain = run();
-  DIFFICULTY.hard.sharp = DIFFICULTY.expert.sharp;
-  try { assert.notEqual(run(), plain, 'a sharp block changes hard bots'); } finally { delete DIFFICULTY.hard.sharp; }
+  DIFFICULTY.normal.sharp = DIFFICULTY.hard.sharp;
+  try { assert.notEqual(run(), plain, 'a sharp block changes normal bots'); } finally { delete DIFFICULTY.normal.sharp; }
   assert.equal(run(), plain, 'and without one they play as before');
 });
 
 test('a sharp bot going head-on still avoids a loop of its target\'s body across the way (#110)', () => {
-  const { game, worms: [bot, other] } = scene('expert', [
+  const { game, worms: [bot, other] } = scene('hard', [
     { name: 'Bot', mass: 400, x: 0, y: 0, angle: 0, ai: {} },
     { name: 'Other', mass: 100, x: 180, y: 10, angle: Math.PI },
   ]);
@@ -610,11 +613,11 @@ test('a sharp bot boxed in by a loop of body takes the way out, not a heading it
   // The bot heads for food along +x inside a loop of a big worm's body, open only around +90°.
   // The loop lies between the sparse look-ahead points, so only the close check sees it, and the
   // headings toward the food all fail it: more than the four the close check used to try.
-  const { game, worms: [bot, loop] } = withTactics('expert', ONLY(null), () => scene('expert', withFood([
+  const { game, worms: [bot, loop] } = withTactics('hard', ONLY(null), () => scene('hard', withFood([
     { name: 'Bot', mass: 100, x: 0, y: 0, angle: 0, ai: {} },
     { name: 'Loop', mass: 1000, x: 0, y: 3000, angle: 0 },
   ], [{ x: 1000, y: 0 }])));
-  const L = 320 * DIFFICULTY.expert.sharp.look + 3 * bot.r, R = 0.485 * L;
+  const L = 320 * DIFFICULTY.hard.sharp.look + 3 * bot.r, R = 0.485 * L;
   loop.sx = []; loop.sy = [];
   for (let k = 0; k < 320; k++) {
     const a = (2 * Math.PI * k) / 320;
@@ -623,7 +626,7 @@ test('a sharp bot boxed in by a loop of body takes the way out, not a heading it
   }
   loop.updateBounds();
   game.rebuildSegGrid();
-  withTactics('expert', ONLY(null), () => botThink(bot, game));
+  withTactics('hard', ONLY(null), () => botThink(bot, game));
   // How close the chosen ray, out to the look-ahead, comes to the loop; a head dies within 0.78 (r + r').
   const c = Math.cos(bot.targetAngle), s = Math.sin(bot.targetAngle);
   let clearance = Infinity;
@@ -669,8 +672,8 @@ test('a third bot holding a grudge leaves a ganged-up worm alone, even as the ne
 const BIG_AWAY = { name: 'Big', mass: 3000, x: -200, y: 0, angle: 0 };
 const SMALL_AWAY = { name: 'Small', mass: 30, x: -200, y: 0, angle: 0 };
 function huntBeside(shares, dead, hunter = { mass: 400, x: 0, y: 0, angle: 0 }, prey = { mass: 100, x: 300, y: 0, angle: Math.PI / 2 }) {
-  return withTactics('expert', shares, () => {
-    const s = hunt('expert', hunter, prey, dead ? [dead] : [], 30);
+  return withTactics('hard', shares, () => {
+    const s = hunt('hard', hunter, prey, dead ? [dead] : [], 30);
     if (dead) s.game.kill(s.worms[2], null);
     s.game.rebuildFoodGrid();
     botThink(s.worms[0], s.game);
@@ -708,13 +711,13 @@ test('a scavenging coiler leaves its coil for a much bigger meal nearby (#122)',
 });
 
 test('a scavenging bot free to pick prey goes for a big meal instead of starting a hunt (#122)', () => {
-  const picks = (dead) => withTactics('expert', ONLY('scavenge'), () => {
+  const picks = (dead) => withTactics('hard', ONLY('scavenge'), () => {
     const worms = [
       { name: 'Hunter', mass: 400, x: 0, y: 0, angle: 0, ai: { aggro: 1 } },
       { name: 'Prey', mass: 100, x: 250, y: 0, angle: Math.PI / 2 },
     ];
     if (dead) worms.push(dead);
-    const s = scene('expert', worms, 30);
+    const s = scene('hard', worms, 30);
     if (dead) s.game.kill(s.worms[2], null);
     s.game.rebuildFoodGrid();
     const [h] = s.worms;
@@ -748,7 +751,7 @@ test('a scavenger that has reached spread-out remains eats them instead of circl
   // A scavenger 60 px from the middle of remains whose food lies 110-260 px around it, as a dead
   // worm's body leaves it. Aiming at the middle point, it circled it, boosting, and left 105-146 of
   // 240 in 8 s; eating the food itself, it leaves 5-80 (median 25, #146).
-  const { game, worms: [bot] } = withTactics('expert', ONLY('scavenge'), () => scene('expert', [{ name: 'Bot', mass: 300, x: 0, y: 0, angle: 0, ai: {} }]));
+  const { game, worms: [bot] } = withTactics('hard', ONLY('scavenge'), () => scene('hard', [{ name: 'Bot', mass: 300, x: 0, y: 0, angle: 0, ai: {} }]));
   const C = { x: 60, y: 0 }, reach = 300;
   let total = 0;
   for (let k = 0; k < 48; k++) {
@@ -762,7 +765,7 @@ test('a scavenger that has reached spread-out remains eats them instead of circl
   // leave it short of time, which isn't what this tests (#146).
   Object.assign(game, { powerupTarget: 0, specialTarget: 0, foodTarget: 0 });
   let boosting = 0;
-  withTactics('expert', ONLY('scavenge'), () => {
+  withTactics('hard', ONLY('scavenge'), () => {
     for (let i = 0; i < 8 * 60; i++) {
       game.update(1 / 60);
       // Only boosting in the remains counts. A bot may leave them for a pickup and boost back in from
@@ -779,8 +782,8 @@ test('a scavenger that overshoots the remains\' edge doesn\'t boost back in (#14
   // Remains of 240 spread 110-260 px around (0, 0), reach 300. A bot that was in them and is now
   // 30 px past the edge, heading outward after a pellet there, used to count as "not there yet",
   // aim for the middle and boost.
-  const think = (path) => withTactics('expert', ONLY('scavenge'), () => {
-    const { game, worms: [bot] } = scene('expert', [{ name: 'Bot', mass: 300, x: path[0], y: 0, angle: 0, ai: {} }]);
+  const think = (path) => withTactics('hard', ONLY('scavenge'), () => {
+    const { game, worms: [bot] } = scene('hard', [{ name: 'Bot', mass: 300, x: path[0], y: 0, angle: 0, ai: {} }]);
     let total = 0;
     for (let k = 0; k < 48; k++) {
       const a = k * 2.39996, d = 110 + (k % 6) * 30;
@@ -807,15 +810,15 @@ test('a scavenger that overshoots the remains\' edge doesn\'t boost back in (#14
 });
 
 // Reachable paths (#149).
-// Runs fn with expert's reach switched to `on` (1/0).
+// Runs fn with hard's reach switched to `on` (1/0).
 function withReach(on, fn) {
-  const saved = DIFFICULTY.expert.sharp.reach;
-  DIFFICULTY.expert.sharp.reach = on;
-  try { return fn(); } finally { DIFFICULTY.expert.sharp.reach = saved; }
+  const saved = DIFFICULTY.hard.sharp.reach;
+  DIFFICULTY.hard.sharp.reach = on;
+  try { return fn(); } finally { DIFFICULTY.hard.sharp.reach = saved; }
 }
 
 test('a reachable path is where the worm actually goes when it steers for that heading (#149)', () => {
-  const { game } = scene('expert', []);
+  const { game } = scene('hard', []);
   for (const deg of [0, 45, 90, 170, -45, -90, -170]) {
     for (const boosted of [false, true]) {
       for (const turn of [0, 10]) {
@@ -834,19 +837,19 @@ test('a reachable path is where the worm actually goes when it steers for that h
   }
 });
 
-test('an expert bot does not boost when only its wider boosting turn meets a body (#149)', () => {
+test('a hard bot does not boost when only its wider boosting turn meets a body (#149)', () => {
   // The bot goes for a big pellet 250 away, about 110° to its left, and its boost roll always passes.
   // A body runs alongside that line, 170 to its right: clear of the straight line and of the normal
   // turn (about 63 out at 110°), but on the wider boosting turn (about 154 out, and farther as it
   // carries on past the pellet).
   const a = (110 * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a), nx = sa, ny = -ca; // right of the line
-  const think = (reach) => withReach(reach, () => withTactics('expert', ONLY(null), () => {
-    const { game, worms: [bot, body] } = scene('expert', withFood([
+  const think = (reach) => withReach(reach, () => withTactics('hard', ONLY(null), () => {
+    const { game, worms: [bot, body] } = scene('hard', withFood([
       { name: 'Bot', mass: 120, x: 0, y: 0, angle: 0, ai: {} },
       { name: 'Body', mass: 2000, x: ca * 800 + nx * 170, y: sa * 800 + ny * 170, angle: a },
     ], [{ x: ca * 250, y: sa * 250 }]));
     game.rng = () => 0;
-    const L = 320 * DIFFICULTY.expert.sharp.look + 3 * bot.r, rad = bot.r + 10;
+    const L = 320 * DIFFICULTY.hard.sharp.look + 3 * bot.r, rad = bot.r + 10;
     botThink(bot, game);
     // How close the bot's path along its chosen heading comes to the body, out to `far`.
     const gap = (boosted, far) => {
@@ -869,28 +872,27 @@ test('an expert bot does not boost when only its wider boosting turn meets a bod
   assert.equal(on.bot.wantBoost, false, 'so it does not boost');
 });
 
-test('reachable paths change nothing on easy, normal and hard (#149)', () => {
+test('reachable paths change nothing on easy and normal (#149)', () => {
   const run = (level, reach) => withReach(reach, () => {
     const g = new Game({ botCount: 30, difficulty: level }, null, { seed: 4242 });
     for (let i = 0; i < 600; i++) g.update(1 / 60);
     return JSON.stringify(g.worms.map((w) => [w.id, w.mass, w.sx[0], w.sy[0], w.angle]));
   });
-  for (const level of ['easy', 'normal', 'hard']) assert.equal(run(level, 1), run(level, 0), level);
-  assert.notEqual(run('expert', 1), run('expert', 0), 'expert does change');
+  for (const level of ['easy', 'normal']) assert.equal(run(level, 1), run(level, 0), level);
+  assert.notEqual(run('hard', 1), run('hard', 0), 'hard does change');
 });
 
 // --- Shadowing bigger worms (#150) ---------------------------------------------------
 
-test('shadow is appended: some hard bots, every expert bot; every bot keeps its other tactics (#150)', () => {
+test('shadow is appended: every hard bot; every bot keeps its other tactics (#150, #177)', () => {
   assert.deepEqual(TACTICS.slice(11), ['escape', 'shadow']);
   for (const level of ['easy', 'normal']) assert.equal(DIFFICULTY[level].tactics.shadow, 0, level);
-  assert.equal(DIFFICULTY.hard.tactics.shadow, 0.4);
-  assert.equal(DIFFICULTY.expert.tactics.shadow, 1);
-  // Each bot's first twelve tactics, as bits, for ids 1-40, recorded before shadow was added.
+  assert.equal(DIFFICULTY.hard.tactics.shadow, 1);
+  // Each bot's first twelve tactics, as bits, for ids 1-40, recorded before shadow was added
+  // (hard: what Expert knew, everything).
   const before = {
-    hard: [2623, 571, 2135, 2775, 139, 2151, 2087, 19, 2591, 523, 559, 175, 27, 2111, 647, 2259, 725, 43, 527, 2203, 25, 2655, 2647, 2107, 627, 59, 2205, 2687, 247, 649, 2615, 179, 19, 141, 2627, 679, 655, 599, 79, 635],
     normal: [537, 521, 3, 516, 8, 1, 7, 17, 512, 0, 526, 5, 17, 19, 6, 19, 517, 1, 5, 2, 16, 5, 7, 27, 16, 0, 21, 17, 22, 8, 518, 18, 3, 5, 515, 512, 514, 530, 0, 19],
-    expert: Array(40).fill(4095),
+    hard: Array(40).fill(4095),
   };
   for (const [level, masks] of Object.entries(before)) {
     const now = masks.map((_, i) => TACTICS.slice(0, 12).reduce((m, k, j) => m | (knowsTactic({ id: i + 1 }, level, k) ? 1 << j : 0), 0));
@@ -900,7 +902,7 @@ test('shadow is appended: some hard bots, every expert bot; every bot keeps its 
 
 // A mass-300 bot at `at` heading `angle`, free to act (its rolls always pass), and a bigger worm with
 // its head at (300, 0) heading +y, its body trailing down along x = 300.
-function shadowScene(shares, { bigMass = 900, at = [0, 0], angle = 0, player = false, extra = [], level = 'expert' } = {}) {
+function shadowScene(shares, { bigMass = 900, at = [0, 0], angle = 0, player = false, extra = [], level = 'hard' } = {}) {
   return withTactics(level, shares, () => {
     const s = scene(level, [
       { name: 'Bot', mass: 300, x: at[0], y: at[1], angle, ai: { aggro: 1 } },
@@ -965,7 +967,7 @@ test('a shadowing bot gives up after 15 seconds or when its worm gets far, and e
 });
 
 test('a shadow cuts in only with a clear, in-time cut from beside its worm, never from in front (#150)', () => {
-  // Shadowers on hard and expert all predict turns, which times the cut-off point ahead of the head.
+  // Shadowers on hard all predict turns, which times the cut-off point ahead of the head.
   const CUTTER = { ...SHADOW, predict: 1 };
   // Beside the big worm's head, going its way: the cut is clear and in time.
   const cut = shadowScene(CUTTER, { at: [230, 30], angle: Math.PI / 2 });

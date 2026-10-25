@@ -1,4 +1,4 @@
-// A small brain by an Expert bot's head while the game watches it cut the player off (#138).
+// A small brain by a Hard bot's head (Expert until #177) while the game watches it cut the player off (#138).
 // Run with `node --test "tests/**/*.test.js"`.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -31,9 +31,9 @@ test('learning cue', async (t) => {
   const stopWatching = () => page.eval('window.__game.encounter = null');
   const endRun = async () => { await stopWatching(); await page.click('#endRun'); await page.frames(5); };
 
-  await t.test('an expert bot being watched shows a brain, and only that bot', async () => {
+  await t.test('a hard bot being watched shows a brain, and only that bot', async () => {
     page.exceptions.length = 0;
-    const id = await scene('expert');
+    const id = await scene('hard');
     await page.frames(5);
     assert.equal(await cues(), 0, 'nobody is being watched yet');
     await watch(id);
@@ -52,8 +52,8 @@ test('learning cue', async (t) => {
     await endRun();
   });
 
-  await t.test('a real cut-off on expert shows the brain', async () => {
-    const id = await scene('expert');
+  await t.test('a real cut-off on hard shows the brain', async () => {
+    const id = await scene('hard');
     await page.eval(`(() => {
       const g = window.__game, p = window.__player, b = g.worms.find((w) => w.id === ${id});
       p.shield = 0;
@@ -65,9 +65,9 @@ test('learning cue', async (t) => {
     await endRun();
   });
 
-  await t.test('no brain on hard', async () => {
+  await t.test('no brain on normal', async () => {
     page.exceptions.length = 0;
-    const id = await scene('hard');
+    const id = await scene('normal');
     await watch(id);
     await page.frames(10);
     assert.equal(await cues(), 0);

@@ -33,10 +33,10 @@ test('the player\'s habits', async (t) => {
   await t.test('a stored record reaches every new game', async () => {
     await startupWith(JSON.stringify(LEARNED));
     assert.deepEqual(await inGame(), LEARNED, 'the menu\'s world');
-    await page.click('#difficulty button[data-v="expert"]'); // a new world, not the restored one
+    await page.click('#difficulty button[data-v="hard"]'); // a new world, not the restored one
     await page.startRun();
-    assert.equal(await page.eval('window.__game.settings.difficulty'), 'expert');
-    assert.deepEqual(await inGame(), LEARNED, 'a new expert world');
+    assert.equal(await page.eval('window.__game.settings.difficulty'), 'hard');
+    assert.deepEqual(await inGame(), LEARNED, 'a new hard world');
   });
 
   await t.test('what the bots learn survives a reload', async () => {

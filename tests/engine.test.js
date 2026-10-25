@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 require('../engine.js');
-const { Game, Worm, SKINS, PICKABLE_SKINS, DIFFICULTY, MAX_BOTS, arenaRadius, CFG, radiusFor, lengthFor, botThink, validateSnapshot } = globalThis.WormEngine;
+const { Game, Worm, SKINS, PICKABLE_SKINS, DIFFICULTY, DIFFICULTIES, difficultyOf, MAX_BOTS, arenaRadius, CFG, radiusFor, lengthFor, botThink, validateSnapshot } = globalThis.WormEngine;
 const { clone, fixture, simulate, withFood, scene, hunt, withTactics } = require('./helpers/engine.js');
 
 test('a saved world restores and keeps running', () => {
@@ -408,6 +408,37 @@ test('unlockable skins are appended and never worn by bots (#14)', () => {
   assert.ok(game.worms.every((w) => !w.skin.unlock), 'nor do respawned bots');
 });
 
+// #177: three levels; Hard is what was Expert, and old names keep loading.
+test('three difficulty levels; Expert and Hard load as Hard (#177)', () => {
+  assert.deepEqual(DIFFICULTIES, ['easy', 'normal', 'hard']);
+  assert.equal(DIFFICULTY.hard.preyRatio, 2, 'Hard has what was Expert');
+  assert.ok(DIFFICULTY.hard.sharp, 'including its sharpness');
+  assert.deepEqual([difficultyOf('expert'), difficultyOf('hard'), difficultyOf('normal'), difficultyOf('nightmare'), difficultyOf('__proto__')], ['hard', 'hard', 'normal', null, null]);
+  assert.equal(new Game({ botCount: 5, difficulty: 'expert' }).settings.difficulty, 'hard');
+  for (const old of ['expert', 'hard']) {
+    const snap = JSON.parse(JSON.stringify(new Game({ botCount: 5, difficulty: 'normal' })));
+    snap.settings.difficulty = old;
+    validateSnapshot(snap);
+    const g = new Game(null, snap);
+    assert.equal(g.settings.difficulty, 'hard', `a world saved on ${old} loads on hard`);
+    assert.equal(JSON.parse(JSON.stringify(g)).settings.difficulty, 'hard', 'and is saved as hard');
+  }
+  const snap = JSON.parse(JSON.stringify(new Game({ botCount: 5 })));
+  snap.settings.difficulty = 'nightmare';
+  assert.throws(() => validateSnapshot(snap), /settings/, 'unknown names are still rejected');
+});
+
+test('a world created as expert plays exactly like one created as hard (#177)', () => {
+  const run = (difficulty) => {
+    const g = new Game({ botCount: 30, difficulty }, null, { seed: 31337 });
+    for (let i = 0; i < 60 * 60; i++) g.update(1 / 60);
+    const snap = JSON.parse(JSON.stringify(g));
+    delete snap.savedAt; // the only thing that depends on the clock
+    return snap;
+  };
+  assert.deepEqual(run('expert'), run('hard'));
+});
+
 test('bots hunt only worms lighter than their difficulty allows (#16)', () => {
   // A very aggressive bot thinks repeatedly next to one other worm: it may pick that worm
   // as prey only when the worm is lighter than preyRatio times the bot's mass.
@@ -521,7 +552,7 @@ test('a worm that keeps eating can hold massive size (#82)', () => {
 
 test('a world replays exactly from its seed, and the seed is not saved (#100)', () => {
   const run = (seed) => {
-    const g = new Game({ botCount: 12, difficulty: 'expert' }, null, { seed });
+    const g = new Game({ botCount: 12, difficulty: 'hard' }, null, { seed });
     g.spawnPlayer('You', 0);
     for (let i = 0; i < 60 * 20; i++) g.update(1 / 60); // 20 simulated seconds: bots think, fight, die and respawn
     const snap = g.toJSON();
@@ -819,8 +850,8 @@ test('a head does not die on a smaller worm\'s body where its own body lies over
 
 test('bots treat a smaller body under their own as clear, like the collision rule (#155)', () => {
   // A is a bot after food straight below it, across B's body.
-  const heading = (over) => withTactics('expert', { ...Object.fromEntries(Object.keys(DIFFICULTY.expert.tactics).map((k) => [k, 0])) }, () => {
-    const s = underScene(over, 'expert');
+  const heading = (over) => withTactics('hard', { ...Object.fromEntries(Object.keys(DIFFICULTY.hard.tactics).map((k) => [k, 0])) }, () => {
+    const s = underScene(over, 'hard');
     const [a] = s.worms;
     a.ai = { skill: 1, aggro: 0, interval: 0.1, wx: 0, wy: -300, prey: null, huntUntil: 0 };
     s.game.food.push({ x: 0, y: -250, v: 8, r: 6, c: '#fff', life: Infinity, ph: 0, dead: false, natural: true });

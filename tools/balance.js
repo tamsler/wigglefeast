@@ -2,27 +2,28 @@
 // Headless difficulty-balance report (#16): runs worlds on each difficulty with a scripted
 // stand-in player and prints how long it survives, what kills it (by the killer's tactic,
 // #78), how big bots get and how long a tick takes.
-// Usage: node tools/balance.js [--minutes 8] [--runs 3] [--bots 30] [--diff easy,normal,hard,expert]
+// Usage: node tools/balance.js [--minutes 8] [--runs 3] [--bots 30] [--diff easy,normal,hard]
 //                              [--profile novice,careful,skilled] [--set SHED_RATE=0.01,easy.bigShare=0.1]
 //                              [--seed 12345]
 // --seed replays runs exactly (#100): run r of every row uses seed + r. Without it a random
 // seed is picked and printed, so any report can be rerun. Only ms/tick differs between replays.
 // --set tries values without editing engine.js: CFG keys by name, DIFFICULTY keys as
 // <difficulty>.<key> (ranges as lo:hi, e.g. hard.skill=0.6:1), tactic shares as
-// <difficulty>.tactics.<tactic> (e.g. expert.tactics.coil=0).
+// <difficulty>.tactics.<tactic> (e.g. hard.tactics.coil=0).
 // The stand-in uses the bot brain at a fixed skill and without tactics, so numbers compare
 // settings with each other; they are not a prediction of how long a person lasts.
 // Playtesting decides.
 // Not part of the game: the release check ignores tools/.
 require('../engine.js');
-const { Game, botThink, CFG, DIFFICULTY, DIFFICULTIES } = globalThis.WormEngine;
+const { Game, botThink, CFG, DIFFICULTY, DIFFICULTIES, difficultyOf } = globalThis.WormEngine;
 
 const args = {};
 for (let i = 2; i < process.argv.length; i += 2) args[process.argv[i].replace(/^--/, '')] = process.argv[i + 1];
 const MINUTES = Number(args.minutes || 8);
 const RUNS = Number(args.runs || 3);
 const BOTS = Number(args.bots || 30);
-const DIFFS = args.diff ? args.diff.split(',') : DIFFICULTIES;
+// 'expert' still names Hard (#177); an unknown name stops with a clear message.
+const DIFFS = args.diff ? args.diff.split(',').map((d) => difficultyOf(d) || (() => { throw new Error(`unknown --diff level: ${d}`); })()) : DIFFICULTIES;
 const SEED = args.seed !== undefined ? Number(args.seed) >>> 0 : Math.floor(Math.random() * 4294967296);
 for (const kv of (args.set || '').split(',').filter(Boolean)) {
   const [key, val] = kv.split('=');

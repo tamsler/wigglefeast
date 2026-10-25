@@ -153,7 +153,7 @@ test('locked skins in the picker', async (t) => {
     assert.equal(await page.eval(`document.querySelector('#skins button[title="Cosmic"]').getAttribute('aria-label')`), 'Cosmic (locked)');
     const before = await skinName();
     await page.click('#skins button[title="Cosmic"]');
-    assert.equal(await skinName(), 'Reach 10,000 on Expert to unlock Cosmic');
+    assert.equal(await skinName(), 'Reach 10,000 on Hard to unlock Cosmic'); // Expert became Hard (#177)
     assert.equal(await page.eval(`JSON.parse(localStorage.getItem('wormarena.settings') || '{}').skin ?? 0`), 0);
     await page.waitFor(`document.getElementById('skinName').textContent === ${JSON.stringify(before)}`, 'name back', 6000);
   });
@@ -272,4 +272,30 @@ test('the achievements tab fits a laptop screen', async (t) => {
   await page.click('#achTitle');
   await page.frames(2);
   assert.equal(await page.eval(`(() => { const p = document.querySelector('#statsScreen .panel'); return p.scrollHeight - p.clientHeight; })()`), 0);
+});
+
+// #177: Expert Survivor became Hard Survivor, on the new Hard (what was Expert).
+test('Hard Survivor', async (t) => {
+  let page;
+  t.after(() => page && page.close());
+  page = await launch();
+  await page.goto(gameUrl());
+
+  await t.test('earned as Expert Survivor, it shows as Hard Survivor and Cosmic stays unlocked', async () => {
+    await startWith(page, profile({}, { ach: { expert: 1700000000123 } }));
+    assert.equal((await ach(page)).expert, 1700000000123);
+    assert.equal(await page.eval(`document.querySelector('#skins button[title="Cosmic"]').classList.contains('locked')`), false);
+    await page.click('#openStats');
+    await page.click('#achTitle');
+    const row = await page.eval(`document.querySelector('#achList .ach[data-id="expert"]').textContent`);
+    assert.match(row, /Hard Survivor/);
+    assert.match(row, /Reach 10,000 on Hard/);
+    assert.match(row, /Earned/);
+    await page.click('#closeStats');
+  });
+
+  await t.test('a Hard best of 10,000 earns it', async () => {
+    await startWith(page, profile({ best: 10000, bestByDiff: { easy: 0, normal: 100, hard: 10000 } }));
+    assert.ok((await ach(page)).expert > 0);
+  });
 });

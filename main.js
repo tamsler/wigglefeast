@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const { Game, CFG, SKINS, SAVE_APP_IDS, DIFFICULTIES, MIN_BOTS, MAX_BOTS, validateSnapshot, TAU, freshHabits, validHabits, knowsTactic } = window.WormEngine;
+  const { Game, CFG, SKINS, SAVE_APP_IDS, DIFFICULTIES, difficultyOf, MIN_BOTS, MAX_BOTS, validateSnapshot, TAU, freshHabits, validHabits, knowsTactic } = window.WormEngine;
   const $ = (id) => document.getElementById(id);
 
   const canvas = $('game');
@@ -57,7 +57,7 @@
       if (typeof s.name === 'string') settings.name = s.name.slice(0, 16);
       if (Number.isInteger(s.skin) && s.skin >= 0 && s.skin < SKINS.length) settings.skin = s.skin;
       if (Number.isInteger(s.botCount) && s.botCount >= MIN_BOTS && s.botCount <= MAX_BOTS) settings.botCount = s.botCount;
-      if (DIFFICULTIES.includes(s.difficulty)) settings.difficulty = s.difficulty;
+      if (difficultyOf(s.difficulty)) settings.difficulty = difficultyOf(s.difficulty); // Expert became Hard (#177)
       if (['auto', 'classic', 'halloween', 'christmas', 'snacks', 'tech'].includes(s.theme)) settings.theme = s.theme; // #64
       if (typeof s.sound === 'boolean') settings.sound = s.sound; // #9: older settings have neither, so both stay on
       if (typeof s.music === 'boolean') settings.music = s.music;
@@ -125,7 +125,8 @@
     { id: 'grazer', name: 'Grazer', goal: 'Eat 10,000 food in total', progress: (c) => [plus(c, 'eaten'), 10000] },
     { id: 'dedicated', name: 'Dedicated', goal: 'Play 50 games', progress: (c) => [c.totals.games, 50] },
     { id: 'hard', name: 'Hard Mode', goal: 'Reach 5,000 on Hard', progress: (c) => [bestOn(c, 'hard'), 5000] },
-    { id: 'expert', name: 'Expert Survivor', goal: 'Reach 10,000 on Expert', progress: (c) => [bestOn(c, 'expert'), 10000] },
+    // Expert Survivor until there were three levels (#177); the id stays, so it stays earned.
+    { id: 'expert', name: 'Hard Survivor', goal: 'Reach 10,000 on Hard', progress: (c) => [bestOn(c, 'hard'), 10000] },
     { id: 'stargazer', name: 'Stargazer', goal: 'Eat 25 special food', progress: (c) => [plus(c, 'specials'), 25] },
     { id: 'board', name: 'Top of the Board', goal: 'Be first on the leaderboard', progress: (c) => [c.totals.firsts + (c.live && c.live.first ? 1 : 0), 1] },
   ];
@@ -149,11 +150,13 @@
     if (p.top.length > 1000 || p.recent.length > 1000) return null;
     const t = p.totals, bd = isObj(t.bestByDiff) ? t.bestByDiff : null;
     if (!['games', 'kills', 'time', 'eaten', 'best'].every((k) => num(t[k])) || !bd) return null;
-    if (!DIFFICULTIES.every((d) => bd[d] === undefined || num(bd[d]))) return null; // Expert (#78) is missing from older profiles
+    // Bests may hold 'expert' (#78) from before there were three levels (#177), or miss levels.
+    const BEST_KEYS = DIFFICULTIES.concat(['expert']);
+    if (!BEST_KEYS.every((d) => bd[d] === undefined || num(bd[d]))) return null;
     const cleanRun = (r) => {
       if (!isObj(r) || !['date', 'score', 'peak', 'kills', 'eaten', 'time'].every((k) => num(r[k]))) return null;
-      if (!str(r.name) || !str(r.by) || !DIFFICULTIES.includes(r.diff) || !Number.isInteger(r.bots) || r.bots < 0 || r.bots > 1000) return null;
-      return { date: r.date, name: r.name, score: r.score, peak: r.peak, kills: r.kills, eaten: r.eaten, time: r.time, by: r.by, diff: r.diff, bots: r.bots };
+      if (!str(r.name) || !str(r.by) || !difficultyOf(r.diff) || !Number.isInteger(r.bots) || r.bots < 0 || r.bots > 1000) return null;
+      return { date: r.date, name: r.name, score: r.score, peak: r.peak, kills: r.kills, eaten: r.eaten, time: r.time, by: r.by, diff: difficultyOf(r.diff), bots: r.bots };
     };
     const top = p.top.map(cleanRun), recent = p.recent.map(cleanRun);
     if (!keepGoodRuns && (top.includes(null) || recent.includes(null))) return null;
@@ -165,7 +168,8 @@
       v: PROFILE_VERSION,
       totals: {
         games: t.games, kills: t.kills, time: t.time, eaten: t.eaten, best: t.best,
-        bestByDiff: Object.fromEntries(DIFFICULTIES.map((d) => [d, bd[d] || 0])),
+        // Each level's best, the old Expert's folded into Hard (#177).
+        bestByDiff: Object.fromEntries(DIFFICULTIES.map((d) => [d, Math.max(0, ...BEST_KEYS.filter((k) => difficultyOf(k) === d).map((k) => bd[k] || 0))])),
         specials: num(t.specials) ? t.specials : 0, firsts: num(t.firsts) ? t.firsts : 0,
       },
       top: top.filter(Boolean).slice(0, 10),
@@ -268,7 +272,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // The player's habits (#135): how they escape a bot cutting them off, which expert bots learn
+  // The player's habits (#135): how they escape a bot cutting them off, which hard bots learn
   // from. Kept between games, separate from the world and the stats, never exported; Reset stats
   // forgets it. Every game shares this one object, which the engine updates in place.
   function loadHabits() {
@@ -1584,7 +1588,7 @@
     }
     boostArrowsDrawn++;
   }
-  // Learning cue (#138): a small brain beside the head of an Expert bot while the game watches how
+  // Learning cue (#138): a small brain beside the head of a Hard bot while the game watches how
   // the player escapes its cut-off (#135), pulsing, then fading out. Drawing only: kept by page time.
   const LEARN_FADE = 0.5; // seconds the brain takes to fade once the watching ends
   const learningSeen = new Map(); // bot -> page time it was last seen being watched
