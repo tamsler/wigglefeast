@@ -13,8 +13,8 @@
 ## 3. Release and integration
 
 - [x] 3.1 Take screenshots of each reward in the arena (still frames), the picker and the stats screen for the PR; run the 50,000-mass frame-time test with Inferno as the player's skin. Verify frame times pass.
-- [ ] 3.2 Bump `VERSION` in `sw.js` to 1.32.0 (no new files). Run `node --test "tests/**/*.test.js"` once (no parallel stress runs) and verify everything passes.
-- [ ] 3.3 Check on a real device that the rewards look right and animate smoothly.
+- [x] 3.2 Bump `VERSION` in `sw.js` to 1.32.0 (no new files). Run `node --test "tests/**/*.test.js"` once (no parallel stress runs) and verify everything passes.
+- [x] 3.3 Check on a real device that the rewards look right and animate smoothly.
 
 ## Workflow follow-up
 

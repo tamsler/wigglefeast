@@ -16,7 +16,7 @@
 ## 3. Release and integration
 
 - [x] 3.1 Bump `VERSION` in `sw.js` to 1.31.0 (no new files). Run `node --test "tests/**/*.test.js"` and verify everything passes.
-- [ ] 3.2 Check on a real device that the menu shows three levels and that a Hard run plays like Expert did (cut-offs, coils, the learning brain).
+- [x] 3.2 Check on a real device that the menu shows three levels and that a Hard run plays like Expert did (cut-offs, coils, the learning brain).
 
 ## Workflow follow-up
 

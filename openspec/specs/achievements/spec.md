@@ -6,7 +6,7 @@ Long-term goals across many runs: the achievements, how progress toward them is 
 ## Requirements
 
 ### Requirement: Growth achievements
-The game SHALL have these achievements for size, each earned when the player's worm reaches the given score (peak mass) in a run: Snack Time (1,000), Big Noodle (5,000), Titan (25,000), Hard Mode (5,000 on Hard difficulty) and Expert Survivor (10,000 on Expert difficulty).
+The game SHALL have these achievements for size, each earned when the player's worm reaches the given score (peak mass) in a run: Snack Time (1,000), Big Noodle (5,000), Titan (25,000), Hard Mode (5,000 on Hard difficulty) and Hard Survivor (10,000 on Hard difficulty). Hard Survivor was called Expert Survivor before there were three levels; earning it under either name counts.
 
 #### Scenario: Reaching 5,000
 - **WHEN** the player's worm reaches a score of 5,000 for the first time, on any difficulty
@@ -15,6 +15,10 @@ The game SHALL have these achievements for size, each earned when the player's w
 #### Scenario: Difficulty goals
 - **WHEN** the player reaches 5,000 on Normal
 - **THEN** Hard Mode is not earned, because it needs Hard
+
+#### Scenario: Earned as Expert Survivor
+- **WHEN** a player who earned Expert Survivor before this change opens the game
+- **THEN** Hard Survivor shows as earned, and Cosmic stays unlocked
 
 ### Requirement: Hunting achievements
 The game SHALL have these achievements for eating other worms: First Bite (eat one worm), Hungry Hunter (eat 10 worms in one run) and Apex (eat 100 worms in total across all runs).
@@ -67,7 +71,7 @@ The stats screen SHALL list every achievement with its name, goal and progress (
 - **THEN** Big Noodle shows 3,200 / 5,000 and that it unlocks Rainbow
 
 ### Requirement: Skin rewards
-Earning Big Noodle SHALL unlock Rainbow, First Bite Lavender, Hungry Hunter Dragon, Marathon Thunder, Titan Royal and Expert Survivor Cosmic.
+Earning Big Noodle SHALL unlock Rainbow, First Bite Lavender, Hungry Hunter Dragon, Marathon Thunder, Titan Royal and Hard Survivor Cosmic.
 
 #### Scenario: Unlocking Dragon
 - **WHEN** the player earns Hungry Hunter

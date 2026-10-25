@@ -110,7 +110,7 @@ The skin picker SHALL show every unlockable skin, after the free ones: unlocked 
 
 #### Scenario: Tapping a locked skin
 - **WHEN** the player taps the locked Cosmic swatch
-- **THEN** the skin doesn't change, and the menu says "Reach 10,000 on Expert to unlock Cosmic"
+- **THEN** the skin doesn't change, and the menu says "Reach 10,000 on Hard to unlock Cosmic"
 
 #### Scenario: After unlocking
 - **WHEN** the player has earned Big Noodle and opens the menu
