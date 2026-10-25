@@ -27,6 +27,21 @@ In a themed arena, small food SHALL show one of the theme's two small items, med
 - **WHEN** a piece of food is on screen for several seconds, or the world is saved and loaded
 - **THEN** it keeps showing the same item
 
+### Requirement: Food drawn large enough to read
+Food SHALL be drawn about a third larger than its pickup size suggests, in every theme: a themed item is drawn 5.4 times the food's radius across on a glow 6.5 times its radius, and a Classic dot's glow 6.5 times its radius. Food values, sizes in the game, pickup reach and the drift toward a nearby head SHALL be unchanged.
+
+#### Scenario: Themed food
+- **WHEN** a piece of food of radius 10 is on screen in the Halloween theme
+- **THEN** its item is drawn 54 world units across on a glow 65 units across
+
+#### Scenario: Classic food
+- **WHEN** a piece of food of radius 10 is on screen in the Classic theme
+- **THEN** its glowing dot is drawn 65 world units across
+
+#### Scenario: Pickup unchanged
+- **WHEN** a worm's head passes a piece of food
+- **THEN** it is pulled in and eaten from exactly the same distance as before this change
+
 ### Requirement: Choosing a theme
 The menu SHALL let the player choose Auto, Classic, Halloween, Christmas, Snacks or Tech, and SHALL remember the choice. Auto SHALL be the default. Auto SHALL use Halloween from 15 to 31 October, Christmas from 1 to 26 December, and Classic on every other day, following the player's local date. Auto SHALL be listed first, and the theme Auto currently uses SHALL NOT be listed again, unless the player has chosen it explicitly.
 

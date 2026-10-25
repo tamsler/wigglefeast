@@ -17,7 +17,7 @@
 
 - [x] 4.1 Run `node --test tests/browser/massive.test.js tests/simulation.test.js` and the scratch GPU benchmark on `main` and on the branch (150 bots in view, player at 50,000). Verify the smoke limits pass and note the numbers in the PR.
 - [x] 4.2 Bump `VERSION` in `sw.js` to 1.28.0 (no new files). Run `node --test "tests/**/*.test.js"` and verify everything passes, including `tests/fixtures/save-v1.json` loading.
-- [ ] 4.3 Take before/after screenshots at mass 15, 1,000 and 10,000 (desktop and phone size) for the PR. Check on a real phone that the floor texture doesn't shimmer distractingly when zoomed out and the game runs smoothly.
+- [x] 4.3 Take before/after screenshots at mass 15, 1,000 and 10,000 (desktop and phone size) for the PR. Check on a real phone that the floor texture doesn't shimmer distractingly when zoomed out and the game runs smoothly.
 
 ## Workflow follow-up
 
