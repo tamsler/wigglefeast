@@ -25,7 +25,7 @@
 
 - [x] 6.1 Run `node --test tests/browser/massive.test.js tests/simulation.test.js` with audio unlocked during the frame-time check, and verify the smoke limits pass.
 - [x] 6.2 Bump `VERSION` in `sw.js` to 1.29.0 (with `audio.js` in `FILES`). Run `node --test "tests/**/*.test.js"` and verify everything passes, including `tests/fixtures/save-v1.json` loading and the offline-app tests seeing `audio.js` cached.
-- [ ] 6.3 Check on a real phone (iPhone if possible): sound starts after Play, the boost whoosh follows the boost button, music pauses with the game and when switching apps, and the mute buttons work.
+- [x] 6.3 Check on a real phone (iPhone if possible): sound starts after Play, the boost whoosh follows the boost button, music pauses with the game and when switching apps, and the mute buttons work.
 
 ## Workflow follow-up
 
