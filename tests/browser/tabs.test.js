@@ -15,7 +15,9 @@ test('a second tab shares storage with the first', async (t) => {
     await other.goto(url);
     await other.eval(`window.__events = []; addEventListener('storage', (e) => window.__events.push(e.key))`);
     await page.eval(`localStorage.setItem('probe', ${JSON.stringify(where)})`);
-    assert.equal(await other.eval(`localStorage.getItem('probe')`), where, `${where}: storage is shared`);
+    // Chrome copies localStorage between tabs asynchronously, so the other tab may see the old
+    // value for a moment (#162): wait for it rather than reading once.
+    await other.waitFor(`localStorage.getItem('probe') === ${JSON.stringify(where)}`, `${where}: storage is shared`, 5000);
     await page.frames(5);
     const events = await other.eval('window.__events');
     // The game must not rely on these events (design decision 3); this just records what Chrome does.
