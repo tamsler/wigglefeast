@@ -2,17 +2,17 @@
 // Coil-escape measurement (#94, #149): many seeded encounters of a small bot being coiled by a
 // big worm. Reports how often the trapped bot dies, the coiler dies, the bot gets free, or it's
 // still held when time runs out, for each arm (baseline, reach only, reach + escape).
-// Usage: node tools/coil.js [--n 300] [--seed 1] [--coiler bot,scripted] [--prey expert]
+// Usage: node tools/coil.js [--n 300] [--seed 1] [--coiler bot,scripted] [--prey hard]
 //                           [--arms baseline,reach,escape] [--secs 6] [--dist 400] [--coiler-reach 1]
 // Arms switch reachable paths and the escape tactic for the prey only; --coiler-reach sets the bot
-// coiler's reachable paths (1, as Expert ships; 0, as before #149).
+// coiler's reachable paths (1, as Hard ships; 0, as before #149).
 // Coilers: 'bot' is an ordinary bot of the prey's level hunting the prey (it starts coiling at
 // once); 'scripted' circles the prey's head the way a coiling bot aims, every tick, but never
 // steers around bodies, like a person might. Encounter i of every arm uses seed + i, so arms are
 // compared on the same starts. The 95% interval is the normal approximation.
 // Not part of the game: the release check ignores tools/.
 require('../engine.js');
-const { Game, Worm, SKINS, DIFFICULTY, botThink, predictHead, freedom, TAU } = globalThis.WormEngine;
+const { Game, Worm, SKINS, DIFFICULTY, difficultyOf, botThink, predictHead, freedom, TAU } = globalThis.WormEngine;
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const ARMS = {
@@ -21,10 +21,10 @@ const ARMS = {
   escape: { reach: 1, escape: 1 },
 };
 
-// Runs fn with the arm's switches set: Expert sharpness' reach, and the escape tactic share of
+// Runs fn with the arm's switches set: Hard sharpness' reach, and the escape tactic share of
 // the prey's level (1, so every prey bot knows it, when measuring the tactic itself).
 function withArm(arm, level, fn) {
-  const a = ARMS[arm], sharp = DIFFICULTY.expert.sharp, tac = DIFFICULTY[level].tactics;
+  const a = ARMS[arm], sharp = DIFFICULTY.hard.sharp, tac = DIFFICULTY[level].tactics;
   const saved = { reach: sharp.reach, escape: tac.escape };
   sharp.reach = a.reach;
   tac.escape = a.escape;
@@ -80,7 +80,7 @@ function sectors(c, prey) {
 // A live coil scene: a mass-120 prey bot and a mass-3,000 coiler about `dist` away, in the default
 // arena with no food, power-ups or respawns. Returns { g, p, c, tick }: tick() advances 1/60 s,
 // steering the scripted coiler or letting the bot coiler think. Call it inside withArm.
-function coilScene({ seed = 1, coiler = 'bot', prey: level = 'expert', preyMass = 120, coilerMass = 3000, dist = 400, coilerReach = 1 } = {}) {
+function coilScene({ seed = 1, coiler = 'bot', prey: level = 'hard', preyMass = 120, coilerMass = 3000, dist = 400, coilerReach = 1 } = {}) {
   const g = new Game({ botCount: 30, difficulty: level }, null, { seed }); // the default arena
   const rng = g.rng, d = DIFFICULTY[level];
   g.food = []; g.powerups = []; g.specials = []; g.worms = []; g.respawnQueue = [];
@@ -113,7 +113,7 @@ function coilScene({ seed = 1, coiler = 'bot', prey: level = 'expert', preyMass 
   }
   if (!c) throw new Error('no clear start for seed ' + seed);
   // The bot coiler thinks here, not in g.update, so the arm's switches apply to the prey alone:
-  // the coiler keeps coilerReach (on by default, as Expert bots ship).
+  // the coiler keeps coilerReach (on by default, as Hard bots ship).
   const cai = c.ai;
   if (bot) { cai.prey = p; c.ai = null; }
   let thinkT = 0;
@@ -143,7 +143,7 @@ function coilScene({ seed = 1, coiler = 'bot', prey: level = 'expert', preyMass 
 
 // One encounter. Returns { outcome: 'prey' | 'coiler' | 'free' | 'held', loop: most sectors
 // closed, modes: Set of the prey's modes, moves: Set of its escape moves, secs }.
-function encounter({ arm = 'baseline', prey: level = 'expert', secs = 6, ...opts } = {}) {
+function encounter({ arm = 'baseline', prey: level = 'hard', secs = 6, ...opts } = {}) {
   return withArm(arm, level, () => {
     const { g, p, c, tick } = coilScene({ prey: level, ...opts });
     let outcome = null, loop = 0;
@@ -177,7 +177,7 @@ if (require.main === module) {
   const N = Number(args.n || 300), SEED = Number(args.seed || 1) >>> 0, SECS = Number(args.secs || 6), DIST = Number(args.dist || 400);
   const CREACH = Number(args['coiler-reach'] ?? 1);
   const coilers = (args.coiler || 'bot,scripted').split(','), arms = (args.arms || 'baseline,reach,escape').split(',');
-  const level = args.prey || 'expert';
+  const level = difficultyOf(args.prey || 'hard');
   const ci = (k) => {
     const q = k / N, h = 1.96 * Math.sqrt((q * (1 - q)) / N);
     return `${String(k).padStart(4)} (${(100 * q).toFixed(0).padStart(2)}% ±${(100 * h).toFixed(0)})`;

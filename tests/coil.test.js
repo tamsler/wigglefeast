@@ -37,16 +37,15 @@ test('bots that escape coils die clearly less often in a fixed batch of live coi
 
 // --- Coil escape in the engine (#94) ---------------------------------------------
 
-test('escape is appended, on half the hard bots and every expert bot; every bot keeps its other tactics (#94)', () => {
+test('escape is appended, on every hard bot; every bot keeps its other tactics (#94, #177)', () => {
   assert.equal(TACTICS[11], 'escape');
   for (const level of ['easy', 'normal']) assert.equal(DIFFICULTY[level].tactics.escape, 0, level);
-  assert.equal(DIFFICULTY.hard.tactics.escape, 0.5);
-  assert.equal(DIFFICULTY.expert.tactics.escape, 1);
-  // Each bot's first eleven tactics, as bits, for ids 1-40, recorded before escape was added.
+  assert.equal(DIFFICULTY.hard.tactics.escape, 1);
+  // Each bot's first eleven tactics, as bits, for ids 1-40, recorded before escape was added
+  // (hard: what Expert knew, everything).
   const before = {
-    hard: [575, 571, 87, 727, 139, 103, 39, 19, 543, 523, 559, 175, 27, 63, 647, 211, 725, 43, 527, 155, 25, 607, 599, 59, 627, 59, 157, 639, 247, 649, 567, 179, 19, 141, 579, 679, 655, 599, 79, 635],
     normal: [537, 521, 3, 516, 8, 1, 7, 17, 512, 0, 526, 5, 17, 19, 6, 19, 517, 1, 5, 2, 16, 5, 7, 27, 16, 0, 21, 17, 22, 8, 518, 18, 3, 5, 515, 512, 514, 530, 0, 19],
-    expert: Array(40).fill(2047),
+    hard: Array(40).fill(2047),
   };
   for (const [level, masks] of Object.entries(before)) {
     const now = masks.map((_, i) => TACTICS.slice(0, 11).reduce((m, k, j) => m | (knowsTactic({ id: i + 1 }, level, k) ? 1 << j : 0), 0));
@@ -87,7 +86,7 @@ const ESCAPE = ONLY('escape');
 test('a bot notices a live coil closing round it (#94)', () => {
   let circled = 0;
   for (let i = 0; i < 10; i++) {
-    withArm('escape', 'expert', () => {
+    withArm('escape', 'hard', () => {
       const { p, c, tick } = coilScene({ seed: 200 + i, coiler: 'scripted' });
       for (let k = 0; k < 3 * 60 && !p.dead && !c.dead; k++) {
         tick();
@@ -99,8 +98,8 @@ test('a bot notices a live coil closing round it (#94)', () => {
 });
 
 test('a bot does not count itself circled by a worm passing by, circling elsewhere, or a loose loop (#94)', () => {
-  const think = (worms, fix) => withTactics('expert', ESCAPE, () => {
-    const s = scene('expert', [{ name: 'Prey', mass: 120, x: 0, y: 0, angle: 0, ai: {} }, ...worms]);
+  const think = (worms, fix) => withTactics('hard', ESCAPE, () => {
+    const s = scene('hard', [{ name: 'Prey', mass: 120, x: 0, y: 0, angle: 0, ai: {} }, ...worms]);
     if (fix) fix(s);
     botThink(s.worms[0], s.game);
     return s.worms[0].ai;
@@ -109,15 +108,15 @@ test('a bot does not count itself circled by a worm passing by, circling elsewhe
   assert.ok(!passing.circledBy, 'straight past');
   const elsewhere = think([{ name: 'Big', mass: 3000, x: 800, y: 0, angle: Math.PI / 2, turnRate: 1.5 }]);
   assert.ok(!elsewhere.circledBy, 'circling a point far away');
-  const loose = withTactics('expert', ESCAPE, () => {
-    const s = laidCoil('expert', { span: Math.PI / 2 });
+  const loose = withTactics('hard', ESCAPE, () => {
+    const s = laidCoil('hard', { span: Math.PI / 2 });
     botThink(s.p, s.game);
     return s.p.ai;
   });
   assert.ok(!loose.circledBy, 'a quarter loop leaves most ways open');
   assert.notEqual(loose.mode, 'escape');
-  const closed = withTactics('expert', ESCAPE, () => {
-    const s = laidCoil('expert');
+  const closed = withTactics('hard', ESCAPE, () => {
+    const s = laidCoil('hard');
     botThink(s.p, s.game);
     return s;
   });
@@ -132,8 +131,8 @@ test('a bot does not count itself circled by a worm passing by, circling elsewhe
 });
 
 test('coil escape decides only from what is visible, and draws no random numbers (#94)', () => {
-  const run = (setCoiler, shares = ESCAPE) => withTactics('expert', shares, () => {
-    const s = laidCoil('expert');
+  const run = (setCoiler, shares = ESCAPE) => withTactics('hard', shares, () => {
+    const s = laidCoil('hard');
     setCoiler(s.c, s.p);
     let calls = 0;
     s.game.rng = () => { calls++; return 0.5; };
@@ -153,12 +152,12 @@ test('a circled bot takes a way out it can turn into (#94)', () => {
   // A loop of radius 100 open ahead of the coiler's head, from -120° round to +45°: straight ahead
   // (+x) is the way out.
   const open = { R: 100, at: (-2 * Math.PI) / 3, span: (195 / 180) * Math.PI };
-  const out = withTactics('expert', ESCAPE, () => { const s = laidCoil('expert', open); botThink(s.p, s.game); return s.p; });
+  const out = withTactics('hard', ESCAPE, () => { const s = laidCoil('hard', open); botThink(s.p, s.game); return s.p; });
   assert.equal(out.ai.escape, 'out');
   assert.ok(Math.abs(out.targetAngle) < 0.5, `heads out through the gap (${out.targetAngle.toFixed(2)})`);
   assert.ok(Math.hypot(out.ai.aim.x, out.ai.aim.y) > 100 + 34 + out.r, 'its path ends outside the loop');
   // With a second ring beyond the gap there's no way out: it hugs the loop instead.
-  const held = withTactics('expert', ESCAPE, () => { const s = laidCoil('expert', { ...open, outer: 320 }); botThink(s.p, s.game); return s.p; });
+  const held = withTactics('hard', ESCAPE, () => { const s = laidCoil('hard', { ...open, outer: 320 }); botThink(s.p, s.game); return s.p; });
   assert.equal(held.ai.escape, 'hug', 'blocked beyond: no way out');
 });
 
@@ -167,8 +166,8 @@ test('a circled bot does not go for a gap it cannot turn into (#94)', () => {
   // the middle heading +x. A straight line down through the gap is clear; every turn down into it
   // swings into the loop's edge.
   const gap = (28 / 180) * Math.PI;
-  const s = withTactics('expert', ESCAPE, () => {
-    const s = laidCoil('expert', { R: 150, at: -Math.PI / 2 - gap, span: 2 * Math.PI - 2 * gap, py: -40 });
+  const s = withTactics('hard', ESCAPE, () => {
+    const s = laidCoil('hard', { R: 150, at: -Math.PI / 2 - gap, span: 2 * Math.PI - 2 * gap, py: -40 });
     botThink(s.p, s.game);
     return s;
   });
@@ -180,8 +179,8 @@ test('a circled bot does not go for a gap it cannot turn into (#94)', () => {
 });
 
 test('with no way out, a circled bot hugs the loop its coiler\'s way round and survives (#94)', () => {
-  withTactics('expert', ESCAPE, () => {
-    const s = laidCoil('expert');
+  withTactics('hard', ESCAPE, () => {
+    const s = laidCoil('hard');
     s.c.update = () => {}; // the loop holds still
     botThink(s.p, s.game);
     s.p.thinkT = 0; // a bot in a coil has been thinking all along
@@ -201,8 +200,13 @@ test('with no way out, a circled bot hugs the loop its coiler\'s way round and s
 });
 const angleDiffTest = (a, b) => { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
 
-test('a circled bot boosts only along a boosting path that leads cleanly out, on hard as on expert (#94)', () => {
-  for (const level of ['expert', 'hard']) {
+test('a circled bot boosts only along a boosting path that leads cleanly out, with or without Hard sharpness (#94)', () => {
+  // Without sharpness: every setting at its off value (what the old Hard level was here, #177).
+  const NO_SHARP = { think: 1, look: 1, dense: 0, headings: 1, sense: 1, heads: 8, escape: 0, reach: 0 };
+  for (const [label, sharp] of [['sharp', {}], ['plain', NO_SHARP]]) {
+    const level = 'hard', saved = { ...DIFFICULTY.hard.sharp };
+    Object.assign(DIFFICULTY.hard.sharp, sharp);
+    try {
     // A big pellet ahead and a boost roll that always passes: it would boost, if it weren't circled.
     const think = (opts, shares) => withTactics(level, shares, () => {
       const s = laidCoil(level, { ...opts, extra: Object.assign([], { food: [{ x: 60, y: 0, v: 20 }] }) });
@@ -211,12 +215,13 @@ test('a circled bot boosts only along a boosting path that leads cleanly out, on
       return s.p;
     });
     const gap = { R: 100, at: (-2 * Math.PI) / 3, span: (195 / 180) * Math.PI };
-    assert.equal(think(gap, ONLY(null)).wantBoost, true, `${level}: boosts for the pellet through the gap without the tactic`);
+    assert.equal(think(gap, ONLY(null)).wantBoost, true, `${label}: boosts for the pellet through the gap without the tactic`);
     const tight = think({}, ESCAPE);
     assert.equal(tight.ai.mode, 'escape');
-    assert.equal(tight.wantBoost, false, `${level}: not inside a closed loop`);
+    assert.equal(tight.wantBoost, false, `${label}: not inside a closed loop`);
     const open = think(gap, ESCAPE);
     assert.equal(open.ai.escape, 'out');
-    assert.equal(open.wantBoost, true, `${level}: straight out through the gap at speed`);
+    assert.equal(open.wantBoost, true, `${label}: straight out through the gap at speed`);
+    } finally { Object.assign(DIFFICULTY.hard.sharp, saved); }
   }
 });

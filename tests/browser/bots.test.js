@@ -33,7 +33,7 @@ test('bot count', async (t) => {
   // playtest decides the real limit (#81).
   await t.test('frame times stay reasonable at 30, 60 and 150 bots', async (st) => {
     for (const botCount of [30, 60, 150]) {
-      await withSettings({ name: 'A', skin: 0, botCount, difficulty: 'expert' });
+      await withSettings({ name: 'A', skin: 0, botCount, difficulty: 'hard' });
       await page.startRun();
       await page.eval('window.__player.shield = 1e9');
       // At 150 every worm also has a magnet, so the magnet fields' drawing cost is in the worst case (#103).

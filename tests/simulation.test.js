@@ -23,8 +23,8 @@ test('simulation stays healthy on every difficulty', () => {
   }
 });
 
-test('the biggest world on Expert stays within the tick budget (#78)', () => {
-  const { g, msPerTick, shortfalls } = simulate(60, 'expert', 30);
+test('the biggest world on Hard stays within the tick budget (#78)', () => {
+  const { g, msPerTick, shortfalls } = simulate(60, 'hard', 30);
   assert.ok(g.worms.every((w) => Number.isFinite(w.mass) && w.sx.every(Number.isFinite)), 'finite state');
   assert.equal(shortfalls, 0);
   // Same loose limit as above; locally about 0.7 ms.
@@ -49,8 +49,8 @@ test('food and power-ups refill at the same pace at any update rate (#48)', () =
   }
 });
 
-test('a 150-bot Expert world stays healthy within the tick budget (#81)', () => {
-  const { g, msPerTick, shortfalls, avgBots } = simulate(MAX_BOTS, 'expert', 20);
+test('a 150-bot Hard world stays healthy within the tick budget (#81)', () => {
+  const { g, msPerTick, shortfalls, avgBots } = simulate(MAX_BOTS, 'hard', 20);
   assert.ok(g.worms.every((w) => Number.isFinite(w.mass) && w.sx.every(Number.isFinite)), 'finite state');
   assert.equal(shortfalls, 0, 'living + queued bots always cover the target');
   assert.ok(avgBots >= MAX_BOTS * 0.8, `average ${avgBots.toFixed(0)} bots alive`);

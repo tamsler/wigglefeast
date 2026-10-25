@@ -151,9 +151,10 @@ test('save import and stored data', async (t) => {
     const kept = await page.eval(`JSON.parse(localStorage.getItem('wormarena.profile'))`);
     assert.equal(kept.recent.length, fixture.profile.recent.length, 'only the bad run is dropped');
     assert.equal(kept.top.length, fixture.profile.top.length);
-    // Totals are kept; the Expert best (#78) and the achievement counters (#14), which this profile
-    // predates, start at 0.
-    assert.deepEqual(kept.totals, { ...fixture.profile.totals, bestByDiff: { ...fixture.profile.totals.bestByDiff, expert: 0 }, specials: 0, firsts: 0 });
+    // Totals are kept, with a best for each of the three levels (#177); the achievement counters
+    // (#14), which this profile predates, start at 0.
+    const bd = fixture.profile.totals.bestByDiff;
+    assert.deepEqual(kept.totals, { ...fixture.profile.totals, bestByDiff: { easy: bd.easy || 0, normal: bd.normal || 0, hard: bd.hard || 0 }, specials: 0, firsts: 0 });
   });
 
   await t.test('a stored payload never runs (#18)', async () => {

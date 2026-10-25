@@ -73,8 +73,8 @@ function hunt(level, hunter, prey, extra = [], botCount = 5) {
 
 // Prey choice for a reading bot with only `read` on: a near and a far candidate.
 function pickPrey(near, far, setup, extra = [], shares = ONLY('read')) {
-  return withTactics('expert', shares, () => {
-    const s = scene('expert', [
+  return withTactics('hard', shares, () => {
+    const s = scene('hard', [
       { name: 'Reader', mass: 400, x: 0, y: 0, angle: 0, ai: { aggro: 1 } },
       { name: 'Near', x: 250, y: 0, angle: Math.PI / 2, ...near },
       { name: 'Far', x: 0, y: 450, angle: 0, ...far },

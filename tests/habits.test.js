@@ -28,7 +28,7 @@ test('a habits record starts empty, rejects anything invalid, and fades one enco
 // The player heads +x from the origin; a bot alongside, ahead on the player's +1 side (+y),
 // is cutting it off and doesn't re-plan during the test.
 function cutOff(record = freshHabits(), bot = { x: 150, y: 120, angle: 0 }) {
-  const s = scene('expert', [{ name: 'You', mass: 15, x: 0, y: 0, angle: 0 }, { name: 'Cutter', mass: 100, ai: { huntUntil: 1e9 }, ...bot }]);
+  const s = scene('hard', [{ name: 'You', mass: 15, x: 0, y: 0, angle: 0 }, { name: 'Cutter', mass: 100, ai: { huntUntil: 1e9 }, ...bot }]);
   const [p, b] = s.worms;
   p.isPlayer = true;
   s.game.player = p;
@@ -126,7 +126,7 @@ test('the record leaves easy, normal and hard worlds exactly as they were (#135)
   const strong = () => habits({ away: 12, boost: 12 });
   // Seeds until one has a cut-off on the player, so the comparison covers recording (#141 and #143
   // changed which seeds do); every seed tried must give identical worlds.
-  for (const diff of ['easy', 'normal', 'hard']) {
+  for (const diff of ['easy', 'normal']) {
     let recorded = false;
     for (const seed of [99, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
       const rec = strong();
@@ -137,18 +137,19 @@ test('the record leaves easy, normal and hard worlds exactly as they were (#135)
   }
 });
 
-test('learn is appended and expert-only; every bot keeps its other tactics (#135)', () => {
+test('learn is appended and hard-only; every bot keeps its other tactics (#135, #177)', () => {
   assert.equal(TACTICS[10], 'learn');
-  for (const level of ['easy', 'normal', 'hard']) assert.equal(DIFFICULTY[level].tactics.learn, 0, level);
-  assert.equal(DIFFICULTY.expert.tactics.learn, 1);
+  for (const level of ['easy', 'normal']) assert.equal(DIFFICULTY[level].tactics.learn, 0, level);
+  assert.equal(DIFFICULTY.hard.tactics.learn, 1);
   for (let id = 1; id <= 200; id++) {
-    assert.equal(knowsTactic({ id }, 'expert', 'learn'), true);
-    assert.equal(knowsTactic({ id }, 'hard', 'learn'), false);
+    assert.equal(knowsTactic({ id }, 'hard', 'learn'), true);
+    assert.equal(knowsTactic({ id }, 'normal', 'learn'), false);
   }
-  // Each bot's first ten tactics, as bits, for ids 1-40, recorded before learn was added.
+  // Each bot's first ten tactics, as bits, for ids 1-40, recorded before learn was added
+  // (hard: what Expert knew, everything).
   const before = {
-    hard: [575, 571, 87, 727, 139, 103, 39, 19, 543, 523, 559, 175, 27, 63, 647, 211, 725, 43, 527, 155, 25, 607, 599, 59, 627, 59, 157, 639, 247, 649, 567, 179, 19, 141, 579, 679, 655, 599, 79, 635],
     normal: [537, 521, 3, 516, 8, 1, 7, 17, 512, 0, 526, 5, 17, 19, 6, 19, 517, 1, 5, 2, 16, 5, 7, 27, 16, 0, 21, 17, 22, 8, 518, 18, 3, 5, 515, 512, 514, 530, 0, 19],
+    hard: Array(40).fill(1023),
   };
   for (const [level, masks] of Object.entries(before)) {
     const now = masks.map((_, i) => TACTICS.slice(0, 10).reduce((m, k, j) => m | (knowsTactic({ id: i + 1 }, level, k) ? 1 << j : 0), 0));
@@ -156,11 +157,11 @@ test('learn is appended and expert-only; every bot keeps its other tactics (#135
   }
 });
 
-// An expert hunter at the origin cutting off the player, who heads +y 300 px to its right. The
+// A hard hunter at the origin cutting off the player, who heads +y 300 px to its right. The
 // hunter is on the player's +1 side, so the player turning away goes to -1 (+x).
 function learnHunt(record, shares = ONLY('learn'), prey = {}) {
-  return withTactics('expert', shares, () => {
-    const s = hunt('expert', { mass: 400, x: 0, y: 0, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2, ...prey });
+  return withTactics('hard', shares, () => {
+    const s = hunt('hard', { mass: 400, x: 0, y: 0, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2, ...prey });
     const [h, p] = s.worms;
     p.isPlayer = true;
     s.game.player = p;
@@ -170,7 +171,7 @@ function learnHunt(record, shares = ONLY('learn'), prey = {}) {
   });
 }
 
-test('an expert bot aims at the side the player usually escapes to, a little at first (#135)', () => {
+test('a hard bot aims at the side the player usually escapes to, a little at first (#135)', () => {
   const none = learnHunt(freshHabits()), without = learnHunt(habits({ away: 12 }), ONLY('none'));
   assert.equal(none.mode, 'cut');
   assert.deepEqual(none.aim, without.aim, 'no record: exactly the cut of a bot without learn');
@@ -192,8 +193,8 @@ test('an expert bot aims at the side the player usually escapes to, a little at 
     assert.ok(moved > 0 && moved < (CFG.HABIT_MAX * full) / 3, `${n} encounter(s): moved ${moved.toFixed(1)}`);
   }
   // Only the player's habits: the same record means nothing against another worm.
-  const bot = withTactics('expert', ONLY('learn'), () => {
-    const s = hunt('expert', { mass: 400, x: 0, y: 0, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2 });
+  const bot = withTactics('hard', ONLY('learn'), () => {
+    const s = hunt('hard', { mass: 400, x: 0, y: 0, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2 });
     s.game.habits = habits({ away: 12 });
     botThink(s.worms[0], s.game);
     return s.worms[0].ai;
@@ -204,16 +205,16 @@ test('an expert bot aims at the side the player usually escapes to, a little at 
 
 test('pin and flank come before a learned habit, which comes before trap (#135)', () => {
   // Along the wall, pin wins.
-  const pin = withTactics('expert', { ...ONLY('learn'), pin: 1 }, () => {
-    const s = hunt('expert', { mass: 400, x: 1500, y: -150, angle: Math.PI / 2 }, { mass: 100, x: 1850, y: 0, angle: Math.PI / 2 });
+  const pin = withTactics('hard', { ...ONLY('learn'), pin: 1 }, () => {
+    const s = hunt('hard', { mass: 400, x: 1500, y: -150, angle: Math.PI / 2 }, { mass: 100, x: 1850, y: 0, angle: Math.PI / 2 });
     s.worms[1].isPlayer = true; s.game.player = s.worms[1]; s.game.habits = habits({ away: 12 });
     botThink(s.worms[0], s.game);
     return s.worms[0].ai.mode;
   });
   assert.equal(pin, 'pin');
   // With another hunter on the player's +1 side, flank wins.
-  const flank = withTactics('expert', { ...ONLY('learn'), flank: 1 }, () => {
-    const s = hunt('expert', { mass: 400, x: 500, y: -200, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2 },
+  const flank = withTactics('hard', { ...ONLY('learn'), flank: 1 }, () => {
+    const s = hunt('hard', { mass: 400, x: 500, y: -200, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2 },
       [{ name: 'First', mass: 400, x: 150, y: 50, angle: Math.PI / 2, ai: { huntUntil: 1e9 } }]);
     s.worms[2].ai.prey = s.worms[1];
     s.worms[1].isPlayer = true; s.game.player = s.worms[1]; s.game.habits = habits({ toward: 12 });
@@ -225,7 +226,7 @@ test('pin and flank come before a learned habit, which comes before trap (#135)'
   assert.equal(learnHunt(habits({ away: 12 }), { ...ONLY('learn'), trap: 1 }).mode, 'learn');
 });
 
-test('an expert bot leads farther ahead of a player who usually boosts out (#135)', () => {
+test('a hard bot leads farther ahead of a player who usually boosts out (#135)', () => {
   for (const shares of [ONLY('learn'), { ...ONLY('learn'), predict: 1 }]) {
     const none = learnHunt(freshHabits(), shares), boosts = learnHunt(habits({ boost: 12 }), shares);
     assert.equal(boosts.mode, 'cut', 'no side habit, no shift');
@@ -233,8 +234,8 @@ test('an expert bot leads farther ahead of a player who usually boosts out (#135
     assert.ok(boosts.aim.y > none.aim.y + 20, `further ahead (${none.aim.y.toFixed(0)} -> ${boosts.aim.y.toFixed(0)})`);
     assert.deepEqual(learnHunt(habits({ still: 12 }), shares).aim, none.aim, 'a player who never boosts: no extra lead');
   }
-  const boosting = (rec) => withTactics('expert', ONLY('learn'), () => {
-    const s = hunt('expert', { mass: 400, x: 0, y: 0, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2 });
+  const boosting = (rec) => withTactics('hard', ONLY('learn'), () => {
+    const s = hunt('hard', { mass: 400, x: 0, y: 0, angle: Math.PI / 2 }, { mass: 100, x: 300, y: 0, angle: Math.PI / 2 });
     const p = s.worms[1];
     p.isPlayer = true; s.game.player = p; s.game.habits = rec; p.boosting = true; p.speed = CFG.BASE_SPEED * CFG.BOOST_MULT;
     botThink(s.worms[0], s.game);
@@ -254,13 +255,13 @@ test('a new style wins: ten escapes toward the cutter outweigh twenty older ones
 });
 
 test('the record never makes a bot pick the player as prey (#135)', () => {
-  // The player near and another worm far, then the other way round; with every expert tactic.
+  // The player near and another worm far, then the other way round; with every hard tactic.
   for (const [near, far] of [[{ name: 'You' }, { name: 'Other' }], [{ name: 'Other' }, { name: 'You' }]]) {
     const picks = [freshHabits(), habits({ away: 12, boost: 12 })].map((rec) =>
       pickPrey({ mass: 100, ...near }, { mass: 100, ...far }, (s) => {
         const p = s.worms.find((w) => w.name === 'You');
         p.isPlayer = true; s.game.player = p; s.game.habits = rec;
-      }, [], DIFFICULTY.expert.tactics).prey);
+      }, [], DIFFICULTY.hard.tactics).prey);
     assert.equal(picks[0], picks[1], `${near.name} near`);
     assert.equal(picks[0], near.name);
   }

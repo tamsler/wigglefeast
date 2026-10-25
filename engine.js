@@ -174,7 +174,7 @@
   // aggro: how often and how far a bot hunts. preyRatio: it hunts worms lighter than this
   // times its own mass. bigShare: share of the bots in a new world that start large, at
   // up to bigMax mass; the rest start small. tactics: share of bots that know each tactic.
-  // sharp (expert only, #110): sharper than skill allows, applied when a bot thinks, so nothing
+  // sharp (hard only, #110): sharper than skill allows, applied when a bot thinks, so nothing
   // is saved. think: re-plan delay x; look: look-ahead x; dense: check the winning heading
   // closely (1/0); headings: candidates x; sense: threat-sensing range x; heads: heads tracked;
   // escape: steer clear of every cutter, not only the nearest (1/0); reach: before boosting, check the
@@ -185,17 +185,18 @@
       skill: [0.35, 0.8], aggro: [0.1, 0.65], preyRatio: 1.3, bigShare: 0.15, bigMax: 2000,
       tactics: tactics({ predict: 0.5, anticipate: 0.3, evade: 0.3, headOn: 0.2, scavenge: 0.3, read: 0.2 }),
     },
+    // Hard is what was Expert until there were three levels (#177); the old Hard is gone.
     hard: {
-      skill: [0.7, 1.0], aggro: [0.35, 1.0], preyRatio: 1.6, bigShare: 0.2, bigMax: 2500,
-      tactics: tactics({ predict: 1, anticipate: 0.7, evade: 0.6, headOn: 0.5, scavenge: 0.5, trap: 0.4, pin: 0.4, coil: 0.3, read: 0.5, escape: 0.5, shadow: 0.4 }),
-    },
-    expert: {
       skill: [0.85, 1.0], aggro: [0.6, 1.0], preyRatio: 2, bigShare: 0.35, bigMax: 5000,
       tactics: tactics(Object.fromEntries(TACTICS.map((k) => [k, 1]))),
       sharp: { think: 0.7, look: 1.25, dense: 1, headings: 1.3, sense: 1.4, heads: 12, escape: 1, reach: 1 },
     },
   };
   const DIFFICULTIES = Object.keys(DIFFICULTY);
+  // Older names still found in saved settings, worlds and stats (#177): Expert became Hard. (A saved
+  // "hard" is still hard: it now gets the bots that were Expert.)
+  const LEGACY_DIFFICULTY = { expert: 'hard' };
+  const difficultyOf = (name) => (Object.prototype.hasOwnProperty.call(DIFFICULTY, name) ? name : Object.prototype.hasOwnProperty.call(LEGACY_DIFFICULTY, name) ? LEGACY_DIFFICULTY[name] : null);
 
   // A bot knows a tactic when a hash of its id and the tactic falls below the level's share,
   // so it keeps the same tactics for life, across saves, without storing them.
@@ -267,7 +268,7 @@
 
     if (!isObj(snap) || !SAVE_APP_IDS.includes(snap.app) || snap.v !== 1) fail('not a world snapshot');
     const s = snap.settings;
-    if (!isObj(s) || !Number.isInteger(s.botCount) || s.botCount < MIN_BOTS || s.botCount > MAX_BOTS || !has(DIFFICULTY, s.difficulty)) fail('settings');
+    if (!isObj(s) || !Number.isInteger(s.botCount) || s.botCount < MIN_BOTS || s.botCount > MAX_BOTS || !difficultyOf(s.difficulty)) fail('settings');
     if (!inRange(snap.time, 0, MAX_TIME)) fail('time');
     if (snap.nextId !== undefined && !isId(snap.nextId)) fail('nextId');
     // Everything lives inside the arena; twice its radius leaves plenty of slack.
@@ -725,7 +726,7 @@
     const ai = w.ai, skill = ai.skill, r = w.r;
     const level = g.settings.difficulty;
     const diff = DIFFICULTY[level] || DIFFICULTY.normal;
-    const sharp = diff.sharp; // expert only (#110)
+    const sharp = diff.sharp; // hard only (#110)
     const knows = (k) => knowsTactic(w, level, k);
     const hx = w.sx[0], hy = w.sy[0];
     const edge = g.R - r * 3 - 40;
@@ -1264,7 +1265,7 @@
     // A boost turns wider and goes farther: bots with reach check, closely, the path a boost would
     // really take, as far as a boost carries them, whether or not they are boosting already (#149).
     // Headings themselves are still judged along straight lines: judging them along reachable paths
-    // made Expert bots very hard to kill and trapped bots worse at surviving a coil (measured, #149).
+    // made hard (then Expert) bots very hard to kill and trapped bots worse at surviving a coil (measured, #149).
     // Circled bots (#94) and cuts from a shadow (#150) check it on any level.
     const reach = !!(sharp && sharp.reach > 0) || !!t.circled || !!w.ai.fromShadow;
     if (w.wantBoost && reach) {
@@ -1345,6 +1346,7 @@
         settings = snapshot.settings;
       }
       this.settings = Object.assign({ botCount: 30, difficulty: 'normal' }, settings);
+      this.settings.difficulty = difficultyOf(this.settings.difficulty) || 'normal'; // old names (#177)
       const bc = this.settings.botCount;
       this.R = arenaRadius(bc);
       const area = Math.PI * this.R * this.R;
@@ -1891,7 +1893,7 @@
   }
 
   root.WormEngine = {
-    CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, MIN_BOTS, MAX_BOTS, arenaRadius, DIFFICULTY, DIFFICULTIES, TACTICS, SPECIALS, validateSnapshot, seasonalTheme,
+    CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, MIN_BOTS, MAX_BOTS, arenaRadius, DIFFICULTY, DIFFICULTIES, difficultyOf, TACTICS, SPECIALS, validateSnapshot, seasonalTheme,
     freshHabits, validHabits, recordHabit, habitBias, habitBoost,
     Game, Worm, botThink, knowsTactic, predictHead, reachPath, reachAt, freedom, radiusFor, lengthFor, angleDiff, TAU,
   };
