@@ -177,7 +177,7 @@ if (require.main === module) {
   const N = Number(args.n || 300), SEED = Number(args.seed || 1) >>> 0, SECS = Number(args.secs || 6), DIST = Number(args.dist || 400);
   const CREACH = Number(args['coiler-reach'] ?? 1);
   const coilers = (args.coiler || 'bot,scripted').split(','), arms = (args.arms || 'baseline,reach,escape').split(',');
-  const level = difficultyOf(args.prey || 'hard');
+  const level = (difficultyOf(args.prey || 'hard') || (() => { throw new Error(`unknown --prey level: ${args.prey}`); })());
   const ci = (k) => {
     const q = k / N, h = 1.96 * Math.sqrt((q * (1 - q)) / N);
     return `${String(k).padStart(4)} (${(100 * q).toFixed(0).padStart(2)}% ±${(100 * h).toFixed(0)})`;

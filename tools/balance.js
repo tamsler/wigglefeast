@@ -22,7 +22,8 @@ for (let i = 2; i < process.argv.length; i += 2) args[process.argv[i].replace(/^
 const MINUTES = Number(args.minutes || 8);
 const RUNS = Number(args.runs || 3);
 const BOTS = Number(args.bots || 30);
-const DIFFS = args.diff ? args.diff.split(',').map((d) => difficultyOf(d) || d) : DIFFICULTIES; // 'expert' still names Hard (#177)
+// 'expert' still names Hard (#177); an unknown name stops with a clear message.
+const DIFFS = args.diff ? args.diff.split(',').map((d) => difficultyOf(d) || (() => { throw new Error(`unknown --diff level: ${d}`); })()) : DIFFICULTIES;
 const SEED = args.seed !== undefined ? Number(args.seed) >>> 0 : Math.floor(Math.random() * 4294967296);
 for (const kv of (args.set || '').split(',').filter(Boolean)) {
   const [key, val] = kv.split('=');
