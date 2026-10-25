@@ -108,12 +108,14 @@ test('sounds follow the game', async (t) => {
   });
 
   await t.test('eating food pops', async () => {
-    const got = await during(() => page.eval(`(() => {
+    const n = (await sounds()).length;
+    await page.eval(`(() => {
       const g = window.__game, p = window.__player;
       g.food.push({ x: p.sx[0], y: p.sy[0], v: 2, r: 5, c: '#fff', life: Infinity, ph: 0, dead: false, natural: true });
       g.rebuildFoodGrid();
-    })()`));
-    assert.ok(got.includes('eat'), `eat: ${got}`);
+    })()`);
+    // Wait for it rather than a fixed number of frames: a busy machine may need a few more.
+    await page.waitFor(`window.wigglefeastDebug.sounds().slice(${n}).includes('eat')`, 'eating pop', 5000);
   });
 
   await t.test('power-ups, special food and kills', async () => {
@@ -126,13 +128,17 @@ test('sounds follow the game', async (t) => {
   });
 
   await t.test('bots make no sound', async () => {
+    // The kill above earned First Bite (#14); let its fanfare play before listening.
+    await page.waitFor(`window.wigglefeastDebug.toasts().includes('firstbite')`, 'First Bite fanfare');
     const got = await during(() => page.eval(`(() => {
       const g = window.__game, b = g.worms.find((w) => w.ai && !w.dead);
-      Object.assign(g, { food: [], foodTarget: 0 }); g.rebuildFoodGrid(); // so the player eats nothing meanwhile
+      // So the player eats and picks up nothing meanwhile.
+      Object.assign(g, { food: [], foodTarget: 0, powerups: [], powerupTarget: 0, specials: [], specialTarget: 0 }); g.rebuildFoodGrid();
       g.emit('eat', { worm: b, r: 5 });
       g.emit('powerup', { worm: b, type: 'magnet' });
       g.emit('special', { worm: b, kind: 'nova', value: 25 });
       b.boosting = true;
+      b.sx = b.sx.map((x) => x + 5000); b.updateBounds(); // far away, so the player can't eat what it drops
       g.kill(b, null, 'wall');
     })()`));
     assert.deepEqual(got, []);

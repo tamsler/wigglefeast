@@ -106,11 +106,37 @@
   // Profile: lifetime totals, top runs and recent runs. Kept separate from the
   // world snapshot so a failed world save can never take the stats with it.
   const PROFILE_VERSION = 1;
+  // Achievements (#14). Each progress(c) returns [value, target]; c is the stored profile (totals,
+  // saved runs) plus, during a run, the live run. One list drives unlocking, past play and the stats
+  // screen. skin: the reward it unlocks (SKINS[].unlock names the same id).
+  const runsOf = (c) => c.top.concat(c.recent);
+  const most = (c, key) => Math.max(0, ...runsOf(c).map((r) => r[key]), c.live ? c.live[key] : 0);
+  const bestOn = (c, diff) => Math.max(c.totals.bestByDiff[diff] || 0, c.live && c.live.diff === diff ? c.live.peak : 0);
+  const plus = (c, key, liveKey = key) => c.totals[key] + (c.live ? c.live[liveKey] : 0);
+  const ACHIEVEMENTS = [
+    { id: 'snack', name: 'Snack Time', goal: 'Reach 1,000', progress: (c) => [Math.max(c.totals.best, c.live ? c.live.peak : 0), 1000] },
+    { id: 'noodle', name: 'Big Noodle', goal: 'Reach 5,000', progress: (c) => [Math.max(c.totals.best, c.live ? c.live.peak : 0), 5000] },
+    { id: 'titan', name: 'Titan', goal: 'Reach 25,000', progress: (c) => [Math.max(c.totals.best, c.live ? c.live.peak : 0), 25000] },
+    { id: 'firstbite', name: 'First Bite', goal: 'Eat your first worm', progress: (c) => [plus(c, 'kills'), 1] },
+    { id: 'hunter', name: 'Hungry Hunter', goal: 'Eat 10 worms in one run', progress: (c) => [most(c, 'kills'), 10] },
+    { id: 'apex', name: 'Apex', goal: 'Eat 100 worms in total', progress: (c) => [plus(c, 'kills'), 100] },
+    { id: 'hang', name: 'Hang In There', goal: 'Survive 5 minutes in one run', time: true, progress: (c) => [most(c, 'time'), 300] },
+    { id: 'marathon', name: 'Marathon', goal: 'Survive 20 minutes in one run', time: true, progress: (c) => [most(c, 'time'), 1200] },
+    { id: 'grazer', name: 'Grazer', goal: 'Eat 10,000 food in total', progress: (c) => [plus(c, 'eaten'), 10000] },
+    { id: 'dedicated', name: 'Dedicated', goal: 'Play 50 games', progress: (c) => [c.totals.games, 50] },
+    { id: 'hard', name: 'Hard Mode', goal: 'Reach 5,000 on Hard', progress: (c) => [bestOn(c, 'hard'), 5000] },
+    { id: 'expert', name: 'Expert Survivor', goal: 'Reach 10,000 on Expert', progress: (c) => [bestOn(c, 'expert'), 10000] },
+    { id: 'stargazer', name: 'Stargazer', goal: 'Eat 25 special food', progress: (c) => [plus(c, 'specials'), 25] },
+    { id: 'board', name: 'Top of the Board', goal: 'Be first on the leaderboard', progress: (c) => [c.totals.firsts + (c.live && c.live.first ? 1 : 0), 1] },
+  ];
+  for (const a of ACHIEVEMENTS) a.skin = (SKINS.find((s) => s.unlock === a.id) || {}).name;
+  const ACH_IDS = new Set(ACHIEVEMENTS.map((a) => a.id));
   const emptyProfile = () => ({
     v: PROFILE_VERSION,
-    totals: { games: 0, kills: 0, time: 0, eaten: 0, best: 0, bestByDiff: Object.fromEntries(DIFFICULTIES.map((d) => [d, 0])) },
+    totals: { games: 0, kills: 0, time: 0, eaten: 0, best: 0, bestByDiff: Object.fromEntries(DIFFICULTIES.map((d) => [d, 0])), specials: 0, firsts: 0 },
     top: [],
     recent: [],
+    ach: {}, // achievement id -> when it was earned (#14)
   });
   // Profiles can come from imported files, so rebuild them from checked fields only.
   // Returns a clean copy, or null if anything is missing or the wrong type. With
@@ -131,14 +157,20 @@
     };
     const top = p.top.map(cleanRun), recent = p.recent.map(cleanRun);
     if (!keepGoodRuns && (top.includes(null) || recent.includes(null))) return null;
+    // Achievements and their two counters (#14) are optional: profiles from before them load with
+    // none, and unknown or damaged entries are dropped rather than rejecting the profile.
+    const ach = {};
+    if (isObj(p.ach)) for (const id of Object.keys(p.ach)) if (ACH_IDS.has(id) && num(p.ach[id])) ach[id] = p.ach[id];
     return {
       v: PROFILE_VERSION,
       totals: {
         games: t.games, kills: t.kills, time: t.time, eaten: t.eaten, best: t.best,
         bestByDiff: Object.fromEntries(DIFFICULTIES.map((d) => [d, bd[d] || 0])),
+        specials: num(t.specials) ? t.specials : 0, firsts: num(t.firsts) ? t.firsts : 0,
       },
       top: top.filter(Boolean).slice(0, 10),
       recent: recent.filter(Boolean).slice(0, 50),
+      ach,
     };
   }
   function loadProfile() {
@@ -165,6 +197,39 @@
   let profile = loadProfile();
   const saveProfile = () => { if (isActive()) store.set('profile', profile); };
 
+  // Earns every achievement the stats (plus the live run, if any) now prove (#14). New ones are
+  // saved at once, merged with the stored profile so another window's achievements survive (#45),
+  // and announced when `announce` is set (in a run, at its end); on load and import they're silent.
+  // merge: false when the profile was just replaced (import) and the stored one must not leak in.
+  function checkAchievements(live = null, { announce = false, merge = true } = {}) {
+    const c = { totals: profile.totals, top: profile.top, recent: profile.recent, live };
+    const earned = ACHIEVEMENTS.filter((a) => !profile.ach[a.id] && a.progress(c)[0] >= a.progress(c)[1]);
+    if (!earned.length) return earned;
+    const now = Date.now();
+    for (const a of earned) profile.ach[a.id] = now;
+    if (merge) {
+      const stored = cleanProfile(store.get('profile', null), true);
+      if (stored) {
+        for (const id in stored.ach) profile.ach[id] = Math.min(stored.ach[id], profile.ach[id] || Infinity);
+        stored.ach = profile.ach;
+        profile = stored;
+      }
+    }
+    saveProfile();
+    if (announce) for (const a of earned) announceAchievement(a);
+    return earned;
+  }
+  const isUnlocked = (skin) => !skin.unlock || !!profile.ach[skin.unlock];
+  // What the stats can't see until a run ends: special food eaten and whether the player led (#14).
+  const freshRun = () => ({ specials: 0, first: false });
+  let liveRun = freshRun();
+  function liveContext() {
+    const p = game && game.player;
+    if (!p || p.dead) return null;
+    return { peak: Math.round(p.peak), kills: p.kills, eaten: p.eaten, time: Math.max(0, game.time - p.born), diff: game.settings.difficulty, specials: liveRun.specials, first: liveRun.first };
+  }
+  checkAchievements(); // past play counts, silently
+
   function recordRun(w, killer, cause) {
     const run = {
       date: Date.now(),
@@ -189,12 +254,16 @@
     t.eaten += run.eaten;
     t.best = Math.max(t.best, run.peak);
     t.bestByDiff[run.diff] = Math.max(t.bestByDiff[run.diff] || 0, run.peak);
+    t.specials += liveRun.specials; // #14
+    if (liveRun.first) t.firsts++;
     profile.recent.unshift(run);
     profile.recent.length = Math.min(profile.recent.length, 50);
     profile.top.push(run);
     profile.top.sort((a, b) => b.peak - a.peak);
     profile.top.length = Math.min(profile.top.length, 10);
     saveProfile();
+    checkAchievements(null, { announce: true }); // e.g. Dedicated, earned as a game ends
+    liveRun = freshRun();
     return isBest;
   }
 
@@ -291,6 +360,7 @@
     claimSession();
     $('standby').classList.add('hidden');
     profile = loadProfile();
+    checkAchievements(); // silently, as on load (#14)
     Object.assign(habits, loadHabits()); // the other window saved what its bots learned
     loadSettings(); // the other window may have changed name, skin or world settings
     $('name').value = settings.name;
@@ -971,6 +1041,7 @@
     if (worm !== game.player) return;
     feed(`${SPECIAL_INFO[kind].icon} ${SPECIAL_INFO[kind].label} +${value}`, 'good');
     sound.play('special');
+    liveRun.specials++; // toward Stargazer (#14)
   }
 
   // Eating pop (#9), higher for small food: food radii run from 3 to 20 (foodRadius in engine.js).
@@ -979,6 +1050,7 @@
   }
 
   function startPlaying() {
+    liveRun = freshRun();
     settings.name = $('name').value.trim().slice(0, 16);
     if (isActive()) store.set('settings', settings);
     activeTheme = resolveTheme();
@@ -1010,6 +1082,7 @@
     mode = 'menu';
     for (const id of ['death', 'hud', 'paused', 'statsScreen']) $(id).classList.add('hidden');
     $('menu').classList.remove('hidden');
+    refreshMenu(); // rewards earned in the run show unlocked (#14)
     const t = profile.totals;
     $('best').textContent = t.games ? `Personal best: ${t.best.toLocaleString()} · ${t.games} game${t.games === 1 ? '' : 's'} played` : '';
   }
@@ -1081,10 +1154,26 @@
       tile(fmtNum(avg), 'avg (recent)') + tile(fmtNum(t.eaten), 'food eaten') + tile(t.games ? (t.kills / t.games).toFixed(1) : '0', 'kills / game') +
       tile(t.games ? fmtDuration(Math.round(t.time / t.games)) : '0s', 'avg survival');
     $('bestByDiff').innerHTML = DIFFICULTIES.map((d) => tile(fmtNum(t.bestByDiff[d]), d)).join('');
+    renderAchievements();
     $('topRuns').innerHTML = runsTable(profile.top, true);
     $('recentRuns').innerHTML = runsTable(profile.recent.slice(0, 15), false);
     $('menu').classList.add('hidden');
     $('statsScreen').classList.remove('hidden');
+  }
+
+  // Achievements on the stats screen (#14): each with its goal and progress, or when it was earned.
+  function renderAchievements() {
+    const c = { totals: profile.totals, top: profile.top, recent: profile.recent, live: null };
+    const fmt = (a, v) => (a.time ? fmtDuration(Math.round(v)) : fmtNum(Math.floor(v)));
+    $('achTitle').textContent = `🏆 Achievements ${ACHIEVEMENTS.filter((a) => profile.ach[a.id]).length} / ${ACHIEVEMENTS.length}`;
+    $('achList').innerHTML = ACHIEVEMENTS.map((a) => {
+      const [v, target] = a.progress(c), when = profile.ach[a.id];
+      const reward = a.skin ? `<span class="reward">Unlocks ${escapeHtml(a.skin)}</span>` : '';
+      const status = when
+        ? `<span class="done">✓ Earned ${escapeHtml(new Date(when).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}</span>`
+        : `<span class="bar"><i style="width:${Math.round(Math.min(1, v / target) * 100)}%"></i></span><span class="val">${fmt(a, Math.min(v, target))} / ${fmt(a, target)}</span>`;
+      return `<div class="ach${when ? ' earned' : ''}" data-id="${a.id}"><div><b>${when ? '🏆 ' : ''}${escapeHtml(a.name)}</b><small>${escapeHtml(a.goal)}</small>${reward}</div><div class="prog">${status}</div></div>`;
+    }).join('');
   }
 
   function exportSave() {
@@ -1115,6 +1204,7 @@
       if (!confirm('Replace your current stats and world with this save?') || !isActive()) return;
       if (!restoreWorld(data.world)) { alert('That save could not be loaded. Nothing was changed.'); return; }
       profile = newProfile;
+      checkAchievements(null, { merge: false }); // whatever its stats prove (#14)
       saveProfile();
       saveWorld();
       if (mode === 'menu') showStats();
@@ -1181,23 +1271,53 @@
     previewName = skin.name;
     previewFrames++;
   }
+  // The free skins, then the rewards (#14): locked ones dimmed with a padlock; picking one shows
+  // what unlocks it instead of choosing it.
   const skinsEl = $('skins');
-  SKINS.forEach((skin, i) => {
-    if (skin.hidden) return;
+  let skinHintTimer = 0;
+  const unlockHint = (skin) => {
+    const a = ACHIEVEMENTS.find((x) => x.id === skin.unlock);
+    return `${a.goal} to unlock ${skin.name}`;
+  };
+  const pickerOrder = SKINS.map((skin, i) => [skin, i]).filter(([s]) => !s.hidden).concat(SKINS.map((skin, i) => [skin, i]).filter(([s]) => s.hidden && s.unlock));
+  for (const [skin, i] of pickerOrder) {
     const b = document.createElement('button');
     b.dataset.skin = i;
     b.title = skin.name;
-    b.setAttribute('aria-label', skin.name);
     b.appendChild(skinSwatch(skin));
-    b.addEventListener('click', () => { settings.skin = i; refreshMenu(); });
+    if (skin.unlock) {
+      const lock = document.createElement('span');
+      lock.className = 'lock';
+      lock.setAttribute('aria-hidden', 'true');
+      lock.textContent = '🔒';
+      b.appendChild(lock);
+    }
+    b.addEventListener('click', () => {
+      if (!isUnlocked(skin)) {
+        $('skinName').textContent = unlockHint(skin);
+        $('skinName').classList.add('hint');
+        clearTimeout(skinHintTimer);
+        skinHintTimer = setTimeout(refreshMenu, 3500);
+        return;
+      }
+      settings.skin = i;
+      refreshMenu();
+    });
     skinsEl.appendChild(b);
-  });
+  }
   $('botCount').value = settings.botCount;
   $('botCount').addEventListener('input', (e) => { settings.botCount = +e.target.value; refreshMenu(); });
   document.querySelectorAll('#difficulty button').forEach((b) =>
     b.addEventListener('click', () => { settings.difficulty = b.dataset.v; refreshMenu(); }));
   function refreshMenu() {
-    [...skinsEl.children].forEach((b) => b.classList.toggle('on', +b.dataset.skin === settings.skin)); // none for a hidden skin
+    [...skinsEl.children].forEach((b) => {
+      const skin = SKINS[+b.dataset.skin], locked = !isUnlocked(skin);
+      b.classList.toggle('on', !locked && +b.dataset.skin === settings.skin); // none for a remembered locked skin
+      b.classList.toggle('locked', locked);
+      b.setAttribute('aria-label', locked ? `${skin.name} (locked)` : skin.name);
+    });
+    clearTimeout(skinHintTimer);
+    $('skinName').classList.remove('hint');
     $('skinName').textContent = SKINS[settings.skin].name;
     $('botCountVal').textContent = settings.botCount;
     document.querySelectorAll('#difficulty button').forEach((b) => b.classList.toggle('on', b.dataset.v === settings.difficulty));
@@ -1239,7 +1359,17 @@
   $('toMenu').addEventListener('click', showMenu);
   $('resume').addEventListener('click', () => setPaused(false));
   $('endRun').addEventListener('click', endRun);
-  $('openStats').addEventListener('click', showStats);
+  $('openStats').addEventListener('click', () => { showStatsTab('statsPane'); showStats(); });
+  // Stats and Achievements (#14) are two tabs, so each fits a laptop screen without scrolling.
+  function showStatsTab(id) {
+    document.querySelectorAll('#statsTabs button').forEach((b) => {
+      const on = b.dataset.tab === id;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', String(on));
+      $(b.dataset.tab).classList.toggle('hidden', !on);
+    });
+  }
+  document.querySelectorAll('#statsTabs button').forEach((b) => b.addEventListener('click', () => showStatsTab(b.dataset.tab)));
   $('closeStats').addEventListener('click', showMenu);
   $('exportSave').addEventListener('click', exportSave);
   $('importSave').addEventListener('click', () => $('importFile').click());
@@ -1487,6 +1617,9 @@
     boostArrows: () => boostArrowsDrawn,
     headRepaints: () => headRepaints, // #161
     previewSkin: () => previewName, // #161
+    achievements: () => ({ ...profile.ach }), // #14
+    profile: () => JSON.parse(JSON.stringify(profile)),
+    toasts: () => toastsShown.slice(),
     sounds: () => sound.log().map((e) => e.name), // #9
     audioState: () => sound.state(),
     foodSizes: (r, themed) => foodSizes(r, 1, themed), // #163
@@ -1933,6 +2066,27 @@
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  // Achievement pop-up (#14): one at a time, 3 s each, with the fanfare.
+  const toastQueue = [];
+  let toastBusy = false;
+  function announceAchievement(a) {
+    toastQueue.push(a);
+    if (!toastBusy) nextToast();
+  }
+  function nextToast() {
+    const a = toastQueue.shift(), el = $('achToast');
+    if (!a) { toastBusy = false; el.classList.add('hidden'); return; }
+    toastBusy = true;
+    $('achToastName').textContent = a.name;
+    $('achToastSkin').textContent = a.skin ? `${a.skin} unlocked!` : a.goal;
+    el.classList.remove('hidden');
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    sound.play('achievement');
+    toastsShown.push(a.id);
+    setTimeout(nextToast, 3000);
+  }
+  const toastsShown = []; // for the test hook
+
   function feed(text, cls) {
     const el = document.createElement('div');
     el.textContent = text;
@@ -1956,6 +2110,7 @@
   }
   document.addEventListener('visibilitychange', syncAudio); // frames stop while hidden
 
+  let achTimer = 0; // seconds since the last in-run achievement check (#14)
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
@@ -1969,6 +2124,11 @@
     render(now / 1000);
     drawSkinPreview(now);
     syncAudio();
+    if (mode === 'playing' && game.player && !game.player.dead && (achTimer += dt) >= 0.5) {
+      achTimer = 0;
+      if (game.leaderboard[0] === game.player) liveRun.first = true;
+      checkAchievements(liveContext(), { announce: true });
+    }
     if (mode !== 'menu' && mode !== 'standby') renderMinimap();
     updateHud(dt);
     syncUpdateBanner();

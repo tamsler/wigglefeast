@@ -98,6 +98,10 @@
       o.start(at);
       o.stop(at + 1.05);
     },
+    achievement() { // a bright five-note rise over a soft sparkle (#14)
+      [523, 659, 784, 1047, 1319].forEach((f, i) => tone({ type: 'triangle', f0: f, t: i * 0.09, dur: 0.3, vol: 0.2 }));
+      [2093, 2637].forEach((f, i) => tone({ f0: f, t: 0.4 + i * 0.06, dur: 0.35, vol: 0.08 }));
+    },
     click() { tone({ type: 'square', f0: 1800, f1: 1200, dur: 0.03, vol: 0.06 }); },
     start() {
       burst({ dur: 0.35, vol: 0.18, f0: 400, f1: 3000, q: 1.2 });

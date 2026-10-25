@@ -14,12 +14,14 @@ test('skins', async (t) => {
   page = await launch();
   await page.goto(gameUrl());
 
-  await t.test('the picker offers the 24 visible skins, drawn with their finish', async () => {
+  await t.test('the picker offers the 24 free skins, then the 6 rewards locked, drawn with their finish', async () => {
     const names = await page.eval(`[...document.querySelectorAll('#skins button')].map((b) => b.title)`);
-    assert.equal(names.length, 24);
-    assert.ok(!names.includes('Rainbow') && !names.includes('Lavender'), 'hidden skins are not offered');
-    assert.ok(NEW.every((n) => names.includes(n)), 'all new skins are offered');
-    assert.equal(await page.eval(`document.querySelectorAll('#skins button canvas').length`), 24, 'each swatch is a drawn canvas');
+    assert.equal(names.length, 30);
+    assert.ok(NEW.every((n) => names.slice(0, 24).includes(n)), 'all free skins are offered first');
+    assert.deepEqual(names.slice(24), ['Rainbow', 'Lavender', 'Dragon', 'Thunder', 'Royal', 'Cosmic'], 'then the rewards (#14)');
+    const locked = await page.eval(`[...document.querySelectorAll('#skins button.locked')].map((b) => b.title)`);
+    assert.deepEqual(locked, names.slice(24), 'rewards are locked on a fresh profile');
+    assert.equal(await page.eval(`document.querySelectorAll('#skins button canvas').length`), 30, 'each swatch is a drawn canvas');
   });
 
   await t.test('picking Galaxy plays as Galaxy and is remembered', async () => {
@@ -57,7 +59,7 @@ test('skins', async (t) => {
     }`);
     await page.frames(30);
     assert.deepEqual(page.exceptions, []);
-    assert.equal(await page.eval('window.__game.worms.length'), 1 + 26, 'all skins in the world');
+    assert.equal(await page.eval('window.__game.worms.length'), 1 + (await page.eval('window.WormEngine.SKINS.length')), 'all skins in the world');
   });
 
   await t.test('animated finishes freeze while paused (#58)', async () => {

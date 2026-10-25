@@ -57,7 +57,8 @@ async function launch({ width = 1280, height = 800, mobile = false, profile } = 
   if (!chrome) throw new Error('Chrome not found; set CHROME_PATH');
   const ownProfile = !profile;
   const userDataDir = profile || fs.mkdtempSync(path.join(os.tmpdir(), 'wigglefeast-chrome-'));
-  const args = ['--headless=new', '--disable-gpu', '--remote-debugging-port=0', `--user-data-dir=${userDataDir}`,
+  // --mute-audio: the game makes sound (#9); test runs must never play it through the speakers.
+  const args = ['--headless=new', '--disable-gpu', '--mute-audio', '--remote-debugging-port=0', `--user-data-dir=${userDataDir}`,
     `--window-size=${width},${height}`, '--no-first-run', '--no-default-browser-check'];
   if (process.env.CI) args.push('--no-sandbox', '--disable-dev-shm-usage');
   args.push('about:blank');
