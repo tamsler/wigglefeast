@@ -18,7 +18,7 @@ The game SHALL have these achievements for size, each earned when the player's w
 
 #### Scenario: Earned as Expert Survivor
 - **WHEN** a player who earned Expert Survivor before this change opens the game
-- **THEN** Hard Survivor shows as earned, and Cosmic stays unlocked
+- **THEN** Hard Survivor shows as earned, and Galaxy Prime stays unlocked
 
 ### Requirement: Hunting achievements
 The game SHALL have these achievements for eating other worms: First Bite (eat one worm), Hungry Hunter (eat 10 worms in one run) and Apex (eat 100 worms in total across all runs).
@@ -50,7 +50,7 @@ When achievements first appear, and whenever a profile is loaded or imported, ev
 
 #### Scenario: Existing player
 - **WHEN** a player whose saved best score is 6,000 with 120 total kills opens the new version
-- **THEN** Snack Time, Big Noodle, First Bite and Apex are already earned, Rainbow and Lavender are unlocked, and no pop-ups appear
+- **THEN** Snack Time, Big Noodle, First Bite and Apex are already earned, Holo and Ghost are unlocked, and no pop-ups appear
 
 ### Requirement: Earning an achievement
 The moment an achievement is earned during a run, the game SHALL show a short pop-up with its name and play a fanfare, and SHALL remember it straight away, even if the run is not finished. Each achievement SHALL be earned only once.
@@ -68,11 +68,11 @@ The stats screen SHALL list every achievement with its name, goal and progress (
 
 #### Scenario: Viewing progress
 - **WHEN** a player with a best score of 3,200 opens the stats screen
-- **THEN** Big Noodle shows 3,200 / 5,000 and that it unlocks Rainbow
+- **THEN** Big Noodle shows 3,200 / 5,000 and that it unlocks Holo
 
 ### Requirement: Skin rewards
-Earning Big Noodle SHALL unlock Rainbow, First Bite Lavender, Hungry Hunter Dragon, Marathon Thunder, Titan Royal and Hard Survivor Cosmic.
+Earning Big Noodle SHALL unlock Holo, First Bite Ghost, Hungry Hunter Inferno, Marathon Storm, Titan Crystal and Hard Survivor Galaxy Prime.
 
 #### Scenario: Unlocking Dragon
 - **WHEN** the player earns Hungry Hunter
-- **THEN** Dragon can be picked in the skin picker from then on
+- **THEN** Inferno can be picked in the skin picker from then on
