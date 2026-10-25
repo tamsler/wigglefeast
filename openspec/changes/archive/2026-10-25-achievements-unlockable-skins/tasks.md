@@ -26,7 +26,7 @@
 ## 6. Release and integration
 
 - [x] 6.1 Bump `VERSION` in `sw.js` to 1.30.0 (no new files). Run `node --test "tests/**/*.test.js"` and verify everything passes, including `tests/fixtures/save-v1.json` loading.
-- [ ] 6.2 Take screenshots of the picker with locked skins, the stats section and a pop-up (desktop and phone) for the PR. Check on a real phone that the picker and stats section look right and the pop-up doesn't block play.
+- [x] 6.2 Take screenshots of the picker with locked skins, the stats section and a pop-up (desktop and phone) for the PR. Check on a real phone that the picker and stats section look right and the pop-up doesn't block play.
 
 ## Workflow follow-up
 
