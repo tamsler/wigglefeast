@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { launch, gameUrl } = require('../helpers/browser');
 
-const KEYS = { KeyP: ['p', 80], Space: [' ', 32] };
+const KEYS = { KeyP: ['p', 80], Space: [' ', 32], Enter: ['Enter', 13] };
 const hidden = (id) => `document.getElementById('${id}').classList.contains('hidden')`;
 
 test('keyboard', async (t) => {
@@ -13,7 +13,7 @@ test('keyboard', async (t) => {
   await page.goto(gameUrl());
   const key = (type, code, autoRepeat = false) => {
     const [k, vk] = KEYS[code];
-    return page.send('Input.dispatchKeyEvent', { type, code, key: k, windowsVirtualKeyCode: vk, autoRepeat });
+    return page.send('Input.dispatchKeyEvent', { type, code, key: k, windowsVirtualKeyCode: vk, autoRepeat, ...(code === 'Enter' && type === 'keyDown' ? { text: '\r' } : {}) });
   };
 
   await t.test('Space presses a focused menu button (#50)', async () => {
@@ -63,4 +63,22 @@ test('keyboard', async (t) => {
     await key('keyUp', 'Space');
     await page.waitFor(`${hidden('death')} && window.__player && !window.__player.dead`, 'new run from Play again');
   });
+  for (const id of ['again', 'toMenu']) {
+    await t.test(`Enter on a focused #${id} button fires once (#184)`, async () => {
+      await page.eval('window.__player.shield = 1e9');
+      await page.eval('window.__game.kill(window.__player, null)');
+      await page.waitFor(`!${hidden('death')}`, 'death screen');
+      await page.eval(`document.getElementById('${id}').focus()`);
+      await key('keyDown', 'Enter');
+      await key('keyUp', 'Enter');
+      if (id === 'again') {
+        await page.waitFor(`${hidden('death')} && window.__player && !window.__player.dead`, 'new run');
+        assert.equal(await page.eval('window.__game.worms.filter((w) => w.isPlayer).length'), 1, 'exactly one player');
+      } else {
+        await page.waitFor(`!${hidden('menu')}`, 'main menu');
+        assert.equal(await page.eval('window.__game.worms.filter((w) => w.isPlayer).length'), 0, 'no run started');
+        await page.startRun();
+      }
+    });
+  }
 });
