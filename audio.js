@@ -139,7 +139,14 @@
     } else if (musicTimer) {
       clearInterval(musicTimer);
       musicTimer = null;
-      ramp(musicBus.gain, 0, 0.15); // notes already scheduled fade out with the bus
+      // Notes already scheduled fade out with the bus, and are then cut off with it: a suspended
+      // context keeps them queued, and they would play over the next bar after a resume (#185).
+      const old = musicBus;
+      ramp(old.gain, 0, 0.15);
+      musicBus = ac.createGain();
+      musicBus.gain.value = 0;
+      musicBus.connect(master);
+      setTimeout(() => { try { old.disconnect(); } catch (e) { /* already gone */ } }, 300);
     }
   }
 

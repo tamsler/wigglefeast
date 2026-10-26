@@ -38,6 +38,9 @@
   // Active unless another window holds a fresh session (a closed or crashed one goes stale).
   let active = (() => { const s = readKey(SESSION_KEY); return !s || Date.now() - s.at >= STALE_MS; })();
   if (active) claimSession();
+  // Declared here, not with the game state: checkAchievements() at startup can reach goStandby() (#185).
+  let mode = 'menu'; // menu | playing | dead | paused | standby (another window is active, #45)
+  let deathTimer = 0;
   // Before every write: still ours? If another window took over, stop and stand by.
   function isActive() {
     if (!active) return false;
@@ -302,9 +305,7 @@
     if (!game || !isActive()) return;
     try {
       localStorage.setItem(WORLD_KEY, JSON.stringify(game));
-    } catch {
-      try { localStorage.removeItem(WORLD_KEY); } catch { /* storage unavailable */ }
-    }
+    } catch { /* storage full or unavailable: a failed write leaves the last good save in place (#185) */ }
     store.set('habits', habits);
   }
   function loadWorld() {
@@ -1155,7 +1156,6 @@
   // ---------------------------------------------------------------------------
   // Game state
   let game = null;
-  let mode = 'menu'; // menu | playing | dead | paused | standby (another window is active, #45)
   const cam = { x: 0, y: 0, z: 0.6 };
   let spectate = null;
 
@@ -1225,7 +1225,6 @@
     canvas.focus();
   }
 
-  let deathTimer = 0;
   function showDeath(w, isBest) {
     mode = 'dead';
     const score = Math.round(w.mass), peak = Math.round(w.peak), best = profile.totals.best;
@@ -1801,14 +1800,6 @@
     specialsDrawn: () => specialsDrawn.slice(),
   };
 
-  function tracePath(sx, sy, from, to) {
-    ctx.beginPath();
-    if (span && from > to) { from = Math.min(from, span[1]); to = Math.max(to, span[0]); if (from < to) return; }
-    ctx.moveTo(sx[from], sy[from]);
-    if (from > to) for (let i = from - 1; i >= to; i--) ctx.lineTo(sx[i], sy[i]);
-    else for (let i = from + 1; i <= to; i++) ctx.lineTo(sx[i], sy[i]);
-  }
-
   // part: 'all'; 'body' (everything but the eyes and boost arrows); 'head' (the first few
   // segments, eyes and arrows). Worms are drawn lighter first, so a heavier body lies over a lighter
   // one and a worm wrapping a smaller one is on top of it (#116). The player's body takes its place
@@ -1892,7 +1883,7 @@
       // Outline
       ctx.strokeStyle = 'rgba(0,0,0,0.5)';
       ctx.lineWidth = 2 * r + 4;
-      tracePath(sx, sy, n - 1, 0);
+      traceOn(ctx, sx, sy, n - 1, 0);
       ctx.stroke();
 
       // Body in the skin's finish, with ridges (#58, #161)
@@ -2277,7 +2268,8 @@
 
   let achTimer = 0; // seconds since the last in-run achievement check (#14)
   function frame(now) {
-    const dt = Math.min(0.1, (now - last) / 1000);
+    requestAnimationFrame(frame); // first, so one exception can't leave a dead canvas (#185)
+    const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); // `last` can be ahead of `now` after a resume
     last = now;
     if (mode !== 'paused' && mode !== 'standby') {
       applyInput(dt);
@@ -2300,7 +2292,6 @@
     syncTouchControls();
     syncBoostBadge();
     syncBadges();
-    requestAnimationFrame(frame);
   }
 
   // ---------------------------------------------------------------------------
