@@ -1208,6 +1208,7 @@
   }
 
   function startPlaying() {
+    if (mode === 'playing') return; // a second trigger (key + click) must not spawn a second player (#184)
     liveRun = freshRun();
     dropLockedSkin(); // never start a run in a locked skin (#178)
     settings.name = $('name').value.trim().slice(0, 16);
@@ -1672,7 +1673,10 @@
         setAudio('sound', !settings.sound);
         if (mode === 'playing') feed(settings.sound ? '🔊 Sound on' : '🔇 Sound off', 'info');
         break;
-      case 'Enter': if (mode === 'dead' && !$('death').classList.contains('hidden')) startPlaying(); break;
+      case 'Enter': // a focused button presses itself; running both started two runs (#184)
+        if (e.target.closest && e.target.closest('button, a[href]')) break;
+        if (mode === 'dead' && !$('death').classList.contains('hidden')) startPlaying();
+        break;
     }
   });
   window.addEventListener('keyup', (e) => {
