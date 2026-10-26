@@ -17,6 +17,7 @@ html, body {
   user-select: none;
   -webkit-user-select: none;
 }
+#name { user-select: text; -webkit-user-select: text; } /* the html/body rule above can stop iOS Safari focusing it (#185) */
 #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: default; }
 .hidden { display: none !important; }
 
