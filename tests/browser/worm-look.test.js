@@ -52,6 +52,24 @@ test('worm look', async (t) => {
     assert.ok(dips >= expected * 0.7 && dips <= expected * 1.3, `${dips} ridges over ${r.lum.length} px, expected about ${expected.toFixed(0)}`);
   });
 
+  await t.test('a see-through skin has no dark outline under it (#187)', async () => {
+    // The outline is a dark stroke 4 units wider than the body. Count the frames' strokes that match.
+    const outlines = (skin) => page.eval(`(async () => {
+      const { SKINS } = window.WormEngine, p = window.__player;
+      p.skin = ${skin ? 'SKINS.find((s) => s.name === ' + JSON.stringify(skin) + ')' : '{ name: "Test blue", finish: "stripes", colors: ["#3a86ff"], accent: "#3a86ff", food: ["#3a86ff"], hidden: true }'};
+      const proto = CanvasRenderingContext2D.prototype, stroke = proto.stroke;
+      let count = 0;
+      proto.stroke = function (...a) {
+        if (/^rgba\\(0, 0, 0, 0\\.5\\)$/.test(this.strokeStyle) && Math.abs(this.lineWidth - (2 * p.r + 4)) < 0.01) count++;
+        return stroke.apply(this, a);
+      };
+      try { for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r)); } finally { proto.stroke = stroke; }
+      return count;
+    })()`);
+    assert.ok(await outlines(null) > 0, 'a solid skin is drawn on its outline');
+    assert.equal(await outlines('Ghost'), 0, 'Ghost has none');
+  });
+
   await t.test('the pupils look where the worm steers', async () => {
     // Heading right; eye centres sit 0.34 r ahead of the head and 0.4 r to each side. A point
     // 0.25 r above or below an eye's centre (0.1 r forward, clear of the glint) is pupil when the
