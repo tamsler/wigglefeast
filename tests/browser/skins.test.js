@@ -185,8 +185,8 @@ test('reward skins', async (t) => {
     assert.ok(ghost > 60, `but it doesn't vanish (${ghost.toFixed(0)})`);
   });
 
-  await t.test('no reward is drawn wider than its body outline: no glow around it (#190)', async () => {
-    for (const name of REWARDS) {
+  await t.test('no skin is drawn wider than its body outline: no glow around it (#190)', async () => {
+    for (const name of await page.eval(`window.WormEngine.SKINS.map((s) => s.name)`)) {
       await bodyPixels(name);
       // The widest stroke the game draws in a few frames. The body is 2r wide and its outline 2r + 4;
       // a glow under the body would be wider and make the edge look like it was further out than it is.

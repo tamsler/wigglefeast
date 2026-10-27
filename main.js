@@ -782,7 +782,7 @@
 
   // ---------------------------------------------------------------------------
   // Skin finishes (#58): how a skin's body is painted. A finish gives each band of 3 segments its
-  // colour and may draw markings over the body (and, for neon, a glow under it); ridges come on
+  // colour and may draw markings over the body; ridges come on
   // top of the colour (#161). Every routine draws on the context it is given, so
   // the arena, the picker swatches and the menu preview share one drawing path. Patterns are
   // spaced in body lengths (segments sit 0.42 r apart) so they look the same at any size. t is
@@ -829,24 +829,13 @@
   const hash01 = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 
   // color(skin, a, n, t): the colour of the band of 3 segments starting at segment a. marks: drawn
-  // over the body. under: drawn under it. soft: lighter ridges, for dark-bodied finishes.
+  // over the body. soft: lighter ridges, for dark-bodied finishes.
   const FINISH = {
     stripes: { color: (skin, a) => skin.colors[(a / 3) % skin.colors.length] },
     gradient: { color: (skin, a, n) => along(skin.colors, a / Math.max(1, n - 1)) },
     neon: {
       soft: true,
       color: (skin) => skin.colors[0],
-      under(g, sx, sy, r, skin) {
-        const n = sx.length, a0 = g.globalAlpha;
-        g.strokeStyle = skin.colors[1];
-        for (const [w, k] of [[2 * r + r * 1.4, 0.12], [2 * r + r * 0.75, 0.25]]) {
-          g.globalAlpha = a0 * k;
-          g.lineWidth = w;
-          traceOn(g, sx, sy, n - 1, 0);
-          g.stroke();
-        }
-        g.globalAlpha = a0;
-      },
       marks(g, sx, sy, r, skin, t) {
         const [, glow, lights] = skin.colors, n = sx.length, a0 = g.globalAlpha;
         g.strokeStyle = glow;
@@ -1077,11 +1066,9 @@
   // of 3 segments, each in its band's colour), then every ridge is added to one path and stroked
   // once, which costs about the same as the tube itself. Worms under a few pixels wide skip them.
   const RIDGE_MIN_PX = 6; // body width on screen, in pixels
-  // Paints a body: the finish's glow under it, the tube, ridges and a soft highlight, then the
-  // finish's markings. px: screen pixels per world unit.
+  // Paints a body: the tube, ridges and a soft highlight, then the finish's markings. px: screen pixels per world unit.
   function paintBody(g, sx, sy, r, skin, t, px) {
     const f = FINISH[skin.finish], n = sx.length, last = n - 1, aOuter = g.globalAlpha;
-    if (f.under) f.under(g, sx, sy, r, skin, t);
     // A see-through finish (Ghost, #180) draws the body, ridges and markings at its own alpha.
     const a0 = aOuter * (f.alpha || 1);
     g.globalAlpha = a0;
