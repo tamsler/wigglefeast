@@ -6,7 +6,7 @@ How worms look: the skins players and bots can wear, how each skin's body is dra
 ## Requirements
 
 ### Requirement: Skin finishes
-Every skin SHALL have a finish that decides how its body is drawn: stripes (colour bands), gradient (a smooth blend from head to tail), neon (a dark body with a glowing outline and running lights), metallic (a shine that moves along the body), spots, scales (a diamond pattern down the spine), galaxy (twinkling stars), or pulse (glowing waves running toward the tail). The finish SHALL decide the body's colours and the markings drawn on top of its ridges. Every finish keeps the worm's eyes and size, and its dark outline, except a see-through finish (Ghost), whose body would show the outline through it (#187).
+Every skin SHALL have a finish that decides how its body is drawn: stripes (colour bands), gradient (a smooth blend from head to tail), neon (a dark body with a glowing line along it and running lights), metallic (a shine that moves along the body), spots, scales (a diamond pattern down the spine), galaxy (twinkling stars), or pulse (glowing waves running toward the tail). The finish SHALL decide the body's colours and the markings drawn on top of its ridges. Every finish keeps the worm's eyes and size, and its dark outline, except a see-through finish (Ghost), whose body would show the outline through it (#187). No finish SHALL draw a glow or anything else around the body beyond that outline: the edge of the body is where another worm's head kills (#190).
 
 #### Scenario: Animated finishes
 - **WHEN** a worm with the metallic, neon, galaxy or pulse finish is on screen while the game is running
