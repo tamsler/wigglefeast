@@ -402,8 +402,11 @@ kbd {
   #tip .desk { display: none; }
 }
 @media (max-height: 420px) { #tip { max-width: min(80vw, 460px); font-size: 13px; } } /* one line, so it stays below the head */
-/* A window with a mouse that is this short has no room beside the leaderboard: no hints there (none count as seen). */
-@media (pointer: fine) and (max-height: 419px) { #tip { display: none; } }
+/* A window that is this short has no room beside the ten-row leaderboard: no hints there (none count as seen).
+   Touch screens, whose leaderboard is shorter, keep them. (Not `pointer: fine`: a machine with no pointing device
+   reports `none`, as headless Chrome does.) */
+@media (max-height: 419px) { #tip { display: none; } }
+@media (pointer: coarse) and (max-height: 419px) { #tip { display: block; } }
 @media (prefers-reduced-motion: reduce) { #tip, #tip.on { transition: none; } }
 
 /* Achievement pop-up (#14): top centre, above the HUD, never catching taps. */

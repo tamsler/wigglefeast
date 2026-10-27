@@ -70,6 +70,7 @@ test('collecting a power-up ends the power-up hint (#10)', async (t) => {
   const page = await open({ width: 1280, height: 720 }, ['steer', 'boost', 'danger']);
   t.after(() => page.close());
   await page.startRun();
+  await page.eval(`window.__player.shield = 1e9`); // a bot must not end the run while we wait
   await current(page, 'powerups');
   await sleep(2700); // past its 2.5 s minimum
   await page.eval(`(() => { const g = window.__game, p = window.__player; g.emit('powerup', { worm: p, type: 'magnet' }); })()`);
@@ -80,6 +81,7 @@ test('pausing hides the hint and stops its clock (#10)', async (t) => {
   const page = await open({ width: 1280, height: 720 });
   t.after(() => page.close());
   await page.startRun();
+  await page.eval(`window.__player.shield = 1e9`); // a bot must not end the run while we wait
   await current(page, 'steer');
   await page.press('KeyP');
   await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'the pause panel');
@@ -99,6 +101,7 @@ test('hints leave a player who has seen them alone, and older profiles count by 
     const page = await open({ width: 1280, height: 720 }, ALL);
     try {
       await page.startRun();
+      await page.eval(`window.__player.shield = 1e9`);
       await sleep(3000);
       assert.equal((await tips(page)).current, null);
       assert.equal(await page.eval(`document.getElementById('tip').classList.contains('on')`), false);
@@ -118,6 +121,7 @@ test('hints leave a player who has seen them alone, and older profiles count by 
     try {
       assert.deepEqual((await tips(page)).seen.sort(), [...ALL].sort());
       await page.startRun();
+      await page.eval(`window.__player.shield = 1e9`);
       await sleep(2500);
       assert.equal((await tips(page)).current, null);
     } finally { await page.close(); }
@@ -194,6 +198,7 @@ test('Show tips again turns them back on; Reset stats leaves them alone (#10)', 
   const page = await open({ width: 1280, height: 720 }, ALL);
   t.after(() => page.close());
   await page.startRun();
+  await page.eval(`window.__player.shield = 1e9`);
   await sleep(1500);
   assert.equal((await tips(page)).current, null);
   await page.press('KeyP');
@@ -241,4 +246,23 @@ test('a mouse window too short to fit the hint shows none, and none count as see
   await sleep(3500); // long enough to have ended the steer hint if it had been showing
   await page.key('keyUp', 'ArrowLeft');
   assert.deepEqual(await tips(page), { current: null, seen: [] });
+});
+
+test("a hint seen here keeps what another window stored meanwhile (#10)", async (t) => {
+  const page = await open({ width: 1280, height: 720 });
+  t.after(() => page.close());
+  await page.startRun();
+  await page.eval(`window.__player.shield = 1e9`);
+  await current(page, 'steer');
+  // Another window has stored two other hints as seen, behind this page's back.
+  await page.eval(`(() => {
+    const p = JSON.parse(localStorage.getItem('wormarena.profile')) || window.wigglefeastDebug.profile();
+    p.tips = { boost: 1, powerups: 1 };
+    localStorage.setItem('wormarena.profile', JSON.stringify(p));
+  })()`);
+  await sleep(2700);
+  await page.key('keyDown', 'ArrowLeft');
+  await page.waitFor(`window.wigglefeastDebug.tips().seen.includes('steer')`, 'the steer hint to end', 5000);
+  await page.key('keyUp', 'ArrowLeft');
+  assert.deepEqual((await storedTips(page)).sort(), ['boost', 'powerups', 'steer'], 'the stored hints and this one, together');
 });

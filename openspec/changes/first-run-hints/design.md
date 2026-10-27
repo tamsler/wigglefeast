@@ -81,7 +81,7 @@ A ghost button in the stats screen's button row ("Show tips again"). It clears `
 - **The pill overlaps the body of a worm** → it is translucent and takes no input; the spec only promises that it stays off the head and the HUD. Checked at 360×640 and 640×360 where the space is tightest.
 - **A player never boosts, so the later hints never show** → they appear in a later run, once boost is tried; the first two are the ones that matter for playing.
 - **Players with a profile but no games (e.g. a fresh import with zero games)** → they get the hints; that is intended.
-- **Test timing** (2.5 s minimum per hint) → tests drive the hint controller through the game state (set the heading, set boosting, advance game time) instead of waiting in real time.
+- **Test timing** (2.5 s minimum per hint, 6 s for the last two) → the browser tests wait in real time (about a minute in all) with the player shielded so a bot can't end the run; each wait has a 9-12 s timeout against the 6 s timers, and the tests that check "still up" can only be made *more* true by a slow machine.
 
 ## Migration Plan
 
@@ -89,4 +89,4 @@ Ships as 1.34.0. No data migration (the field is optional and derived on first l
 
 ## Open Questions
 
-- The exact bottom offset on touch screens (about 112 px) is confirmed on screenshots at 360×640 and 640×360 while building; it changes only a CSS number.
+- None left: the touch offset was settled on screenshots at 360×640 and 640×360 (100 px).
