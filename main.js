@@ -1880,11 +1880,14 @@
         ctx.clip();
       }
 
-      // Outline
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-      ctx.lineWidth = 2 * r + 4;
-      traceOn(ctx, sx, sy, n - 1, 0);
-      ctx.stroke();
+      // Outline: it gives a solid body its edge. A see-through finish (Ghost, #187) has none, since
+      // it would show through the body as a dark tint; its glow marks the edge instead.
+      if (!FINISH[skin.finish].alpha) {
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = 2 * r + 4;
+        traceOn(ctx, sx, sy, n - 1, 0);
+        ctx.stroke();
+      }
 
       // Body in the skin's finish, with ridges (#58, #161)
       paintBody(ctx, sx, sy, r, skin, game.time, cam.z * DPR);
