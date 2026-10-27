@@ -2199,7 +2199,7 @@
   // A leaderboard row (#193): rank, name, kills, score, in the columns the header names.
   function row(rank, w, me) {
     const kills = w.kills || 0;
-    return `<li class="${me ? 'me' : ''}"><span class="r">${rank}</span><span class="n">${escapeHtml(w.name)}</span><span class="k${kills ? '' : ' z'}">${kills}</span><span class="m">${Math.round(w.mass).toLocaleString()}</span></li>`;
+    return `<li class="${me ? 'me' : ''}${rank > 99 ? ' big' : ''}"><span class="r">${rank}</span><span class="n">${escapeHtml(w.name)}</span><span class="k${kills ? '' : ' z'}">${kills}</span><span class="m">${Math.round(w.mass).toLocaleString()}</span></li>`;
   }
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

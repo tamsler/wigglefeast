@@ -133,3 +133,45 @@ for (const [label, opts, coarse] of SIZES) {
     });
   }
 }
+
+// A 3-digit rank (the player can be 151st with 150 bots) must not run into the name (#199).
+for (const [label, opts, coarse] of SIZES) {
+  test(`a 3-digit rank has room next to the name (${label}, #199)`, async (t) => {
+    let page;
+    t.after(() => page && page.close());
+    page = await launch(opts);
+    if (coarse) await page.coarsePointer();
+    await page.goto(gameUrl());
+    await page.startRun();
+    // The widest case: the player's bold gold row with rank 151, measured in the real list.
+    const m = await page.eval(`(() => {
+      const lb = document.getElementById('lb'), li = document.createElement('li');
+      li.className = 'me big'; // as row() builds it for a rank over 99
+      li.innerHTML = '<span class="r">151</span><span class="n">Thomas</span><span class="k z">0</span><span class="m">35</span>';
+      lb.appendChild(li);
+      const r = li.querySelector('.r'), n = li.querySelector('.n');
+      const out = { fits: r.scrollWidth <= r.clientWidth, gap: n.getBoundingClientRect().left - r.getBoundingClientRect().left - r.scrollWidth };
+      li.remove();
+      return out;
+    })()`);
+    assert.ok(m.fits, `the rank's text is wider than its column: ${JSON.stringify(m)}`);
+    assert.ok(m.gap >= 3, `only ${m.gap.toFixed(1)}px between the rank and the name`);
+  });
+}
+
+test('in a 150-bot world the real own row has a 3-digit rank and room for it (#199)', async (t) => {
+  const page = await launch({ width: 1280, height: 720 });
+  t.after(() => page.close());
+  await page.goto(gameUrl());
+  await page.eval(`localStorage.setItem('wormarena.settings', JSON.stringify({ name: 'Thomas', skin: 0, botCount: 150, difficulty: 'normal', theme: 'auto', sound: false, music: false }))`);
+  await page.reload();
+  await page.startRun();
+  await page.eval('window.__player.shield = 1e9');
+  await page.waitFor(`document.querySelector('#lb li.me .r') && Number(document.querySelector('#lb li.me .r').textContent) > 99`, 'a rank over 99');
+  const m = await page.eval(`(() => {
+    const li = document.querySelector('#lb li.me'), r = li.querySelector('.r'), n = li.querySelector('.n');
+    return { big: li.classList.contains('big'), rank: r.textContent, fits: r.scrollWidth <= r.clientWidth, gap: n.getBoundingClientRect().left - r.getBoundingClientRect().left - r.scrollWidth,
+      ordered: n.getBoundingClientRect().right <= li.querySelector('.k').getBoundingClientRect().left + 0.5 };
+  })()`);
+  assert.ok(m.big && m.fits && m.gap >= 3 && m.ordered, JSON.stringify(m));
+});

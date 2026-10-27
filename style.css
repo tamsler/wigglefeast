@@ -39,6 +39,7 @@ html, body {
 :root { --lb-w: 220px; }
 #leaderboard {
   --lb-cols: 18px minmax(0, 1fr) 30px 50px; /* rank, name, kills, score: the same on every row, so the numbers line up */
+  --lb-cols-big: auto minmax(0, 1fr) 30px 50px; /* the player's row below the gap when their rank has 3 digits: the rank takes the room its text needs, in any font (#199) */
   position: absolute; right: calc(16px + env(safe-area-inset-right)); top: calc(16px + env(safe-area-inset-top)); width: var(--lb-w);
   background: rgba(10, 14, 30, .55); border: 1px solid rgba(255,255,255,.08);
   border-radius: 14px; padding: 10px 12px; backdrop-filter: blur(6px);
@@ -56,6 +57,7 @@ html, body {
 #lb li .k.z { opacity: .3; } /* no kills yet: the 0 is there for the column, but quiet */
 #lb li .m { opacity: .85; }
 #lb li.me { color: #ffd60a; font-weight: 700; }
+#lb li.big { grid-template-columns: var(--lb-cols-big); }
 #lb li.gap { display: block; opacity: .4; text-align: center; }
 
 /* Top-left cluster (#63): the minimap, with the active power-up badges beside it
@@ -127,7 +129,7 @@ html, body {
 }
 /* Phones in landscape: a compact leaderboard (top 5 plus your own row) and smaller cluster. */
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
-  #leaderboard { --lb-cols: 14px minmax(0, 1fr) 24px 46px; font-size: 11.5px; padding: 8px; }
+  #leaderboard { --lb-cols: 14px minmax(0, 1fr) 24px 46px; --lb-cols-big: auto minmax(0, 1fr) 24px 46px; font-size: 11.5px; padding: 8px; }
   #lbHead, #lb li { column-gap: 4px; }
   #lbHead { font-size: 8.5px; letter-spacing: .02em; }
   :root { --lb-w: 160px; }
@@ -312,7 +314,7 @@ kbd {
 .grid small { opacity: .6; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 
 @media (max-width: 600px) {
-  #leaderboard { --lb-cols: 14px minmax(0, 1fr) 24px 46px; font-size: 11.5px; padding: 8px; }
+  #leaderboard { --lb-cols: 14px minmax(0, 1fr) 24px 46px; --lb-cols-big: auto minmax(0, 1fr) 24px 46px; font-size: 11.5px; padding: 8px; }
   #lbHead, #lb li { column-gap: 4px; }
   #lbHead { font-size: 8.5px; letter-spacing: .02em; }
   :root { --lb-w: 160px; }
