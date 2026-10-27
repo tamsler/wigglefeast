@@ -385,6 +385,30 @@ kbd {
   .grid b { font-size: 18px; }
 }
 
+/* First-run hints (#10): a pill at the bottom centre, above the score row (and the touch buttons on
+   touch screens). It takes no clicks or taps, and the head stays in the middle of the screen above it. */
+#tip {
+  position: absolute; z-index: 2; left: 50%; bottom: calc(72px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  width: max-content; max-width: min(80vw, 380px); box-sizing: border-box; /* max-content: left: 50% would otherwise cap it at half the screen */ padding: 8px 16px; border-radius: 18px; text-align: center;
+  background: rgba(10, 14, 30, .72); border: 1px solid rgba(255, 214, 10, .45); color: #fff;
+  font-size: 14px; font-weight: 700; line-height: 1.35; pointer-events: none;
+  opacity: 0; visibility: hidden; transition: opacity .25s ease-out, visibility 0s .25s;
+}
+#tip.on { opacity: 1; visibility: visible; transition: opacity .25s ease-out; }
+#tip .touch { display: none; }
+@media (pointer: coarse) {
+  #tip { bottom: calc(100px + env(safe-area-inset-bottom)); }
+  #tip .touch { display: inline; }
+  #tip .desk { display: none; }
+}
+@media (max-height: 420px) { #tip { max-width: min(80vw, 460px); font-size: 13px; } } /* one line, so it stays below the head */
+/* A window that is this short has no room beside the ten-row leaderboard: no hints there (none count as seen).
+   Touch screens, whose leaderboard is shorter, keep them. (Not `pointer: fine`: a machine with no pointing device
+   reports `none`, as headless Chrome does.) */
+@media (max-height: 419px) { #tip { display: none; } }
+@media (pointer: coarse) and (max-height: 419px) { #tip { display: block; } }
+@media (prefers-reduced-motion: reduce) { #tip, #tip.on { transition: none; } }
+
 /* Achievement pop-up (#14): top centre, above the HUD, never catching taps. */
 #achToast {
   position: fixed; top: calc(14px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 30;

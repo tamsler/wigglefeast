@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const { Game, CFG, SKINS, SAVE_APP_IDS, DIFFICULTIES, difficultyOf, MIN_BOTS, MAX_BOTS, validateSnapshot, TAU, freshHabits, validHabits, knowsTactic } = window.WormEngine;
+  const { Game, CFG, SKINS, angleDiff, SAVE_APP_IDS, DIFFICULTIES, difficultyOf, MIN_BOTS, MAX_BOTS, validateSnapshot, TAU, freshHabits, validHabits, knowsTactic } = window.WormEngine;
   const $ = (id) => document.getElementById(id);
 
   const canvas = $('game');
@@ -135,12 +135,15 @@
   ];
   for (const a of ACHIEVEMENTS) a.skin = (SKINS.find((s) => s.unlock === a.id) || {}).name;
   const ACH_IDS = new Set(ACHIEVEMENTS.map((a) => a.id));
+  // First-run hints (#10), in the order they are shown; profile.tips holds the ones already seen.
+  const TIP_IDS = ['steer', 'boost', 'danger', 'powerups'];
   const emptyProfile = () => ({
     v: PROFILE_VERSION,
     totals: { games: 0, kills: 0, time: 0, eaten: 0, best: 0, bestByDiff: Object.fromEntries(DIFFICULTIES.map((d) => [d, 0])), specials: 0, firsts: 0 },
     top: [],
     recent: [],
     ach: {}, // achievement id -> when it was earned (#14)
+    tips: {}, // hint id -> when it was seen (#10)
   });
   // Profiles can come from imported files, so rebuild them from checked fields only.
   // Returns a clean copy, or null if anything is missing or the wrong type. With
@@ -167,6 +170,11 @@
     // none, and unknown or damaged entries are dropped rather than rejecting the profile.
     const ach = {};
     if (isObj(p.ach)) for (const id of Object.keys(p.ach)) if (ACH_IDS.has(id) && num(p.ach[id])) ach[id] = p.ach[id];
+    // Hints seen (#10) are optional too: a profile from before them counts as having seen all of
+    // them if the player has played, and none if not.
+    const tips = {};
+    if (isObj(p.tips)) { for (const id of Object.keys(p.tips)) if (TIP_IDS.includes(id) && num(p.tips[id])) tips[id] = p.tips[id]; }
+    else if (t.games > 0) for (const id of TIP_IDS) tips[id] = 0;
     return {
       v: PROFILE_VERSION,
       totals: {
@@ -178,6 +186,7 @@
       top: top.filter(Boolean).slice(0, 10),
       recent: recent.filter(Boolean).slice(0, 50),
       ach,
+      tips,
     };
   }
   function loadProfile() {
@@ -203,6 +212,13 @@
   }
   let profile = loadProfile();
   const saveProfile = () => { if (isActive()) store.set('profile', profile); };
+  // A hint has been seen (#10): kept with what another window may have stored, then saved at once.
+  function markTipSeen(id) {
+    const stored = cleanProfile(store.get('profile', null), true);
+    if (stored) for (const k in stored.tips) profile.tips[k] = Math.min(stored.tips[k], profile.tips[k] === undefined ? Infinity : profile.tips[k]);
+    if (profile.tips[id] === undefined) profile.tips[id] = Date.now();
+    saveProfile();
+  }
 
   // Earns every achievement the stats (plus the live run, if any) now prove (#14). New ones are
   // saved at once, merged with the stored profile so another window's achievements survive (#45),
@@ -1170,6 +1186,7 @@
 
   function onPowerup({ worm, type }) {
     if (worm !== game.player) return;
+    if (tip.id === 'powerups') tip.got = true; // #10
     feed(`${POWERUP_INFO[type].icon} ${POWERUP_INFO[type].label}!`, 'info');
     sound.play('powerup');
   }
@@ -1189,6 +1206,7 @@
   function startPlaying() {
     if (mode === 'playing') return; // a second trigger (key + click) must not spawn a second player (#184)
     liveRun = freshRun();
+    resetTip(); // a hint not yet seen starts over (#10)
     dropLockedSkin(); // never start a run in a locked skin (#178)
     settings.name = $('name').value.trim().slice(0, 16);
     if (isActive()) store.set('settings', settings);
@@ -1285,6 +1303,7 @@
     return h;
   }
   function showStats() {
+    $('showTips').textContent = '\u{1F4A1} Show tips again';
     const t = profile.totals;
     const avg = t.games ? Math.round(profile.recent.reduce((s, r) => s + r.peak, 0) / Math.max(1, profile.recent.length)) : 0;
     const tile = (v, label) => `<div><b>${escapeHtml(v)}</b><small>${escapeHtml(label)}</small></div>`;
@@ -1516,7 +1535,9 @@
   $('playHere').addEventListener('click', playHere);
   $('resetStats').addEventListener('click', () => {
     if (!confirm('Reset all stats and high scores? This cannot be undone (export a save first if you want a backup).') || !isActive()) return;
+    const seenTips = profile.tips; // the player has learned the game: Show tips again is the way back (#10)
     profile = emptyProfile();
+    profile.tips = seenTips;
     saveProfile();
     dropLockedSkin(); // the rewards are locked again (#178)
     Object.assign(habits, freshHabits()); // the bots forget the player's habits too (#135)
@@ -1761,6 +1782,7 @@
     headRepaints: () => headRepaints, // #161
     previewSkin: () => previewName, // #161
     achievements: () => ({ ...profile.ach }), // #14
+    tips: () => ({ current: $('tip').classList.contains('on') ? tip.id : null, seen: Object.keys(profile.tips) }), // #10
     profile: () => JSON.parse(JSON.stringify(profile)),
     toasts: () => toastsShown.slice(),
     sounds: () => sound.log().map((e) => e.name), // #9
@@ -2250,6 +2272,52 @@
   document.addEventListener('visibilitychange', syncAudio); // frames stop while hidden
 
   let achTimer = 0; // seconds since the last in-run achievement check (#14)
+  // ---------------------------------------------------------------------------
+  // First-run hints (#10): steer, boost, danger, power-ups, one at a time, until each has been seen.
+  // A hint ends when the player has done the thing (or read it, for the last two), and not before it
+  // has been up for TIP_MIN seconds. They run only while a run is in progress and not paused; the
+  // pill takes no input (CSS: pointer-events none).
+  const TIPS = {
+    steer: { desk: 'Move the mouse to steer', touch: 'Drag to steer' },
+    boost: { desk: 'Hold click or Space to boost: it costs a little size', touch: 'Hold the boost button to boost: it costs a little size' },
+    danger: { desk: "Don't hit other worms with your head. Make them hit yours.", touch: "Don't hit other worms with your head. Make them hit yours." },
+    powerups: { desk: 'Grab the glowing power-ups for a boost.', touch: 'Grab the glowing power-ups for a boost.' },
+  };
+  const TIP_MIN = 2.5, TIP_READ = 6, TIP_TURN = Math.PI / 2, TIP_BOOST = 0.5; // seconds, seconds, radians, seconds
+  const tip = { id: null, shown: 0, turned: 0, boosted: 0, last: 0, got: false };
+  const resetTip = () => Object.assign(tip, { id: null, shown: 0, turned: 0, boosted: 0, last: 0, got: false });
+  function updateTips(dt) {
+    const el = $('tip'), p = game && game.player;
+    const room = el.getClientRects().length > 0; // CSS hides it in a window too short to fit it (none count as seen)
+    const id = room && mode === 'playing' && p && !p.dead ? TIP_IDS.find((k) => profile.tips[k] === undefined) : undefined;
+    if (!id) { el.classList.remove('on'); return; } // paused, in the menu, dead, no room, or all seen: the state waits
+    if (tip.id !== id) {
+      Object.assign(tip, { id, shown: 0, turned: 0, boosted: 0, last: p.angle, got: false });
+      el.querySelector('.desk').textContent = TIPS[id].desk;
+      el.querySelector('.touch').textContent = TIPS[id].touch;
+    }
+    el.classList.add('on');
+    tip.shown += dt;
+    tip.turned += Math.abs(angleDiff(p.angle, tip.last));
+    tip.last = p.angle;
+    if (p.boosting) tip.boosted += dt;
+    const done = id === 'steer' ? tip.turned >= TIP_TURN
+      : id === 'boost' ? tip.boosted >= TIP_BOOST
+      : id === 'danger' ? tip.shown >= TIP_READ
+      : tip.got || tip.shown >= TIP_READ;
+    if (done && tip.shown >= TIP_MIN) {
+      markTipSeen(id);
+      tip.id = null;
+      el.classList.remove('on');
+    }
+  }
+  $('showTips').addEventListener('click', () => {
+    if (!isActive()) return;
+    profile.tips = {};
+    saveProfile();
+    $('showTips').textContent = '✓ Tips on for your next run';
+  });
+
   function frame(now) {
     requestAnimationFrame(frame); // first, so one exception can't leave a dead canvas (#185)
     const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); // `last` can be ahead of `now` after a resume
@@ -2271,6 +2339,7 @@
     }
     if (mode !== 'menu' && mode !== 'standby') renderMinimap();
     updateHud(dt);
+    updateTips(dt);
     syncUpdateBanner();
     syncTouchControls();
     syncBoostBadge();
