@@ -29,7 +29,6 @@ html, body {
 }
 #stats .score { font-size: 38px; font-weight: 800; line-height: 1; }
 #stats .score small { font-size: 13px; font-weight: 600; opacity: .7; margin-left: 6px; text-transform: uppercase; letter-spacing: .08em; }
-#stats .line { margin-top: 6px; font-size: 14px; opacity: .85; }
 #boostBadge {
   display: inline-block; margin-left: 10px; padding: 3px 9px; vertical-align: middle; border-radius: 999px;
   font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; text-shadow: none;
@@ -45,8 +44,9 @@ html, body {
 #leaderboard h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; opacity: .6; }
 #lb { list-style: none; margin: 0; padding: 0; }
 #lb li { display: flex; gap: 6px; padding: 2px 0; white-space: nowrap; }
-#lb li .n { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+#lb li .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #lb li .r { width: 22px; opacity: .55; }
+#lb li .k { flex: none; font-variant-numeric: tabular-nums; opacity: .85; }
 #lb li .m { font-variant-numeric: tabular-nums; opacity: .85; }
 #lb li.me { color: #ffd60a; font-weight: 700; }
 #lb li.gap { opacity: .4; justify-content: center; }
