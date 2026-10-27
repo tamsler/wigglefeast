@@ -99,11 +99,11 @@ Holo and Ghost (formerly Rainbow and Lavender) SHALL be unlockable rewards: not 
 - **THEN** Holo is locked again, Cherry Pop is chosen instead, and the next run is in Cherry Pop
 
 ### Requirement: Reward skins
-The game SHALL have six reward skins, each with an animated finish no free skin has: Ghost, Holo, Inferno, Storm, Crystal and Galaxy Prime. Each SHALL have a bright accent and food colours like the other skins, and its animation SHALL move with game time and stop while the game is paused.
+The game SHALL have six reward skins, each with an animated finish no free skin has: Ghost, Holo, Inferno, Storm, Crystal and Galaxy Prime. Each SHALL have a bright accent and food colours like the other skins, and its animation SHALL move with game time and stop while the game is paused. None SHALL be drawn with a glow around its body: the edge of the body is where another worm's head kills, like any other skin's (#190).
 
 #### Scenario: The six looks
 - **WHEN** the six rewards are drawn
-- **THEN** Ghost is see-through and softly glowing; Holo has rainbow colours drifting along the body with a sweeping white shine and twinkles; Inferno is charred with molten veins and cracks pulsing toward the tail; Storm is dark blue with lightning bolts flickering across it; Crystal has icy facets with flashing sparkles; Galaxy Prime has drifting nebula clouds, stars and shooting stars
+- **THEN** Ghost is see-through; Holo has rainbow colours drifting along the body with a sweeping white shine and twinkles; Inferno is charred with molten veins and cracks pulsing toward the tail; Storm is dark blue with lightning bolts flickering across it; Crystal has icy facets with flashing sparkles; Galaxy Prime has drifting nebula clouds, stars and shooting stars
 
 #### Scenario: Wearing Inferno
 - **WHEN** the player has unlocked Inferno and plays with it
@@ -111,7 +111,7 @@ The game SHALL have six reward skins, each with an animated finish no free skin 
 
 #### Scenario: Wearing Ghost
 - **WHEN** the player plays with Ghost
-- **THEN** the arena floor shows through their body, which glows softly with no dark outline under it, and their eyes stay solid
+- **THEN** the arena floor shows through their body, which has no dark outline under it and no glow around it, and their eyes stay solid
 
 #### Scenario: Picker swatches
 - **WHEN** the player opens the menu

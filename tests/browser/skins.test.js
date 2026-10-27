@@ -182,7 +182,23 @@ test('reward skins', async (t) => {
     const mean = (a) => { let sum = 0; for (let i = 0; i < a.length; i += 4) sum += 0.2126 * a[i] + 0.7152 * a[i + 1] + 0.0722 * a[i + 2]; return sum / (a.length / 4); };
     const ghost = mean(await bodyPixels('Ghost')), crystal = mean(await bodyPixels('Crystal'));
     assert.ok(ghost < crystal * 0.95, `Ghost (${ghost.toFixed(0)}) is dimmer than the solid pale Crystal (${crystal.toFixed(0)})`);
-    assert.ok(ghost > 60, `but it glows rather than vanishing (${ghost.toFixed(0)})`);
+    assert.ok(ghost > 60, `but it doesn't vanish (${ghost.toFixed(0)})`);
+  });
+
+  await t.test('no reward is drawn wider than its body outline: no glow around it (#190)', async () => {
+    for (const name of REWARDS) {
+      await bodyPixels(name);
+      // The widest stroke the game draws in a few frames. The body is 2r wide and its outline 2r + 4;
+      // a glow under the body would be wider and make the edge look like it was further out than it is.
+      const { widest, limit } = await page.eval(`(async () => {
+        const proto = CanvasRenderingContext2D.prototype, stroke = proto.stroke, p = window.__player;
+        let widest = 0;
+        proto.stroke = function (...a) { if (this.lineWidth > widest) widest = this.lineWidth; return stroke.apply(this, a); };
+        try { for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r)); } finally { proto.stroke = stroke; }
+        return { widest, limit: 2 * p.r + 4 };
+      })()`);
+      assert.ok(widest > 0 && widest <= limit + 0.01, `${name}: widest stroke ${widest.toFixed(1)}, the outline is ${limit.toFixed(1)}`);
+    }
   });
 
   await t.test('animated rewards freeze while paused', async () => {

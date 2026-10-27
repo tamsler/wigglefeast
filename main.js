@@ -948,10 +948,6 @@
   // so on a very long worm they still happen where the player is looking.
   const NEAR_HEAD = 120;
   const lighter = (g, fn) => { const op = g.globalCompositeOperation; g.globalCompositeOperation = 'lighter'; try { fn(); } finally { g.globalCompositeOperation = op; } };
-  const glowUnder = (color, k, w) => (g, sx, sy, r, skin, t) => lighter(g, () => {
-    const a0 = g.globalAlpha; g.globalAlpha = a0 * k * (0.75 + 0.25 * Math.sin(t * 3));
-    g.strokeStyle = color; g.lineWidth = 2 * r + r * w; traceOn(g, sx, sy, sx.length - 1, 0); g.stroke(); g.globalAlpha = a0;
-  });
   // A jagged line across the body at segment i: from one side to the other, zigzagging.
   function crack(path, sx, sy, r, i, seed, along = 0.5) {
     const [tx, ty, nx, ny] = normalAt(sx, sy, i), steps = 5;
@@ -964,7 +960,6 @@
   Object.assign(FINISH, {
     inferno: {
       color: (skin, a, n, t) => mix(skin.colors[0], skin.colors[1], 0.5 + 0.5 * Math.sin(a * 0.3 - t * 2)),
-      under: glowUnder('#ff4d00', 0.22, 0.9),
       marks(g, sx, sy, r, skin, t) {
         const n = sx.length, levels = [new Path2D(), new Path2D(), new Path2D()], [i0, i1] = stepRange(1, 2, n - 2);
         for (let i = i0; i <= i1; i += 2) { // stepRange with the same step, so cracks stay on fixed segments
@@ -1009,7 +1004,6 @@
     },
     storm: {
       color: (skin, a, n, t) => mix(skin.colors[0], skin.colors[1], 0.5 + 0.5 * Math.sin(a * 0.21 + t)),
-      under: glowUnder('#3ab8ff', 0.14, 0.7),
       marks(g, sx, sy, r, skin, t) {
         const n = sx.length;
         if (n < 10) return;
@@ -1052,12 +1046,10 @@
     ghost: {
       alpha: 0.38,
       color: (skin, a, n, t) => mix(skin.colors[0], skin.colors[1], 0.5 + 0.5 * Math.sin(a * 0.2 - t * 2)),
-      under: glowUnder('#7ff8ff', 0.3, 1.2),
     },
     galaxyprime: {
       soft: true,
       color: (skin, a, n, t) => along(['#14062e', '#4b0f6e', '#0f2a6b', '#14062e'], (Math.sin(a * 0.06 + t * 0.4) + 1) / 2),
-      under: glowUnder('#b46cff', 0.14, 0.8),
       marks(g, sx, sy, r, skin, t) {
         FINISH.galaxy.marks(g, sx, sy, r, skin, t);
         const n = sx.length, a0 = g.globalAlpha, [b0, b1] = stepRange(0, 5, n - 1);
