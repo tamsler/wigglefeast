@@ -2193,12 +2193,13 @@
       }
     }
   }
-  // " ⚔️N" for a worm that has killed, '' for one that hasn't; over heads and in leaderboard rows (#126,
-  // #193). ⚔ in emoji form (U+FE0F): the plain glyph is tiny at name size and reads like "x2".
+  // " ⚔️N" for a worm that has killed, '' for one that hasn't, after its name over its head (#126, #193).
+  // ⚔ in emoji form (U+FE0F): the plain glyph is tiny at name size and reads like "x2".
   function killTag(w) { return w.kills ? ` \u2694\uFE0F${w.kills}` : ''; }
+  // A leaderboard row (#193): rank, name, kills, score, in the columns the header names.
   function row(rank, w, me) {
-    const kills = w.kills ? `<span class="k">${killTag(w).trim()}</span>` : '';
-    return `<li class="${me ? 'me' : ''}"><span class="r">${rank}</span><span class="n">${escapeHtml(w.name)}</span>${kills}<span class="m">${Math.round(w.mass).toLocaleString()}</span></li>`;
+    const kills = w.kills || 0;
+    return `<li class="${me ? 'me' : ''}"><span class="r">${rank}</span><span class="n">${escapeHtml(w.name)}</span><span class="k${kills ? '' : ' z'}">${kills}</span><span class="m">${Math.round(w.mass).toLocaleString()}</span></li>`;
   }
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

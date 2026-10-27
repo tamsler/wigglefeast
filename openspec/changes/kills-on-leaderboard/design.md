@@ -12,7 +12,7 @@ See proposal.md for why. Today:
 ## Goals / Non-Goals
 
 **Goals:**
-- Kills visible on the leaderboard for everyone listed, in the same `⚔N` form as over heads.
+- Kills visible on the leaderboard for everyone listed, as a plain, aligned column under a header.
 - No tag over the player's own worm.
 - The panel never grows; a long name gives way first.
 - The bottom-left area shows just the score: rank and kills live in the player's gold row.
@@ -22,19 +22,20 @@ See proposal.md for why. Today:
 
 ## Decisions
 
-### D1. The kills sit between the name and the score, and only when there are some
+### D1. Kills and score are columns with headers, one number each, no icons
 
-The row becomes `rank · name · ⚔N · score`, with the `⚔N` span left out when `kills` is 0. This matches the head tag (no kills, no tag) and keeps rows of non-killers exactly as they are.
+The leaderboard becomes a grid: rank, name, **Kills**, **Score**, with a small header row naming the two number columns. Every row uses the same fixed column widths (a CSS grid on each row, widths from one variable), so the numbers are right-aligned and line up from the first row to the last, and the headers sit over them. Every row shows its kills as a plain number; `0` is shown quietly (dimmed) rather than left out, since an empty cell would make the column ragged. No ⚔ in the leaderboard.
+
+Widths: the panel keeps its 220px on desktop and tablets (a wider one pushes the touch pause button into the minimap's badges at 760px), with columns `18px / name / 30px / 50px`; the pause button's offset follows the panel width through one variable (`--lb-w`) instead of three copies of the number. The compact phone panel keeps its 160px (a wider one pushes the pause button onto the minimap at 360px) with tighter columns `14px / name / 24px / 46px`, a smaller header and 8px padding. The name is the only flexible column and truncates with an ellipsis. Scores up to about 50,000 fit the phone columns.
 
 Alternatives considered:
-- *A fixed kills column on every row.* Lines the numbers up, but takes about 30px from every name: on the 160px compact panel that leaves roughly 45px for the name, too little. Rejected.
+- *`⚔N` after the name, only for killers* (the first version of this plan). The owner saw it on screen: the icon renders in a different font, sits off the baseline, and the numbers don't line up. Rejected.
+- *A kills column without a header, or the ⚔ as the header.* The header words are clearer than an icon, and cost one small row.
 - *Kills after the score.* Pushes the score, the thing the list is sorted by, away from the right edge. Rejected.
 
-The name is the flexible item and already truncates; the kills span is `flex: none` so it is never the one that shrinks, and `min-width: 0` on the name keeps a long one from forcing the row wider. The panel's width is fixed, so it can't grow whatever the row holds.
+### D2. The head tag keeps its own text form
 
-### D2. Same text form as over heads, built in one place
-
-The `⚔️N` text (with U+FE0F, for the same reason) comes from one small helper used by both the head label and the leaderboard row, so the two can't drift apart. It takes the worm and returns `''` or `' ⚔️N'`.
+Over other worms' heads the tag stays `name ⚔️N` (U+FE0F so it reads at name size), built by one small helper, for killers only. The leaderboard doesn't use it.
 
 ### D3. The player is excluded from the head label by identity
 
@@ -46,16 +47,13 @@ The label code already knows the player (it colours that label yellow), so it sk
 
 ### D5. The dead player
 
-After death the leaderboard no longer lists the player (existing behaviour: `updateHud` adds their row only while they are alive), and the bottom-left score keeps showing their last score under the death screen, which has its own kills and stats. Not changed by this.
-
-### D6. The dead player's row (was D4, unchanged)
-
-No change: `updateHud` shows the player's own row only while they are alive and outside the top 10, and the death screen has its own kills. Not touched.
+After death the leaderboard no longer lists the player (existing behaviour: `updateHud` adds their row only while they are alive and below the top 10, and `lb` holds living worms only), and the bottom-left score keeps showing their last score under the death screen, which has its own kills and stats. Not changed by this.
 
 ## Risks / Trade-offs
 
-- **A killer's name is shortened more on a phone** (about 22px less for `⚔3`) → the name already truncates with an ellipsis, and the 360×640 and 640×360 checks assert nothing overflows. The kills are the more useful thing to keep.
-- **The emoji ⚔️ renders larger or in colour on some platforms** → it already does over heads; the row uses the same glyph, and a size is set so it doesn't change the row height (checked at both leaderboard sizes).
+- **Names are shorter on a phone** (the kills column takes about 30px) → the name truncates with an ellipsis; the owner can see whole names on desktop. The kills are the more useful thing to keep.
+- **A very big score overflows the phone column** (the 46px column fits up to about 50,000; 100,000 is a pixel too wide) → scores that high are practically unreachable (mass sheds above 10,000), and the test pins the 50,000 case.
+- **Less room for the name** (about 80px on desktop, 50px on phones) → names truncate with an ellipsis; the layout tests check nothing overlaps at desktop, tablet and phone sizes.
 - **Players who liked their own tag lose it** → their kills are at the bottom left and in their leaderboard row.
 
 ## Migration Plan

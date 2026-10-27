@@ -7,7 +7,7 @@ The `⚔N` reputation tag over the player's own head repeats the kills the HUD a
 ## What Changes
 
 - **The player's own worm shows no `⚔N` tag.** Their name stays over their head in the same yellow style.
-- **Leaderboard rows show kills.** A worm that has killed at least once shows `⚔N` between its name and its score; a worm with no kills shows nothing extra (the same "no kills yet, no tag" rule as over a head). This applies to the top 10 and to the player's own row below the gap. The panel keeps its width: the name gives way first (it already truncates with an ellipsis).
+- **The leaderboard gets columns.** Each row shows rank, name, **Kills** and **Score**, with a small header row naming the two number columns; the numbers are right-aligned and line up on every row, with no icons (an earlier idea, `⚔N` after the name, looked janky and unaligned on screen). A worm with no kills shows a quiet 0. The panel keeps its widths (220px, 160px on phones); the name gives way first.
 - **The bottom-left score area keeps only the big score** (and its SCORE label and Boost badge). The second line "Rank X of Y · Kills N" is removed, not hidden: the player's rank and kills are shown by their gold leaderboard row, which is always there while they are alive (in the top 10, or below the gap).
 - **Other worms are unchanged**: the `⚔N` tag over their heads, and the red-orange name of a bot holding a grudge, stay as they are.
 - The leaderboard rows have no requirement today, so the rows (rank, name, kills, score, own row highlighted) are written down.
@@ -15,7 +15,7 @@ The `⚔N` reputation tag over the player's own head repeats the kills the HUD a
 ### Out of scope
 
 - A threshold for the tag over other worms (for example only 3+ kills); a possible follow-up if it still feels noisy.
-- A fixed "kills" column, sorting by kills, or any new stat on the leaderboard.
+- Sorting by kills, or any new stat on the leaderboard.
 - The death screen and the stats screen, which keep their own kills and rank numbers.
 - The "of N" total (how many worms are alive) is dropped with the line; nothing replaces it.
 - Anything saved: kill counts are already saved with a world and nothing is added.
@@ -34,7 +34,7 @@ _None._
 
 - `main.js`: the name labels skip the `⚔` suffix for the player's own worm; `row()` adds the kills; `updateHud` no longer fills `#rank`, `#total` and `#kills`.
 - `index.html`: the "Rank X of Y · Kills N" line is removed from `#stats`.
-- `style.css`: the `#stats .line` rule goes; a small `.k` style for the kills in a row (it must not shrink away or widen the panel; the name truncates first), checked in the compact leaderboard (160px) too.
+- `style.css` and `index.html`: the leaderboard rows become a grid with a header row (Kills, Score); the panel width is one variable that the pause button follows; the `#stats .line` rule goes; the compact phone leaderboard gets tighter columns.
 - `tests/browser/tags.test.js`: the player's own label has no tag even with kills; the leaderboard shows the kills; the panel doesn't overflow at phone sizes.
 - `sw.js`: VERSION bump to 1.33.0 (a visible feature).
 - Nothing saved changes; `tests/fixtures/save-v1.json` is unaffected.

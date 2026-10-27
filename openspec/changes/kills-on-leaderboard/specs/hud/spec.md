@@ -3,26 +3,30 @@
 ## ADDED Requirements
 
 ### Requirement: Leaderboard rows
-Each leaderboard row SHALL show the worm's rank, its name and its mass as its score. The leaderboard SHALL list the top 10 worms. The player's own row SHALL be highlighted and, when the player is not in the top 10, shown below a gap.
+Each leaderboard row SHALL show the worm's rank, its name, its kills and its score, with the kills and the score in columns that are named by a header row ("Kills", "Score"). The columns SHALL have the same width on every row, so the numbers are aligned. The leaderboard SHALL list the top 10 worms. The player's own row SHALL be highlighted and, when the player is not in the top 10, shown below a gap.
 
 #### Scenario: The player outside the top 10
 - **WHEN** the player is ranked 14th
 - **THEN** the top 10 are listed, then a gap, then the player's highlighted row with rank 14
 
+#### Scenario: Numbers line up
+- **WHEN** the leaderboard is shown with worms whose kills and scores have different numbers of digits
+- **THEN** every row's kills end at the same position, every row's scores end at the same position, and the headers sit over them
+
 ### Requirement: Kills on the leaderboard
-A leaderboard row for a worm that has killed at least once SHALL show ⚔ and its total number of kills between its name and its score; a row for a worm that has never killed SHALL show no ⚔. Kills SHALL NOT make the leaderboard wider or push the score out of its row: a long name is shortened first.
+A leaderboard row SHALL show its worm's total number of kills as a plain number in the Kills column, with no icon. A worm that has never killed SHALL show 0, in a quieter colour. Kills SHALL NOT make the leaderboard wider or push the score out of its row: a long name is shortened first.
 
 #### Scenario: A killer in the top 10
 - **WHEN** a worm with three kills is in the top 10
-- **THEN** its row shows "⚔3" between its name and its score
+- **THEN** its row shows 3 under the Kills header
 
 #### Scenario: No kills yet
 - **WHEN** a worm in the leaderboard has never killed
-- **THEN** its row shows only its rank, name and score
+- **THEN** its row shows a quiet 0 under Kills
 
 #### Scenario: The player's own row
-- **WHEN** the player has two kills and is ranked 14th
-- **THEN** their highlighted row below the gap shows "⚔2" before their score
+- **WHEN** the player has two kills
+- **THEN** their highlighted row shows 2 under Kills, whether it is in the top 10 or below the gap
 
 #### Scenario: Long name with kills on a phone
 - **WHEN** a worm with a long name and kills is listed on a 360×640 or 640×360 screen
