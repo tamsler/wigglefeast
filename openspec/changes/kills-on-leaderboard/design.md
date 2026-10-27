@@ -43,7 +43,7 @@ The label code already knows the player (it colours that label yellow), so it sk
 
 ### D4. The "Rank · Kills" line is removed, not hidden
 
-`#rank`, `#total` and `#kills` are removed from `index.html`, their three lines from `updateHud`, and the `#stats .line` rule from `style.css`. Hiding it would leave dead markup and work every 0.15 s. The player's own row is always in the leaderboard while they are alive: in the top 10, or below the gap (the compact phone leaderboard hides rows 6+ except the player's own, `.me`). Two things are lost on purpose: the "of N" total (nobody was asked for it), and a visible "0" for kills, since a row shows `⚔N` only from the first kill, as over a head. The big score stays where the eyes are, because it is what moves as the player eats.
+`#rank`, `#total` and `#kills` are removed from `index.html`, their three lines from `updateHud`, and the `#stats .line` rule from `style.css`. Hiding it would leave dead markup and work every 0.15 s. The player's own row is always in the leaderboard while they are alive: in the top 10, or below the gap (the compact phone leaderboard hides rows 6+ except the player's own, `.me`). Two things are lost on purpose: the "of N" total (nobody was asked for it), and the visible "0" for kills in the score area; the leaderboard rows still show it, quietly (D1). The big score stays where the eyes are, because it is what moves as the player eats.
 
 ### D5. The dead player
 
