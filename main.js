@@ -2187,9 +2187,8 @@
     const lbStyle = getComputedStyle($('leaderboard'));
     scoreMeasure.font = `700 ${lbStyle.fontSize} ${lbStyle.fontFamily}`;
     const digit = scoreMeasure.measureText('0').width, comma = scoreMeasure.measureText(',').width;
-    const need = Math.max(...top.map((w) => w.mass), p.mass) >= 1e6 ? Math.round(p.mass).toLocaleString().length : 0;
     const widest = Math.max(...[...top.map((w) => w.mass), p.mass].map((m) => { const t = Math.round(m).toLocaleString(); return (t.length - (t.match(/,/g) || []).length) * digit + (t.match(/,/g) || []).length * comma; }));
-    $('leaderboard').style.setProperty('--lb-need', need ? `${Math.ceil(widest) + 2}px` : '0px');
+    $('leaderboard').style.setProperty('--lb-need', `${Math.ceil(widest) + 2}px`); // a floor only: the column is never narrower than its CSS minimum
   }
 
   // Power-up badges (#63): one per power-up type, built once in POWERUP_INFO order and synced

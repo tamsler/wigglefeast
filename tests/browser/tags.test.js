@@ -179,36 +179,39 @@ test('in a 150-bot world the real own row has a 3-digit rank and room for it (#1
 // Scores in the millions (#204) fit the score column, in full, at every layout: the column grows to the
 // longest score and the name gives up the room.
 for (const [label, opts, coarse] of SIZES) {
-  test(`the leaderboard shows scores up to 99,999,999 in full (${label}, #204)`, async (t) => {
-    let page;
-    t.after(() => page && page.close());
-    page = await launch(opts);
-    if (coarse) await page.coarsePointer();
-    await page.goto(gameUrl());
-    await page.startRun();
-    await page.eval(`(() => {
-      const g = window.__game, p = window.__player;
-      p.shield = 1e9; p.mass = 8765432;
-      const bots = g.worms.filter((w) => w.ai).sort((a, b) => b.mass - a.mass);
-      bots[0].mass = 99999999; bots[1].mass = 12345678; bots[2].mass = 4567;
-      for (const b of bots) b.shield = 1e9;
-    })()`);
-    await page.waitFor(`[...document.querySelectorAll('#lb .m')].some((e) => /^9\\d,\\d{3},\\d{3}$/.test(e.textContent))`, 'the leaderboard to show the big scores');
-    const m = await page.eval(`(() => {
-      const panel = document.getElementById('leaderboard').getBoundingClientRect();
-      const head = [...document.querySelectorAll('#lbHead span')];
-      const rows = [...document.querySelectorAll('#lb li:not(.gap)')].filter((li) => li.getBoundingClientRect().height > 0).map((li) => {
-        const k = li.querySelector('.k').getBoundingClientRect(), m = li.querySelector('.m'), mb = m.getBoundingClientRect(), n = li.querySelector('.n').getBoundingClientRect();
-        return { score: m.textContent, fits: m.scrollWidth <= m.clientWidth, clear: k.right <= mb.left + 0.5 && n.right <= k.left + 0.5, inside: mb.right <= panel.right, right: Math.round(mb.right), nameW: n.width };
-      });
-      return { rows, headRight: Math.round(head[3].getBoundingClientRect().right) };
-    })()`);
-    assert.ok(m.rows.length >= 3, `${m.rows.length} rows`);
-    for (const r of m.rows) {
-      assert.ok(r.fits && r.clear && r.inside, `${r.score} is clipped or overlaps: ${JSON.stringify(r)}`);
-      assert.ok(r.nameW >= 12, `${r.score}: only ${r.nameW.toFixed(0)}px is left for the name`); // a name is cut short, never the score
-    }
-    assert.equal(new Set(m.rows.map((r) => r.right)).size, 1, `scores line up: ${m.rows.map((r) => r.right)}`);
-    assert.equal(m.headRight, m.rows[0].right, 'the Score header sits over the scores');
-  });
+  // Six-digit scores are common once giants start at 20,000 and big worms grow fast; eight-digit ones are the widest.
+  for (const [what, top, second, pattern] of [['six digits', 999999, 123456, '^\\d{3},\\d{3}$'], ['eight digits', 99999999, 12345678, '^9\\d,\\d{3},\\d{3}$']]) {
+    test(`the leaderboard shows ${what} in full (${label}, #204)`, async (t) => {
+      let page;
+      t.after(() => page && page.close());
+      page = await launch(opts);
+      if (coarse) await page.coarsePointer();
+      await page.goto(gameUrl());
+      await page.startRun();
+      await page.eval(`(() => {
+        const g = window.__game, p = window.__player;
+        p.shield = 1e9; p.mass = ${Math.floor(top / 2)};
+        const bots = g.worms.filter((w) => w.ai).sort((a, b) => b.mass - a.mass);
+        bots[0].mass = ${top}; bots[1].mass = ${second}; bots[2].mass = 4567;
+        for (const b of bots) b.shield = 1e9;
+      })()`);
+      await page.waitFor(`[...document.querySelectorAll('#lb .m')].some((e) => /${pattern}/.test(e.textContent))`, 'the leaderboard to show the big scores');
+      const m = await page.eval(`(() => {
+        const panel = document.getElementById('leaderboard').getBoundingClientRect();
+        const head = [...document.querySelectorAll('#lbHead span')];
+        const rows = [...document.querySelectorAll('#lb li:not(.gap)')].filter((li) => li.getBoundingClientRect().height > 0).map((li) => {
+          const k = li.querySelector('.k').getBoundingClientRect(), m = li.querySelector('.m'), mb = m.getBoundingClientRect(), n = li.querySelector('.n').getBoundingClientRect();
+          return { score: m.textContent, fits: m.scrollWidth <= m.clientWidth, clear: k.right <= mb.left + 0.5 && n.right <= k.left + 0.5, inside: mb.right <= panel.right, right: Math.round(mb.right), nameW: n.width };
+        });
+        return { rows, headRight: Math.round(head[3].getBoundingClientRect().right) };
+      })()`);
+      assert.ok(m.rows.length >= 3, `${m.rows.length} rows`);
+      for (const r of m.rows) {
+        assert.ok(r.fits && r.clear && r.inside, `${r.score} is clipped or overlaps: ${JSON.stringify(r)}`);
+        assert.ok(r.nameW >= 12, `${r.score}: only ${r.nameW.toFixed(0)}px is left for the name`); // a name is cut short, never the score
+      }
+      assert.equal(new Set(m.rows.map((r) => r.right)).size, 1, `scores line up: ${m.rows.map((r) => r.right)}`);
+      assert.equal(m.headRight, m.rows[0].right, 'the Score header sits over the scores');
+    });
+  }
 }
