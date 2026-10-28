@@ -14,6 +14,7 @@
     magnet: { icon: '🧲', label: 'Magnet', color: '#ff4d6d' },
     x2: { icon: 'x2', label: 'Double food', color: '#ffd60a' },
     x5: { icon: 'x5', label: 'Food x5', color: '#ff9f1c' },
+    x10: { icon: 'x10', label: 'Food x10', color: '#ff4d9d' },
     speed: { icon: '⚡', label: 'Free boost', color: '#4cc9f0' },
     zoom: { icon: '🔭', label: 'Zoom out', color: '#b388ff' },
     turn: { icon: '🌀', label: 'Tight turns', color: '#8ac926' },
@@ -2166,6 +2167,7 @@
     $('boostBadge').classList.toggle('hidden', !show);
   }
 
+  const scoreMeasure = document.createElement('canvas').getContext('2d');
   function updateHud(dt) {
     hudT -= dt;
     if (hudT > 0 || mode === 'menu') return;
@@ -2180,6 +2182,14 @@
     top.forEach((w, i) => { html += row(i + 1, w, w === p); });
     if (!p.dead && !top.includes(p)) html += `<li class="gap">···</li>` + row(game.rankOf(p), p, true);
     $('lb').innerHTML = html;
+    // The score column is as wide as the longest score shown, so a score in the millions fits (#204).
+    // Measured in px with the board's own bold font (not ch: the header row's font is smaller, and its columns must match the rows').
+    const lbStyle = getComputedStyle($('leaderboard'));
+    scoreMeasure.font = `700 ${lbStyle.fontSize} ${lbStyle.fontFamily}`;
+    const digit = scoreMeasure.measureText('0').width, comma = scoreMeasure.measureText(',').width;
+    const need = Math.max(...top.map((w) => w.mass), p.mass) >= 1e6 ? Math.round(p.mass).toLocaleString().length : 0;
+    const widest = Math.max(...[...top.map((w) => w.mass), p.mass].map((m) => { const t = Math.round(m).toLocaleString(); return (t.length - (t.match(/,/g) || []).length) * digit + (t.match(/,/g) || []).length * comma; }));
+    $('leaderboard').style.setProperty('--lb-need', need ? `${Math.ceil(widest) + 2}px` : '0px');
   }
 
   // Power-up badges (#63): one per power-up type, built once in POWERUP_INFO order and synced

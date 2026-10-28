@@ -14,7 +14,7 @@ test('every level has a full tactic table: none on easy, all on hard (#78, #177)
   assert.ok(TACTICS.every((k) => DIFFICULTY.hard.tactics[k] === 1), 'hard knows everything');
   assert.equal(DIFFICULTY.normal.tactics.coil + DIFFICULTY.normal.tactics.flank, 0, 'normal bots never coil or flank');
   const masses = [];
-  for (let i = 0; i < 6; i++) masses.push(...new Game({ botCount: 60, difficulty: 'hard' }).worms.map((w) => w.mass));
+  for (let i = 0; i < 6; i++) masses.push(...new Game({ botCount: 60, difficulty: 'hard' }).worms.map((w) => w.mass).filter((m) => m < CFG.GIANT_MIN_MASS)); // the giants are counted in 'starting giants' (#204)
   const big = masses.filter((m) => m >= 400).length / masses.length;
   assert.ok(Math.abs(big - DIFFICULTY.hard.bigShare) < 0.08, `${(big * 100).toFixed(0)}% of hard bots start big`);
   assert.ok(Math.max(...masses) <= DIFFICULTY.hard.bigMax);
@@ -488,7 +488,7 @@ test('only hard is sharp, and only hard starts with more and bigger large bots (
   const big = DIFFICULTIES.map((l) => [DIFFICULTY[l].bigShare, DIFFICULTY[l].bigMax]);
   assert.deepEqual(big, [[0.1, 1200], [0.15, 2000], [0.35, 5000]]);
   const masses = [];
-  for (let seed = 1; seed <= 6; seed++) masses.push(...new Game({ botCount: 60, difficulty: 'hard' }, null, { seed }).worms.map((w) => w.mass));
+  for (let seed = 1; seed <= 6; seed++) masses.push(...new Game({ botCount: 60, difficulty: 'hard' }, null, { seed }).worms.map((w) => w.mass).filter((m) => m < CFG.GIANT_MIN_MASS));
   const share = masses.filter((m) => m >= 400).length / masses.length;
   assert.ok(Math.abs(share - 0.35) < 0.08, `${(share * 100).toFixed(0)}% start large`);
   assert.ok(Math.max(...masses) <= 5000 && Math.max(...masses) > 3000, `largest ${Math.round(Math.max(...masses))}`);

@@ -40,6 +40,7 @@ test('minimap shows density', async (t) => {
     const g = window.__game, R = g.R, p = window.__player, { place } = window.__mini;
     const bots = g.worms.filter((w) => w.ai).sort((a, b) => b.mass - a.mass);
     const big = bots[0];
+    for (const w of bots.slice(1)) { w.mass = Math.min(w.mass, 200); w.r = 12; } // the starting giants would lead and smear the shading (#204); paused, so the radius is set by hand
     big.mass = 20000; big.r = 50;
     g.updateLeaderboard();
     bots.slice(1).forEach((w) => place(w, R * 0.5, R * 0.5, 500));
