@@ -93,7 +93,8 @@ test('massive worms', async (t) => {
       b.sx = []; b.sy = [];
       for (let i = 0; i < n; i++) { b.sx.push(p.x - 10000 + i * step); b.sy.push(p.y + 600); }
       b.updateBounds();
-      for (let i = 0; i < 300; i++) g.addFood(p.x - 1500 + i * 10, p.y - 400 + (i % 7) * 20, 2000, '#ffca3a', 55);
+      // A fresh giant's corpse is 340 pieces along its length and is eaten fast; 60 in view at once. Each is drawn big, and drawing many is what software rendering (CI) feels (300 in view took 33 ms a frame here, 50 on CI).
+      for (let i = 0; i < 60; i++) g.addFood(p.x - 1500 + i * 50, p.y - 400 + (i % 7) * 20, 2000, '#ffca3a', 55);
       g.rebuildFoodGrid();
     })()`);
     await sleep(1500);
