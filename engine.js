@@ -5,8 +5,9 @@
   const CFG = {
     BASE_SPEED: 230,
     BOOST_MULT: 2.1,
-    BOOST_COST_BASE: 1.5, // boosting costs BASE + SHARE of mass per second; 60% of it drops as food (#125)
-    BOOST_COST_SHARE: 0.005,
+    BOOST_COST_BASE: 1.5, // boosting costs BASE + SHARE of mass per second, at most MAX; 60% of it drops as food (#125, #204)
+    BOOST_COST_SHARE: 0.0025,
+    BOOST_COST_MAX: 150,
     START_MASS: 15,
     MIN_BOOST_MASS: 12,
     CELL: 96,
@@ -19,9 +20,9 @@
     POWERUP_REACH: 60, // power-ups slide toward heads this far beyond the head's edge (just past their glow)
     MAGNET_REACH: 230, // extra pull range for food and power-ups while the magnet runs
     SPAWN_SHIELD: 2.5,
-    // Very large worms shed mass so nobody grows forever: SHED_RATE of the mass above
-    // SHED_ABOVE per second. Late and gentle, so a worm that keeps winning can grow massive (#82).
-    SHED_ABOVE: 10000,
+    // Enormous worms shed mass so nobody grows forever: SHED_RATE of the mass above
+    // SHED_ABOVE per second. Late and gentle, so a worm that keeps winning can grow into the millions (#82, #204).
+    SHED_ABOVE: 2000000,
     SHED_RATE: 0.002,
     REMAINS_TIME: 60, // longest scavenging bots remember remains: as long as a remains pellet lives (#78, #122)
     REMAINS_REFRESH: 0.25, // seconds between re-counting what is left of each worm's remains (#122)
@@ -43,6 +44,19 @@
     SPECIAL_LIFE: 20,
     SPECIAL_BLINK: 4, // seconds of blinking before one vanishes
     SPECIAL_R: 16, // pickup radius
+    // Big worms get more out of arena food (#204): its value times (mass / GROWTH_FROM) ^ GROWTH_POWER above GROWTH_FROM,
+    // so a worm that keeps surviving snowballs (0.4 left the largest bot near 100,000 after 30 minutes, 0.8 ran away to
+    // MAX_MASS). Food dropped by worms and special food are never scaled, so no mass is made from a corpse.
+    GROWTH_FROM: 1000,
+    GROWTH_POWER: 0.6,
+    // Starting giants (#204): a new world's first GIANT_MIN bots (more in big worlds, see giantCount) start at
+    // GIANT_MIN_MASS up to the level's giantMax, so there is something huge to look up to from the first minute.
+    GIANT_MIN: 3,
+    GIANT_PER_BOTS: 10,
+    GIANT_MIN_MASS: 20000,
+    // A new worm's body is laid out behind its head up to this long; the rest grows on as it moves, so a giant's
+    // body neither piles into a ball nor leaves a small arena (#204).
+    BODY_LAYOUT_MAX: 5000,
   };
 
   const TAU = Math.PI * 2;
@@ -80,15 +94,22 @@
   }
 
   // Size curves: everything derives from mass.
-  // Above MASSIVE a worm grows mostly thicker: its length grows more slowly, and its radius
-  // keeps growing up to 90, so a massive worm looks massive without walling off the arena (#82).
-  const MASSIVE = 10000;
-  const radiusFor = (m) => Math.min(90, 9 + 2.2 * Math.pow(Math.max(m, 1), 0.3));
+  // Above MASSIVE a worm grows mostly thicker: its length grows more slowly, and above GIANT more
+  // slowly still, while its radius keeps growing up to 300, so a massive worm looks massive without
+  // walling off the arena (#82). A 1,000,000 worm is about 20,700 long, under a 30-bot arena's circumference (#204).
+  const MASSIVE = 10000, GIANT = 100000;
+  const lengthAtMassive = 40 + 9 * Math.pow(MASSIVE, 0.72);
+  const lengthAtGiant = lengthAtMassive * Math.pow(GIANT / MASSIVE, 0.4);
+  const radiusFor = (m) => Math.min(300, 9 + 2.2 * Math.pow(Math.max(m, 1), 0.3));
   const lengthFor = (m) => (m <= MASSIVE ? 40 + 9 * Math.pow(Math.max(m, 1), 0.72)
-    : (40 + 9 * Math.pow(MASSIVE, 0.72)) * Math.pow(m / MASSIVE, 0.4));
+    : m <= GIANT ? lengthAtMassive * Math.pow(m / MASSIVE, 0.4)
+    : lengthAtGiant * Math.pow(m / GIANT, 0.08));
   const spacingFor = (r) => r * 0.42;
   const turnRateFor = (r) => 5.4 / (1 + (r - 14) / 45);
-  const foodRadius = (v) => Math.min(20, 3 + Math.sqrt(v) * 2.4);
+  // Pellets under 50 are drawn as ever (up to 20); a giant's big remains keep growing slowly, up to 60 (#204).
+  // What big worms get extra from arena food (#204).
+  const growthBonus = (m) => (m <= CFG.GROWTH_FROM ? 1 : Math.pow(m / CFG.GROWTH_FROM, CFG.GROWTH_POWER));
+  const foodRadius = (v) => (v < 50 ? Math.min(20, 3 + Math.sqrt(v) * 2.4) : Math.min(60, 20 + 18 * Math.log10(v / 50)));
 
   const SKINS = [
     { name: 'Cherry Pop', colors: ['#ff595e', '#ffca3a'] },
@@ -154,7 +175,7 @@
   // Save files written before the rename used 'worm-arena'; both load fine.
   const SAVE_APP_IDS = ['wigglefeast', 'worm-arena'];
 
-  const POWERUP_WEIGHTS = { magnet: 30, x2: 22, x5: 5, speed: 20, zoom: 14, turn: 14 };
+  const POWERUP_WEIGHTS = { magnet: 30, x2: 22, x5: 5, x10: 2, speed: 20, zoom: 14, turn: 14 };
 
   // Special food kinds (#143): value in mass and spawn weight. Only append.
   const SPECIALS = {
@@ -173,21 +194,21 @@
   // Per difficulty (#16). skill: look-ahead, reaction time and steering precision.
   // aggro: how often and how far a bot hunts. preyRatio: it hunts worms lighter than this
   // times its own mass. bigShare: share of the bots in a new world that start large, at
-  // up to bigMax mass; the rest start small. tactics: share of bots that know each tactic.
+  // up to bigMax mass; the rest start small. giantMax: the top of the starting giants' mass (#204). tactics: share of bots that know each tactic.
   // sharp (hard only, #110): sharper than skill allows, applied when a bot thinks, so nothing
   // is saved. think: re-plan delay x; look: look-ahead x; dense: check the winning heading
   // closely (1/0); headings: candidates x; sense: threat-sensing range x; heads: heads tracked;
   // escape: steer clear of every cutter, not only the nearest (1/0); reach: before boosting, check the
   // turn a boost would really take (1/0, #149). 1 (or 8 heads) is off.
   const DIFFICULTY = {
-    easy: { skill: [0.12, 0.45], aggro: [0.0, 0.35], preyRatio: 1, bigShare: 0.1, bigMax: 1200, tactics: tactics({}) },
+    easy: { skill: [0.12, 0.45], aggro: [0.0, 0.35], preyRatio: 1, bigShare: 0.1, bigMax: 1200, giantMax: 35000, tactics: tactics({}) },
     normal: {
-      skill: [0.35, 0.8], aggro: [0.1, 0.65], preyRatio: 1.3, bigShare: 0.15, bigMax: 2000,
+      skill: [0.35, 0.8], aggro: [0.1, 0.65], preyRatio: 1.3, bigShare: 0.15, bigMax: 2000, giantMax: 55000,
       tactics: tactics({ predict: 0.5, anticipate: 0.3, evade: 0.3, headOn: 0.2, scavenge: 0.3, read: 0.2 }),
     },
     // Hard is what was Expert until there were three levels (#177); the old Hard is gone.
     hard: {
-      skill: [0.85, 1.0], aggro: [0.6, 1.0], preyRatio: 2, bigShare: 0.35, bigMax: 5000,
+      skill: [0.85, 1.0], aggro: [0.6, 1.0], preyRatio: 2, bigShare: 0.35, bigMax: 5000, giantMax: 80000,
       tactics: tactics(Object.fromEntries(TACTICS.map((k) => [k, 1]))),
       sharp: { think: 0.7, look: 1.25, dense: 1, headings: 1.3, sense: 1.4, heads: 12, escape: 1, reach: 1 },
     },
@@ -213,11 +234,13 @@
 
   // Limits shared by save validation and the simulation, so a world loaded from a
   // valid save can never grow into one that fails validation (#31).
-  const MAX_MASS = 1e6; // ~1,150 body segments (#82); normal play stays far below (mass sheds above 10,000)
+  const MAX_MASS = 1e8; // a hard backstop; mass sheds above 2,000,000, so normal play stays far below (#204)
   const MAX_SEGMENTS = 20000;
   const MAX_FOOD = 50000;
   const MAX_ID = 1e9;
   const MIN_BOTS = 5, MAX_BOTS = 150; // #81
+  // How many of a new world's bots start as giants: 3, or one per 10 bots, never more than all but two (#204).
+  const giantCount = (bots) => Math.min(bots - 2, Math.max(CFG.GIANT_MIN, Math.round(bots / CFG.GIANT_PER_BOTS)));
 
   // Arena radius for a bot count: 1800 + 60 per bot up to 60 bots (worlds made before #81
   // keep their size); above that the area grows in proportion, so each bot keeps the same room.
@@ -290,7 +313,7 @@
       if (w.dropAcc < 0 || w.dropAcc > 1000) fail('worm dropAcc');
       if (![w.kills, w.eaten].every((v) => Number.isInteger(v) && v >= 0 && v <= 1e9)) fail('worm counters');
       if (w.born < 0 || w.born > snap.time) fail('worm born'); // a run can't start after the save
-      if (!inRange(w.peak, 0, 1e7) || !inRange(w.shield, 0, 1e6)) fail('worm peak or shield');
+      if (!inRange(w.peak, 0, MAX_MASS) || !inRange(w.shield, 0, 1e6)) fail('worm peak or shield');
       if (!finArr(w.sx, MAX_SEGMENTS) || !finArr(w.sy, MAX_SEGMENTS) || w.sx.length !== w.sy.length || w.sx.length < 2 ||
         !w.sx.every(coord) || !w.sy.every(coord)) fail('worm body');
       if (!isObj(w.pw) || Object.keys(w.pw).some((k) => !has(POWERUP_WEIGHTS, k) || !inRange(w.pw[k], 0, 1e6))) fail('worm power-ups');
@@ -308,8 +331,8 @@
     const F = snap.food;
     if (!finArr(F, 7 * MAX_FOOD) || F.length % 7 !== 0) fail('food');
     for (let i = 0; i < F.length; i += 7) {
-      // Value >= 0.01 so it can't round to 0 when saved again; life is -1 (natural food) or a timer.
-      if (!coord(F[i]) || !coord(F[i + 1]) || F[i + 2] < 0.01 || F[i + 2] > 1e6 ||
+      // Value >= 0.01 so it can't round to 0 when saved again (a giant's remains are worth thousands, #204); life is -1 (natural food) or a timer.
+      if (!coord(F[i]) || !coord(F[i + 1]) || F[i + 2] < 0.01 || F[i + 2] > 1e7 ||
         !(F[i + 4] === -1 || inRange(F[i + 4], 0, 1e6)) || !inRange(F[i + 5], -1e6, 1e6)) fail('food values');
     }
     if (!Array.isArray(snap.powerups) || snap.powerups.length > 500 ||
@@ -388,7 +411,7 @@
       this.eaten = o.eaten || 0;
       this.dropAcc = o.dropAcc || 0;
       this.shield = o.shield || 0;
-      this.pw = Object.assign({ magnet: 0, x2: 0, x5: 0, speed: 0, zoom: 0, turn: 0 }, o.pw);
+      this.pw = Object.assign({ magnet: 0, x2: 0, x5: 0, x10: 0, speed: 0, zoom: 0, turn: 0 }, o.pw);
       this.ai = o.ai || null;
       const rng = o.rng || Math.random; // the world's random numbers; Math.random outside a Game
       this.thinkT = rng() * 0.3;
@@ -405,7 +428,7 @@
 
       // Lay the body out behind the head, curling away from the wall.
       const sp = spacingFor(this.r);
-      const n = Math.max(6, Math.ceil(lengthFor(this.mass) / sp));
+      const n = Math.max(6, Math.ceil(Math.min(lengthFor(this.mass), CFG.BODY_LAYOUT_MAX) / sp));
       const lim = o.worldR * 0.85;
       this.sx = new Array(n);
       this.sy = new Array(n);
@@ -424,7 +447,7 @@
 
     get x() { return this.sx[0]; }
     get y() { return this.sy[0]; }
-    get multiplier() { return this.pw.x5 > 0 ? 5 : this.pw.x2 > 0 ? 2 : 1; }
+    get multiplier() { return this.pw.x10 > 0 ? 10 : this.pw.x5 > 0 ? 5 : this.pw.x2 > 0 ? 2 : 1; }
     // Colour of the food dropped at segment i: the skin's food colours, banded like stripes.
     stripeColor(i) { const c = this.skin.food; return c[Math.floor(i / 3) % c.length]; }
 
@@ -448,7 +471,7 @@
         if (pw.speed > 0) this.boosting = true;
         else if (this.mass > CFG.MIN_BOOST_MASS) {
           this.boosting = true;
-          const drain = (CFG.BOOST_COST_BASE + this.mass * CFG.BOOST_COST_SHARE) * dt;
+          const drain = Math.min(CFG.BOOST_COST_BASE + this.mass * CFG.BOOST_COST_SHARE, CFG.BOOST_COST_MAX) * dt;
           this.mass -= drain;
           this.dropAcc += drain * 0.6;
         }
@@ -1382,7 +1405,8 @@
       else {
         for (let i = 0; i < this.foodTarget; i++) this.spawnNaturalFood();
         for (let i = 0; i < this.powerupTarget; i++) this.spawnPowerup();
-        for (let i = 0; i < bc; i++) this.spawnBot(true);
+        const giants = giantCount(bc);
+        for (let i = 0; i < bc; i++) this.spawnBot(true, i < giants);
       }
       this.rebuildSegGrid();
       this.rebuildFoodGrid();
@@ -1478,7 +1502,7 @@
     spawnNaturalFood() {
       if (this.food.length >= MAX_FOOD) return;
       const p = randomInCircle(this.rng, this.R - 30);
-      const v = weighted(this.rng, { 1: 55, 2: 30, 4: 12, 8: 3 }) | 0;
+      const v = weighted(this.rng, { 1: 52, 2: 30, 4: 12, 10: 6 }) | 0;
       this.food.push({ x: p.x, y: p.y, v, r: foodRadius(v), c: pick(this.rng, FOOD_COLORS), life: Infinity, ph: rand(this.rng, 0, TAU), dead: false, natural: true });
       this.naturalFood++;
     }
@@ -1525,12 +1549,13 @@
       return pick(this.rng, BOT_NAMES) + ' ' + Math.floor(rand(this.rng, 2, 99));
     }
 
-    spawnBot(initial) {
+    spawnBot(initial, giant = false) {
       const d = DIFFICULTY[this.settings.difficulty] || DIFFICULTY.normal;
       const skill = rand(this.rng, d.skill[0], d.skill[1]);
       // A new world starts mostly small, with a few large bots (bigShare) to look up to (#16).
-      const big = initial && this.rng() < d.bigShare;
-      const mass = big ? 400 + Math.pow(this.rng(), 2) * (d.bigMax - 400)
+      const big = initial && !giant && this.rng() < d.bigShare;
+      const mass = giant ? rand(this.rng, CFG.GIANT_MIN_MASS, d.giantMax)
+        : big ? 400 + Math.pow(this.rng(), 2) * (d.bigMax - 400)
         : initial ? CFG.START_MASS + Math.pow(this.rng(), 2) * 185
         : CFG.START_MASS + rand(this.rng, 0, 25);
       const p = this.findSpawnPoint(300);
@@ -1710,7 +1735,7 @@
             f.dead = true;
             // x2/x5 multiply natural food only: on food dropped by worms they made mass from
             // nothing, and the worm that ate a big corpse with x5 grew without limit (#16).
-            w.mass = Math.min(MAX_MASS, w.mass + f.v * (f.natural ? mult : 1));
+            w.mass = Math.min(MAX_MASS, w.mass + f.v * (f.natural ? mult * growthBonus(w.mass) : 1));
             w.eaten++;
             if (w.isPlayer) this.emit('eat', { worm: w, r: f.r }); // for the eating sound (#9); bots stay silent
           } else {
@@ -1893,8 +1918,8 @@
   }
 
   root.WormEngine = {
-    CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, MIN_BOTS, MAX_BOTS, arenaRadius, DIFFICULTY, DIFFICULTIES, difficultyOf, TACTICS, SPECIALS, validateSnapshot, seasonalTheme,
+    CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, MIN_BOTS, MAX_BOTS, arenaRadius, giantCount, DIFFICULTY, DIFFICULTIES, difficultyOf, TACTICS, SPECIALS, validateSnapshot, seasonalTheme,
     freshHabits, validHabits, recordHabit, habitBias, habitBoost,
-    Game, Worm, botThink, knowsTactic, predictHead, reachPath, reachAt, freedom, radiusFor, lengthFor, angleDiff, TAU,
+    Game, Worm, botThink, knowsTactic, predictHead, reachPath, reachAt, freedom, radiusFor, lengthFor, foodRadius, angleDiff, TAU,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

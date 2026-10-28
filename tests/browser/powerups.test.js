@@ -35,7 +35,7 @@ test('power-ups in the HUD', async (t) => {
 
   await t.test('badges keep a fixed order (#63)', async () => {
     assert.deepEqual(await page.eval(`[...document.querySelectorAll('#powerups .badge')].map((b) => b.dataset.type)`),
-      ['magnet', 'x2', 'x5', 'speed', 'zoom', 'turn']);
+      ['magnet', 'x2', 'x5', 'x10', 'speed', 'zoom', 'turn']);
   });
 
   await t.test('a fresh power-up has a full ring that drains (#63)', async () => {
@@ -76,7 +76,7 @@ test('badges are labelled for screen readers and the minimap is drawn at its dis
   await page.goto(gameUrl());
   await page.startRun();
   assert.deepEqual(await page.eval(`[...document.querySelectorAll('#powerups .badge')].map((b) => b.getAttribute('role') + ':' + b.getAttribute('aria-label'))`),
-    ['img:Magnet', 'img:Double food', 'img:Food x5', 'img:Free boost', 'img:Zoom out', 'img:Tight turns']);
+    ['img:Magnet', 'img:Double food', 'img:Food x5', 'img:Food x10', 'img:Free boost', 'img:Zoom out', 'img:Tight turns']);
   await page.frames(3);
   const m = await page.eval(`(() => { const c = document.getElementById('minimap'); return [c.width, Math.round(c.clientWidth * Math.min(2, devicePixelRatio))]; })()`);
   assert.equal(m[0], m[1], 'minimap canvas matches its displayed size');

@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 require('../engine.js');
-const { Game, Worm, SKINS, PICKABLE_SKINS, DIFFICULTY, DIFFICULTIES, difficultyOf, MAX_BOTS, arenaRadius, CFG, radiusFor, lengthFor, botThink, validateSnapshot } = globalThis.WormEngine;
+const { Game, Worm, SKINS, PICKABLE_SKINS, DIFFICULTY, DIFFICULTIES, difficultyOf, MAX_BOTS, arenaRadius, giantCount, SPECIALS, CFG, radiusFor, lengthFor, botThink, validateSnapshot, foodRadius } = globalThis.WormEngine;
 const { clone, fixture, simulate, withFood, scene, hunt, withTactics } = require('./helpers/engine.js');
 
 test('a saved world restores and keeps running', () => {
@@ -63,7 +63,7 @@ test('real saves pass validation and malformed ones are rejected', () => {
       // Finite but extreme values (#31)
       'heading that overflows to NaN': (s) => { s.worms[0].angle = 1e308; s.worms[0].targetAngle = -1e308; },
       'body far outside the arena': (s) => { s.worms[0].sx[0] = 1e300; },
-      'mass that outgrows the body limit': (s) => { s.worms[0].mass = 1e7; },
+      'mass that outgrows the body limit': (s) => { s.worms[0].mass = 2e8; },
       'huge dropAcc': (s) => { s.worms[0].dropAcc = 2e6; },
       'bot skill out of range': (s) => { s.worms.find((w) => w.ai).ai.skill = 1e6; },
       'bot thinking every step': (s) => { s.worms.find((w) => w.ai).ai.interval = 0; },
@@ -129,13 +129,13 @@ test('a world loaded from a valid save keeps producing valid saves (#31)', () =>
   // Mass at the limit: eating more must not grow the worm past it.
   const big = fixture().world;
   const p = big.worms.find((w) => w.isPlayer);
-  p.mass = 1e6;
+  p.mass = 1e8;
   p.pw.x5 = 10;
   p.shield = 10;
-  big.food.push(p.sx[0], p.sy[0], 1e6, 0, -1, 0, 1);
+  big.food.push(p.sx[0], p.sy[0], 1e7, 0, -1, 0, 1);
   const g2 = new Game(null, big);
   for (let i = 0; i < 5; i++) g2.update(1 / 60);
-  assert.ok(g2.player && g2.player.mass <= 1e6, 'mass capped');
+  assert.ok(g2.player && g2.player.mass <= 1e8, 'mass capped');
   assert.doesNotThrow(() => validateSnapshot(clone(g2)), 'big worm still saves');
 });
 
@@ -311,7 +311,7 @@ test('a new world starts mostly small, with fewer big bots on easier levels (#16
   const bigShare = {};
   for (const difficulty of ['easy', 'normal', 'hard']) {
     const masses = [];
-    for (let i = 0; i < 6; i++) masses.push(...new Game({ botCount: 60, difficulty }).worms.map((w) => w.mass));
+    for (let i = 0; i < 6; i++) masses.push(...new Game({ botCount: 60, difficulty }).worms.map((w) => w.mass).filter((m) => m < CFG.GIANT_MIN_MASS)); // not the starting giants (#204)
     masses.sort((a, b) => a - b);
     const big = masses.filter((m) => m >= 400).length / masses.length;
     const { bigShare: want, bigMax } = DIFFICULTY[difficulty];
@@ -323,6 +323,72 @@ test('a new world starts mostly small, with fewer big bots on easier levels (#16
     bigShare[difficulty] = want;
   }
   assert.ok(bigShare.easy < bigShare.normal && bigShare.normal < bigShare.hard);
+});
+
+test('a new world starts with giants: 3, or one per 10 bots, bigger on harder levels (#204)', () => {
+  assert.deepEqual([5, 10, 30, 60, 150].map(giantCount), [3, 3, 3, 6, 15]);
+  const giants = (bots, difficulty, seed) => new Game({ botCount: bots, difficulty }, null, { seed }).worms.filter((w) => w.ai && w.mass >= CFG.GIANT_MIN_MASS);
+  for (const [bots, want] of [[5, 3], [30, 3], [150, 15]]) {
+    for (const difficulty of ['easy', 'normal', 'hard']) assert.equal(giants(bots, difficulty, 5).length, want, `${bots} bots on ${difficulty}`);
+  }
+  const top = {};
+  for (const difficulty of DIFFICULTIES) {
+    let max = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      for (const w of giants(30, difficulty, seed)) {
+        assert.ok(w.mass >= 20000 && w.mass <= DIFFICULTY[difficulty].giantMax, `${difficulty}: a giant of ${Math.round(w.mass)}`);
+        max = Math.max(max, w.mass);
+      }
+    }
+    top[difficulty] = max;
+  }
+  assert.deepEqual(DIFFICULTIES.map((d) => DIFFICULTY[d].giantMax), [35000, 55000, 80000]);
+  assert.ok(top.easy < top.normal && top.normal < top.hard, JSON.stringify(top));
+  // Everyone else starts as before, the player included, and replacements are small.
+  const g = new Game({ botCount: 30, difficulty: 'normal' }, null, { seed: 3 });
+  assert.ok(g.worms.filter((w) => w.ai && w.mass < CFG.GIANT_MIN_MASS).every((w) => w.mass <= DIFFICULTY.normal.bigMax));
+  const initial = new Set(g.worms.map((w) => w.id));
+  g.kill(g.worms.find((w) => w.ai && w.mass >= CFG.GIANT_MIN_MASS), null);
+  for (let i = 0; i < 5 * 60; i++) g.update(1 / 60);
+  const fresh = g.worms.filter((w) => !initial.has(w.id));
+  assert.ok(fresh.length > 0, 'a replacement spawned');
+  assert.ok(fresh.every((w) => w.mass < 200), 'replacements are small, never giants');
+  // A saved world keeps what it had: loading adds no giants.
+  const saved = clone(new Game({ botCount: 30, difficulty: 'normal' }, null, { seed: 4 }));
+  for (const w of saved.worms) if (w.ai) w.mass = 100;
+  const back = new Game(null, saved);
+  assert.equal(back.worms.filter((w) => w.ai && w.mass >= CFG.GIANT_MIN_MASS).length, 0);
+});
+
+test('a giant starts with a body that fits the arena and grows to full length as it moves (#204)', () => {
+  const g = new Game({ botCount: 5, difficulty: 'hard' }, null, { seed: 2 });
+  const giant = g.worms.find((w) => w.ai && w.mass >= CFG.GIANT_MIN_MASS);
+  assert.ok(giant, 'a giant');
+  for (let i = 0; i < giant.sx.length; i++) assert.ok(Math.hypot(giant.sx[i], giant.sy[i]) <= g.R, `segment ${i} is inside the arena`);
+  assert.ok(giant.sx.length * (giant.r * 0.42) <= CFG.BODY_LAYOUT_MAX + giant.r, 'a short body at first');
+  assert.equal(giant.r, radiusFor(giant.mass), 'as thick as its mass calls for from the start');
+  giant.shield = 1e9;
+  for (let i = 0; i < 60 * 60; i++) g.update(1 / 60);
+  const full = Math.ceil(lengthFor(giant.mass) / (giant.r * 0.42));
+  assert.ok(Math.abs(giant.sx.length - full) <= 2, `${giant.sx.length} segments, want ${full}`);
+  // Ordinary worms are laid out as before: the whole length, curled behind the head.
+  const w = new Worm({ name: 'Plain', skin: SKINS[0], mass: 3000, x: 0, y: 0, angle: 0, worldR: 3600 });
+  assert.equal(w.sx.length, Math.ceil(lengthFor(3000) / (radiusFor(3000) * 0.42)));
+});
+
+test('the player never spawns inside a giant, and a 150-bot world with 15 giants starts fast (#204)', () => {
+  for (let seed = 1; seed <= 60; seed++) {
+    const g = new Game({ botCount: 5 + (seed % 3) * 30, difficulty: 'hard' }, null, { seed });
+    const p = g.spawnPlayer('Tester', 0);
+    for (const o of g.worms) {
+      if (o === p) continue;
+      for (let i = 0; i < o.sx.length; i++) assert.ok(Math.hypot(o.sx[i] - p.sx[0], o.sy[i] - p.sy[0]) > p.r + o.r, `seed ${seed}: ${o.name} at ${Math.round(o.mass)}`);
+    }
+  }
+  const t0 = Date.now();
+  const big = new Game({ botCount: 150, difficulty: 'hard' }, null, { seed: 1 });
+  assert.ok(Date.now() - t0 < 2000, `${Date.now() - t0} ms to start`);
+  assert.equal(big.worms.filter((w) => w.mass >= CFG.GIANT_MIN_MASS).length, 15);
 });
 
 test('x2 and x5 multiply natural food only, not food dropped by worms (#16)', () => {
@@ -342,6 +408,158 @@ test('x2 and x5 multiply natural food only, not food dropped by worms (#16)', ()
   };
   assert.equal(eat(true), 20);
   assert.equal(eat(false), 4);
+});
+
+// --- Growing into the millions (#204) --------------------------------------------------
+
+// A one-worm world: a shielded eater of the given mass and power-ups, and no other food.
+function eater(mass, pw = {}) {
+  const game = emptyWorld(1, 5);
+  game.specialTarget = 0;
+  const w = new Worm({ name: 'Eater', skin: SKINS[0], mass, x: 0, y: 0, angle: 0, worldR: game.R, shield: 1e9 });
+  Object.assign(w.pw, pw);
+  game.worms = [w];
+  return { game, w };
+}
+
+test('x10 multiplies natural food only, beats x5 and x2, and is the rarest power-up (#204)', () => {
+  const eat = (pw, natural) => {
+    const { game, w } = eater(100, pw);
+    if (natural) game.food.push({ x: 0, y: 0, v: 4, r: 5, c: '#fff', life: Infinity, ph: 0, dead: false, natural: true });
+    else game.addFood(0, 0, 4, '#fff', 30);
+    game.rebuildFoodGrid();
+    game.eatFood(1 / 60);
+    assert.equal(game.food[0].dead, true, 'the food was eaten');
+    return w.mass - 100;
+  };
+  assert.equal(eat({ x10: 10 }, true), 40);
+  assert.equal(eat({ x10: 10 }, false), 4, 'dropped food is not multiplied');
+  assert.equal(eat({ x2: 10, x5: 10, x10: 10 }, true), 40, 'the highest multiplier applies');
+  assert.equal(eat({ x2: 10, x5: 10 }, true), 20, 'without x10, x5 still applies');
+
+  const game = new Game({ botCount: 5 }, null, { seed: 7 });
+  const n = {};
+  for (let i = 0; i < 20000; i++) { game.powerups = []; game.spawnPowerup(); const t = game.powerups[0].type; n[t] = (n[t] || 0) + 1; }
+  assert.ok(n.x10 > 0, 'x10 spawns');
+  assert.ok(Object.entries(n).every(([k, c]) => k === 'x10' || c > n.x10), `x10 is the rarest: ${JSON.stringify(n)}`);
+  assert.ok(n.x10 < n.x5, 'rarer than x5');
+});
+
+test('big worms get more out of natural food only: (mass / 1000) ^ 0.6 above 1,000 (#204)', () => {
+  assert.equal(CFG.GROWTH_FROM, 1000);
+  assert.equal(CFG.GROWTH_POWER, 0.6);
+  const gain = (mass, pw, kind, v = 4) => {
+    const { game, w } = eater(mass, pw);
+    if (kind === 'natural') game.food.push({ x: 0, y: 0, v, r: 5, c: '#fff', life: Infinity, ph: 0, dead: false, natural: true });
+    else if (kind === 'dropped') game.addFood(0, 0, v, '#fff', 30);
+    game.rebuildFoodGrid();
+    if (kind === 'special') { game.specials.push({ x: 0, y: 0, kind: 'plasma', life: 20, ph: 0, dead: false }); game.eatSpecials(1 / 60); } else game.eatFood(1 / 60);
+    return w.mass - mass;
+  };
+  assert.equal(gain(15, {}, 'natural'), 4);
+  assert.equal(gain(1000, {}, 'natural'), 4, 'no bonus at 1,000');
+  assert.ok(Math.abs(gain(10000, {}, 'natural') - 4 * Math.pow(10, 0.6)) < 1e-9, `${gain(10000, {}, 'natural')}`);
+  assert.ok(Math.abs(gain(10000, {}, 'natural') - 15.9) < 0.05);
+  assert.ok(Math.abs(gain(10000, { x2: 10 }, 'natural') - 31.8) < 0.1, 'stacks with x2');
+  assert.ok(Math.abs(gain(100000, {}, 'natural') - 4 * Math.pow(100, 0.6)) < 1e-9);
+  assert.equal(gain(100000, {}, 'dropped', 100), 100, 'dropped food is not scaled');
+  assert.equal(gain(100000, { x10: 10 }, 'dropped', 100), 100);
+  assert.equal(gain(100000, {}, 'special'), SPECIALS.plasma.value, 'special food is not scaled');
+  // Bots get it on the same terms: it is a rule of eating, not of the player.
+  const g = new Game({ botCount: 5 }, null, { seed: 2 });
+  const bot = g.worms.find((w) => w.ai);
+  Object.assign(g, { worms: [bot], food: [], specials: [], powerups: [] });
+  bot.mass = 10000; bot.shield = 1e9;
+  g.food.push({ x: bot.sx[0], y: bot.sy[0], v: 4, r: 5, c: '#fff', life: Infinity, ph: 0, dead: false, natural: true });
+  g.rebuildFoodGrid();
+  g.eatFood(1 / 60);
+  assert.ok(Math.abs(bot.mass - 10000 - 15.9) < 0.05, `${bot.mass}`);
+});
+
+test('saves from before x10 load, and saves with it round-trip (#204)', () => {
+  const old = fixture().world;
+  assert.ok(old.worms.every((w) => !('x10' in w.pw)), 'fixture predates the power-up');
+  const g = new Game(null, old);
+  assert.ok(g.worms.every((w) => w.pw.x10 === 0 && w.multiplier <= 5), 'loaded worms start without the effect');
+
+  const snap = fixture().world;
+  snap.worms[0].pw.x10 = 7.5;
+  snap.powerups.push({ x: 10, y: 20, type: 'x10', ph: 1 });
+  assert.doesNotThrow(() => validateSnapshot(snap));
+  const again = clone(new Game(null, snap));
+  assert.doesNotThrow(() => validateSnapshot(again));
+  assert.equal(again.worms.find((w) => w.id === snap.worms[0].id).pw.x10, 7.5);
+  assert.ok(again.powerups.some((p) => p.type === 'x10'));
+});
+
+test('natural food comes in 1, 2, 4 and 10, in the ratio 52 : 30 : 12 : 6 (#204)', () => {
+  const game = new Game({ botCount: 5 }, null, { seed: 11 });
+  game.food = [];
+  game.naturalFood = 0;
+  const N = 40000;
+  for (let i = 0; i < N; i++) game.spawnNaturalFood();
+  const share = {};
+  for (const f of game.food) share[f.v] = (share[f.v] || 0) + 1;
+  assert.deepEqual(Object.keys(share).map(Number).sort((a, b) => a - b), [1, 2, 4, 10], 'no pellet is worth 8');
+  for (const [v, want] of [[1, 52], [2, 30], [4, 12], [10, 6]]) {
+    const got = (100 * share[v]) / N;
+    assert.ok(Math.abs(got - want) < 1.5, `${v}: ${got.toFixed(1)}% (want ${want}%)`);
+  }
+});
+
+test('big pellets are drawn bigger, small ones exactly as before (#204)', () => {
+  for (const v of [0.5, 1, 2, 4, 10, 25, 49.9]) assert.equal(foodRadius(v), Math.min(20, 3 + Math.sqrt(v) * 2.4), `value ${v}`);
+  assert.ok(foodRadius(2000) >= 48 && foodRadius(2000) <= 50, `2,000: ${foodRadius(2000).toFixed(1)}`);
+  assert.equal(foodRadius(10000), 60);
+  assert.equal(foodRadius(1e6), 60);
+  assert.ok(foodRadius(50) >= 19.9 && foodRadius(50) <= 20.1, 'continuous at 50');
+  for (let v = 1; v < 20000; v *= 1.3) assert.ok(foodRadius(v * 1.3) >= foodRadius(v), `grows at ${v}`);
+});
+
+test('a worm of 200,000 only grows when it eats, and a million-mass worm leaves 80% as big pieces (#204)', () => {
+  const { game, w } = eater(200000);
+  for (let i = 0; i < 600; i++) game.update(1 / 60);
+  assert.ok(Math.abs(w.mass - 200000) < 1e-6, `no shedding (${w.mass})`);
+  game.food.push({ x: w.sx[0], y: w.sy[0], v: 8, r: 8, c: '#fff', life: Infinity, ph: 0, dead: false, natural: false });
+  game.rebuildFoodGrid();
+  game.eatFood(1 / 60);
+  assert.equal(w.mass, 200008, 'food dropped by a worm is worth its value, with no size bonus');
+
+  const giant = eater(1e6);
+  const g = giant.game, big = giant.w;
+  g.update(1 / 60); // the body grows to its length
+  for (let i = 0; i < 60; i++) g.update(1 / 60);
+  const mass = big.mass, segs = big.sx.length;
+  g.food = [];
+  g.kill(big, null);
+  const dropped = g.food.reduce((t, f) => t + f.v, 0);
+  assert.ok(Math.abs(dropped - 0.8 * mass) < 0.8 * mass * 0.05, `drops about 80% (${dropped.toFixed(0)} of ${mass.toFixed(0)})`);
+  assert.ok(g.food.length <= segs && g.food.length <= 50000, `${g.food.length} pieces for ${segs} segments`);
+  assert.ok(g.food.every((f) => f.v > 1000 && f.r > 40), 'each piece is worth thousands and drawn big');
+});
+
+test('a world with a 3,000,000-mass player saves and resumes with the same size (#204)', () => {
+  const snap = fixture().world;
+  const p = snap.worms.find((w) => w.isPlayer);
+  p.mass = 3e6;
+  p.peak = 3e6;
+  assert.doesNotThrow(() => validateSnapshot(snap));
+  const g = new Game(null, snap);
+  Object.assign(g, { food: [], naturalFood: 0, foodTarget: 0 }); // nothing to eat: the size bonus would move the mass
+  g.rebuildFoodGrid();
+  for (let i = 0; i < 90; i++) g.update(1 / 60);
+  const w = g.worms.find((x) => x.isPlayer);
+  assert.ok(w && !w.dead);
+  assert.ok(Math.abs(w.mass - 3e6) < 10000, `mass ${w.mass.toFixed(0)}`);
+  assert.ok(Math.abs(w.r - radiusFor(w.mass)) < 0.1);
+  const back = clone(g);
+  assert.doesNotThrow(() => validateSnapshot(back));
+  const again = new Game(null, back).worms.find((x) => x.isPlayer);
+  assert.ok(Math.abs(again.mass - w.mass) < 1);
+  assert.equal(again.sx.length, w.sx.length);
+  const bad = clone(g);
+  bad.worms.find((x) => x.isPlayer).mass = 2e8;
+  assert.throws(() => validateSnapshot(bad), /Invalid Wigglefeast save/);
 });
 
 // #163 draws food a third larger; how close a head must get stays the same: eaten within
@@ -499,16 +717,18 @@ test('a 150-bot world saves, validates and restores; 151 bots is rejected (#81)'
 
 // --- Massive growth (#82) -------------------------------------------------------
 
-test('worms shed only above 10,000 mass, at 0.2% of the excess per second (#82)', () => {
+test('worms shed only above 2,000,000 mass, at 0.2% of the excess per second (#82, #204)', () => {
   const g = { addFood() {} };
   const shedOver = (mass, seconds) => {
     const w = new Worm({ name: 'Big', skin: SKINS[0], mass, x: 0, y: 0, angle: 0, worldR: 1e5 });
     for (let i = 0; i < seconds * 60; i++) w.update(1 / 60, g);
     return mass - w.mass;
   };
-  assert.ok(Math.abs(shedOver(20000, 1) - 20) < 0.2, `20,000 loses about 20 a second (${shedOver(20000, 1).toFixed(2)})`);
-  assert.equal(shedOver(10000, 2), 0);
-  assert.equal(shedOver(5000, 2), 0, 'mid-size worms (which used to shed above 1500) keep their mass');
+  assert.ok(Math.abs(shedOver(3000000, 1) - 2000) < 5, `3,000,000 loses about 2,000 a second (${shedOver(3000000, 1).toFixed(2)})`);
+  assert.equal(shedOver(2000000, 2), 0);
+  assert.equal(shedOver(1000000, 2), 0, 'a million-mass worm keeps its mass');
+  assert.equal(shedOver(20000, 2), 0, 'worms that used to shed above 10,000 keep their mass');
+  assert.equal(shedOver(5000, 2), 0, 'mid-size worms keep their mass');
 });
 
 test('above 10,000 worms grow mostly thicker; sizes below are unchanged (#82)', () => {
@@ -523,9 +743,24 @@ test('above 10,000 worms grow mostly thicker; sizes below are unchanged (#82)', 
     assert.ok(lengthFor(m + 5000) > lengthFor(m) && radiusFor(m + 5000) >= radiusFor(m), `grows at ${m}`);
   }
   assert.ok(radiusFor(50000) > 62, `radius at 50,000 is ${radiusFor(50000).toFixed(1)}`);
-  assert.ok(radiusFor(1e6) <= 90);
   assert.ok(lengthFor(50000) < 2 * lengthFor(10000), 'less than twice as long as at 10,000');
   assert.ok(lengthFor(50000) < 2 * Math.PI * new Game({ botCount: 30 }).R, "shorter than a 30-bot arena's edge");
+});
+
+test('worms in the millions keep thickening and barely lengthen (#204)', () => {
+  const edge = 2 * Math.PI * new Game({ botCount: 30 }).R;
+  const near = (v, want, tol, what) => assert.ok(Math.abs(v - want) <= tol, `${what} is ${v.toFixed(1)}, want about ${want}`);
+  near(radiusFor(1e5), 79, 1, 'radius at 100,000');
+  near(radiusFor(1e6), 148, 1, 'radius at 1,000,000');
+  near(radiusFor(3e6), 202, 2, 'radius at 3,000,000');
+  assert.equal(radiusFor(1e12), 300, 'capped at 300');
+  // Unchanged up to 100,000, then flat-ish and continuous.
+  near(lengthFor(1e5), (40 + 9 * Math.pow(1e4, 0.72)) * Math.pow(10, 0.4), 0.01, 'length at 100,000 (as before #204)');
+  near(lengthFor(1e6), 20700, 100, 'length at 1,000,000');
+  assert.ok(Math.abs(lengthFor(1e5 + 0.001) - lengthFor(1e5)) < 0.01, 'continuous at 100,000');
+  assert.ok(lengthFor(1e6) < 1.25 * lengthFor(1e5), `less than 25% longer from 100,000 to 1,000,000 (${(lengthFor(1e6) / lengthFor(1e5)).toFixed(3)})`);
+  assert.ok(lengthFor(1e6) < edge, `a 1,000,000 worm (${lengthFor(1e6).toFixed(0)}) is shorter than a 30-bot arena's edge (${edge.toFixed(0)})`);
+  for (let m = 1e5; m < 1e7; m *= 1.5) assert.ok(lengthFor(m * 1.5) > lengthFor(m) && radiusFor(m * 1.5) > radiusFor(m), `grows at ${m}`);
 });
 
 test('a 100,000-mass worm stays within the save limits and round-trips (#82)', () => {
@@ -581,7 +816,7 @@ test('a worm built outside a world never shares an id with the world\'s own worm
   assert.doesNotThrow(() => validateSnapshot(JSON.parse(JSON.stringify(game.toJSON()))), 'still saves');
 });
 
-test('boosting costs (1.5 + 0.5% of mass) a second, and 60% of it drops as food (#125)', () => {
+test('boosting costs (1.5 + 0.25% of mass) a second, at most 150, and 60% of it drops as food (#125, #204)', () => {
   let dropped = 0;
   const g = { rng: Math.random, addFood(x, y, v) { dropped += v; } };
   const w = new Worm({ name: 'B', skin: SKINS[0], mass: 3000, x: 0, y: 0, angle: 0, worldR: 5000 });
@@ -589,17 +824,29 @@ test('boosting costs (1.5 + 0.5% of mass) a second, and 60% of it drops as food 
   for (let i = 0; i < 60; i++) w.update(1 / 60, g);
   const lost = 3000 - w.mass;
   assert.ok(w.boosting, 'boosting');
-  assert.ok(Math.abs(lost - 16.5) < 0.1, `loses about 16.5 a second at mass 3000 (lost ${lost.toFixed(2)})`);
+  assert.ok(Math.abs(lost - 9) < 0.1, `loses about 9 a second at mass 3000 (lost ${lost.toFixed(2)})`);
   assert.ok(Math.abs(dropped + w.dropAcc - 0.6 * lost) < 1e-6, `drops 60% of it (${(dropped + w.dropAcc).toFixed(2)})`);
-  // Small worms pay the base: 1.5 + 0.1 a second at mass 20.
+  // Small worms pay the base: 1.5 + 0.05 a second at mass 20.
   const s = new Worm({ name: 'S', skin: SKINS[0], mass: 20, x: 0, y: 0, angle: 0, worldR: 5000 });
   s.wantBoost = true;
   for (let i = 0; i < 60; i++) s.update(1 / 60, g);
-  assert.ok(Math.abs(20 - s.mass - 1.6) < 0.01, `about 1.6 a second at mass 20 (lost ${(20 - s.mass).toFixed(3)})`);
+  assert.ok(Math.abs(20 - s.mass - 1.55) < 0.01, `about 1.55 a second at mass 20 (lost ${(20 - s.mass).toFixed(3)})`);
+  // A giant pays the ceiling, not 0.25% of its mass.
+  dropped = 0;
+  const gi = new Worm({ name: 'G', skin: SKINS[0], mass: 1e6, x: 0, y: 0, angle: 0, worldR: 1e5 });
+  gi.wantBoost = true;
+  for (let i = 0; i < 60; i++) gi.update(1 / 60, g);
+  const gLost = 1e6 - gi.mass;
+  assert.ok(Math.abs(gLost - 150) < 0.5, `loses 150 a second at mass 1,000,000 (lost ${gLost.toFixed(2)})`);
+  assert.ok(Math.abs(dropped + gi.dropAcc - 0.6 * gLost) < 1e-6, `drops 90 of it (${(dropped + gi.dropAcc).toFixed(2)})`);
+  // A worm too small to boost still can't.
+  const t = new Worm({ name: 'T', skin: SKINS[0], mass: 12, x: 0, y: 0, angle: 0, worldR: 5000 });
+  t.wantBoost = true;
+  t.update(1 / 60, g);
+  assert.equal(t.boosting, false);
 });
 
 // --- Special food (#143) ---------------------------------------------------------------
-const { SPECIALS } = globalThis.WormEngine;
 // A world with nothing in it but special food, so nothing gets eaten and nobody respawns.
 function emptyWorld(seed, botCount = 30) {
   const game = new Game({ botCount }, null, { seed });
@@ -641,7 +888,7 @@ test('special food spawns inside the arena, never above the target, and vanishes
   for (let i = 0; i < 0.2 * 60; i++) lone.update(1 / 60);
   assert.ok(!lone.specials.includes(p), 'gone after 20 s');
 
-  const refill = emptyWorld(9);
+  const refill = emptyWorld(12);
   for (let i = 0; i < 30 * 60; i++) refill.update(1 / 60);
   const before = refill.specials.length;
   assert.ok(before >= 4, `filled up (${before})`);

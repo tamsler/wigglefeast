@@ -81,6 +81,47 @@ test('massive worms', async (t) => {
     assert.ok(m.p50 < 50, `median frame ${m.p50.toFixed(1)} ms`);
   });
 
+  await t.test('frames stay fast with the player and a second giant at 1,000,000 mass (#204)', async (st) => {
+    await page.eval(`(() => {
+      const g = window.__game, p = window.__player, { radiusFor, SKINS } = window.WormEngine;
+      p.mass = 1e6;
+      const b = g.worms.find((w) => w.ai);
+      b.mass = 1e6; b.r = radiusFor(1e6); b.shield = 1e9;
+      b.skin = SKINS.find((s) => s.name === 'Cherry Pop');
+      // Laid across the view just ahead of the player, with a heap of big pellets (a giant's remains) beside it.
+      const step = b.r * 0.42, n = Math.ceil(20000 / step);
+      b.sx = []; b.sy = [];
+      for (let i = 0; i < n; i++) { b.sx.push(p.x - 10000 + i * step); b.sy.push(p.y + 600); }
+      b.updateBounds();
+      // A fresh giant's corpse is 340 pieces along its length and is eaten fast; 60 in view at once. Each is drawn big, and drawing many is what software rendering (CI) feels (300 in view took 33 ms a frame here, 50 on CI).
+      for (let i = 0; i < 60; i++) g.addFood(p.x - 1500 + i * 50, p.y - 400 + (i % 7) * 20, 2000, '#ffca3a', 55);
+      g.rebuildFoodGrid();
+    })()`);
+    await sleep(1500);
+    const m = await page.eval(`new Promise((resolve) => {
+      const g = window.__game, orig = g.update;
+      let engine = 0;
+      g.update = function (dt) { const t0 = performance.now(); orig.call(this, dt); engine += performance.now() - t0; };
+      const frames = [];
+      let last = performance.now();
+      const end = last + 3000;
+      const tick = (now) => {
+        frames.push(now - last); last = now;
+        if (now < end) return requestAnimationFrame(tick);
+        delete g.update;
+        frames.sort((a, b) => a - b);
+        resolve({ engine: engine / frames.length, p50: frames[frames.length >> 1], p95: frames[Math.floor(frames.length * 0.95)], segments: window.__player.sx.length, mass: window.__player.mass, dead: window.__player.dead });
+      };
+      requestAnimationFrame(tick);
+    })`);
+    st.diagnostic(`player at 1,000,000 (${m.segments} segments): engine ${m.engine.toFixed(2)} ms/frame, frame p50 ${m.p50.toFixed(1)} ms, p95 ${m.p95.toFixed(1)} ms`);
+    assert.ok(!m.dead && m.mass > 9e5, `the giant is still alive (${Math.round(m.mass)})`);
+    assert.ok(m.segments < 1000, `${m.segments} segments`);
+    assert.ok(m.engine < 12, `engine ${m.engine.toFixed(2)} ms per frame`);
+    assert.ok(m.p50 < 50, `median frame ${m.p50.toFixed(1)} ms`);
+    await page.eval(`window.__player.mass = 15`);
+  });
+
   await t.test('the camera keeps zooming out as the player thickens past 10,000', async () => {
     // Waits until the camera has eased to its new zoom (two readings 250 ms apart within 0.5%),
     // rather than a fixed time that a busy machine may not keep up with.
@@ -102,7 +143,7 @@ test('massive worms', async (t) => {
 });
 
 // #163: the camera zooms out faster with thickness: zoom = base / (1 + (r - 14) / 35). Relative to a
-// new worm (mass 15) that is about 0.74 at mass 1,000, 0.54 at 10,000 and 0.41 at 50,000; the zoom
+// new worm (mass 15) that is about 0.74 at mass 1,000, 0.54 at 10,000, 0.41 at 50,000 and 0.21 at 1,000,000; the zoom
 // power-up multiplies by 0.62. The worm eats as it goes, so readings are checked against its radius.
 test('camera zoom follows worm size (#163)', async (t) => {
   let page;
@@ -126,10 +167,12 @@ test('camera zoom follows worm size (#163)', async (t) => {
   };
   const s0 = await settled(), base = s0.z / zoomOf(s0.r); // the zoom a radius-14 worm would get
   const radiusFor = (m) => page.eval(`window.WormEngine.radiusFor(${m})`);
-  for (const [mass, want] of [[1000, 0.74], [10000, 0.54], [50000, 0.41]]) {
+  for (const [mass, want] of [[1000, 0.74], [10000, 0.54], [50000, 0.41], [1000000, 0.21]]) {
     await page.eval(`window.__player.mass = ${mass}`);
     const s = await settled();
     assert.ok(Math.abs(s.z / base - zoomOf(s.r)) / zoomOf(s.r) < 0.02, `zoom at ${mass} follows the radius: ${(s.z / base).toFixed(3)} vs ${zoomOf(s.r).toFixed(3)}`);
+    // The worm itself stays a fraction of the screen, so its head and the arena around it are in view (#204).
+    assert.ok(2 * s.r * s.z < (await page.eval('Math.min(innerWidth, innerHeight)')) * 0.5, `at ${mass} the worm is ${(2 * s.r * s.z).toFixed(0)}px wide on screen`);
     const fromNew = zoomOf(await radiusFor(mass)) / zoomOf(await radiusFor(15));
     assert.ok(Math.abs(fromNew - want) <= 0.01, `relative to a new worm at ${mass}: ${fromNew.toFixed(3)}, want about ${want}`);
   }
