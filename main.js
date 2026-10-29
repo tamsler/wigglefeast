@@ -120,8 +120,8 @@
   const plus = (c, key, liveKey = key) => c.totals[key] + (c.live ? c.live[liveKey] : 0);
   const ACHIEVEMENTS = [
     { id: 'snack', name: 'Snack Time', goal: 'Reach 1,000', progress: (c) => [Math.max(c.totals.best, c.live ? c.live.peak : 0), 1000] },
-    { id: 'noodle', name: 'Big Noodle', goal: 'Reach 5,000', progress: (c) => [Math.max(c.totals.best, c.live ? c.live.peak : 0), 5000] },
-    { id: 'titan', name: 'Titan', goal: 'Reach 25,000', progress: (c) => [Math.max(c.totals.best, c.live ? c.live.peak : 0), 25000] },
+    { id: 'noodle', name: 'Big Noodle', goal: 'Reach 10,000', progress: (c) => [Math.max(c.totals.best, c.live ? c.live.peak : 0), 10000] },
+    { id: 'titan', name: 'Titan', goal: 'Reach 100,000', progress: (c) => [Math.max(c.totals.best, c.live ? c.live.peak : 0), 100000] },
     { id: 'firstbite', name: 'First Bite', goal: 'Eat your first worm', progress: (c) => [plus(c, 'kills'), 1] },
     { id: 'hunter', name: 'Hungry Hunter', goal: 'Eat 10 worms in one run', progress: (c) => [most(c, 'kills'), 10] },
     { id: 'apex', name: 'Apex', goal: 'Eat 100 worms in total', progress: (c) => [plus(c, 'kills'), 100] },
@@ -129,9 +129,9 @@
     { id: 'marathon', name: 'Marathon', goal: 'Survive 20 minutes in one run', time: true, progress: (c) => [most(c, 'time'), 1200] },
     { id: 'grazer', name: 'Grazer', goal: 'Eat 10,000 food in total', progress: (c) => [plus(c, 'eaten'), 10000] },
     { id: 'dedicated', name: 'Dedicated', goal: 'Play 50 games', progress: (c) => [c.totals.games, 50] },
-    { id: 'hard', name: 'Hard Mode', goal: 'Reach 5,000 on Hard', progress: (c) => [bestOn(c, 'hard'), 5000] },
+    { id: 'hard', name: 'Hard Mode', goal: 'Reach 25,000 on Hard', progress: (c) => [bestOn(c, 'hard'), 25000] },
     // Expert Survivor until there were three levels (#177); the id stays, so it stays earned.
-    { id: 'expert', name: 'Hard Survivor', goal: 'Reach 10,000 on Hard', progress: (c) => [bestOn(c, 'hard'), 10000] },
+    { id: 'expert', name: 'Hard Survivor', goal: 'Reach 250,000 on Hard', progress: (c) => [bestOn(c, 'hard'), 250000] },
     { id: 'stargazer', name: 'Stargazer', goal: 'Eat 25 special food', progress: (c) => [plus(c, 'specials'), 25] },
     { id: 'board', name: 'Top of the Board', goal: 'Be first on the leaderboard', progress: (c) => [c.totals.firsts + (c.live && c.live.first ? 1 : 0), 1] },
   ];

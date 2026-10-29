@@ -44,10 +44,11 @@ test('achievements from saved stats', async (t) => {
 
   await t.test('past play counts, silently', async () => {
     await startWith(page, profile(
-      { games: 8, kills: 120, best: 6000, bestByDiff: { easy: 0, normal: 6000, hard: 5200, expert: 10500 } },
-      { top: [run({ peak: 6000, kills: 12 })], recent: [run({ time: 1260 })] },
+      { games: 8, kills: 120, best: 120000, bestByDiff: { easy: 0, normal: 120000, hard: 30000, expert: 260000 } },
+      { top: [run({ peak: 120000, kills: 12 })], recent: [run({ time: 1260 })] },
     ));
-    assert.deepEqual(Object.keys(await ach(page)).sort(), ['apex', 'expert', 'firstbite', 'hang', 'hard', 'hunter', 'marathon', 'noodle', 'snack'].sort());
+    // Titan (100,000) and the Hard goals (25,000, and 250,000 from the old Expert best) follow the raised goals (#211).
+    assert.deepEqual(Object.keys(await ach(page)).sort(), ['apex', 'expert', 'firstbite', 'hang', 'hard', 'hunter', 'marathon', 'noodle', 'snack', 'titan'].sort());
     assert.deepEqual(await toasts(page), [], 'no pop-ups for past play');
   });
 });
@@ -121,7 +122,7 @@ test('achievement pop-ups', async (t) => {
     await startWith(page, profile());
     await unlockAudio(page);
     await page.startRun();
-    await page.eval('window.__player.shield = 1e9; window.__player.mass = 5000');
+    await page.eval('window.__player.shield = 1e9; window.__player.mass = 10000');
     await page.waitFor(`window.wigglefeastDebug.toasts().length === 1`, 'first pop-up');
     assert.deepEqual(await toasts(page), ['snack'], 'one at a time');
     await page.waitFor(`window.wigglefeastDebug.toasts().length === 2`, 'second pop-up', 6000);
@@ -153,13 +154,13 @@ test('locked skins in the picker', async (t) => {
     assert.equal(await page.eval(`document.querySelector('#skins button[title="Galaxy Prime"]').getAttribute('aria-label')`), 'Galaxy Prime (locked)');
     const before = await skinName();
     await page.click('#skins button[title="Galaxy Prime"]');
-    assert.equal(await skinName(), 'Reach 10,000 on Hard to unlock Galaxy Prime'); // Expert became Hard (#177)
+    assert.equal(await skinName(), 'Reach 250,000 on Hard to unlock Galaxy Prime'); // Expert became Hard (#177)
     assert.equal(await page.eval(`JSON.parse(localStorage.getItem('wormarena.settings') || '{}').skin ?? 0`), 0);
     await page.waitFor(`document.getElementById('skinName').textContent === ${JSON.stringify(before)}`, 'name back', 6000);
   });
 
   await t.test('an earned reward can be picked and worn', async () => {
-    await startWith(page, profile({ best: 6000, bestByDiff: { easy: 0, normal: 6000, hard: 0, expert: 0 } }));
+    await startWith(page, profile({ best: 12000, bestByDiff: { easy: 0, normal: 12000, hard: 0, expert: 0 } }));
     assert.equal(await page.eval(`document.querySelector('#skins button[title="Holo"]').classList.contains('locked')`), false);
     await page.click('#skins button[title="Holo"]');
     assert.equal(await skinName(), 'Holo');
@@ -173,7 +174,7 @@ test('locked skins in the picker', async (t) => {
     await page.waitFor(`!document.getElementById('menu').classList.contains('hidden')`, 'menu');
     await startWith(page, profile());
     await page.startRun();
-    await page.eval('window.__player.shield = 1e9; window.__player.mass = 5000');
+    await page.eval('window.__player.shield = 1e9; window.__player.mass = 10000');
     await page.waitFor('!!window.wigglefeastDebug.achievements().noodle', 'Big Noodle');
     await page.press('KeyP');
     await page.click('#endRun');
@@ -194,7 +195,7 @@ test('locked skins in the picker', async (t) => {
   await t.test('a run resumed in a skin that is now locked continues in a free one (#178)', async () => {
     await page.press('KeyP');
     await page.click('#endRun');
-    await startWith(page, profile({ best: 6000, bestByDiff: { easy: 0, normal: 6000, hard: 0 } }));
+    await startWith(page, profile({ best: 12000, bestByDiff: { easy: 0, normal: 12000, hard: 0 } }));
     await page.click('#skins button[title="Holo"]');
     await page.startRun();
     assert.equal(await page.eval('window.__player.skin.name'), 'Holo');
@@ -219,7 +220,7 @@ test('achievements on the stats screen', async (t) => {
   assert.equal(await page.eval(`document.querySelectorAll('#achList .ach').length`), 14);
   assert.equal(await page.eval(`document.getElementById('achTitle').textContent`), '🏆 Achievements 1 / 14', 'Snack Time is earned');
   const noodle = await row('noodle');
-  assert.match(noodle, /3,200 \/ 5,000/);
+  assert.match(noodle, /3,200 \/ 10,000/);
   assert.match(noodle, /Unlocks Holo/);
   assert.match(await row('snack'), /Earned/);
   assert.match(await row('hang'), /30s \/ 5m/, 'time goals show as durations');
@@ -266,7 +267,7 @@ test('achievements in exports, imports and reset', async (t) => {
   });
 
   await t.test('reset stats clears achievements and locks the rewards again', async () => {
-    await startWith(page, profile({ best: 6000, bestByDiff: { easy: 0, normal: 6000, hard: 0, expert: 0 } }));
+    await startWith(page, profile({ best: 12000, bestByDiff: { easy: 0, normal: 12000, hard: 0, expert: 0 } }));
     await page.click('#skins button[title="Holo"]');
     await page.click('#openStats');
     await page.click('#resetStats');
@@ -307,13 +308,62 @@ test('Hard Survivor', async (t) => {
     await page.click('#achTitle');
     const row = await page.eval(`document.querySelector('#achList .ach[data-id="expert"]').textContent`);
     assert.match(row, /Hard Survivor/);
-    assert.match(row, /Reach 10,000 on Hard/);
+    assert.match(row, /Reach 250,000 on Hard/);
     assert.match(row, /Earned/);
     await page.click('#closeStats');
   });
 
-  await t.test('a Hard best of 10,000 earns it', async () => {
-    await startWith(page, profile({ best: 10000, bestByDiff: { easy: 0, normal: 100, hard: 10000 } }));
+  await t.test('a Hard best of 250,000 earns it, and 249,999 does not (#211)', async () => {
+    await startWith(page, profile({ best: 249999, bestByDiff: { easy: 0, normal: 100, hard: 249999 } }));
+    assert.equal((await ach(page)).expert, undefined);
+    assert.ok((await ach(page)).hard > 0, 'Hard Mode (25,000 on Hard) is earned');
+    await startWith(page, profile({ best: 250000, bestByDiff: { easy: 0, normal: 100, hard: 250000 } }));
     assert.ok((await ach(page)).expert > 0);
+  });
+});
+
+// #211: the size goals were raised when worms began to grow into the millions.
+test('raised size goals', async (t) => {
+  let page;
+  t.after(() => page && page.close());
+  page = await launch();
+  await page.goto(gameUrl());
+  const rowText = (id) => page.eval(`document.querySelector('#achList .ach[data-id="${id}"]').textContent`);
+
+  await t.test('the goals on the achievements screen', async () => {
+    await startWith(page, profile());
+    await page.click('#openStats');
+    await page.click('#achTitle');
+    const goals = await page.eval(`Object.fromEntries([...document.querySelectorAll('#achList .ach')].map((a) => [a.dataset.id, a.querySelector('small').textContent]))`);
+    assert.equal(goals.snack, 'Reach 1,000');
+    assert.equal(goals.noodle, 'Reach 10,000');
+    assert.equal(goals.titan, 'Reach 100,000');
+    assert.equal(goals.hard, 'Reach 25,000 on Hard');
+    assert.equal(goals.expert, 'Reach 250,000 on Hard');
+    await page.click('#closeStats');
+  });
+
+  await t.test('a goal is earned at its score and not just below it', async () => {
+    await startWith(page, profile({ best: 99999, bestByDiff: { easy: 0, normal: 99999, hard: 24999 } }));
+    let a = await ach(page);
+    assert.ok(a.noodle && a.snack, 'Big Noodle is earned');
+    assert.equal(a.titan, undefined, '99,999 is not Titan');
+    assert.equal(a.hard, undefined, '24,999 on Hard is not Hard Mode');
+    await startWith(page, profile({ best: 100000, bestByDiff: { easy: 0, normal: 100000, hard: 25000 } }));
+    a = await ach(page);
+    assert.ok(a.titan, '100,000 is Titan');
+    assert.ok(a.hard, '25,000 on Hard is Hard Mode');
+  });
+
+  await t.test('an achievement earned at the old goal stays earned, with its skin', async () => {
+    const earned = 1700000000123;
+    await startWith(page, profile({ best: 30000, bestByDiff: { easy: 0, normal: 30000, hard: 12000 } }, { ach: { snack: earned, noodle: earned, titan: earned, hard: earned, expert: earned } }));
+    assert.deepEqual(Object.keys(await ach(page)).sort(), ['expert', 'hard', 'noodle', 'snack', 'titan']);
+    for (const skin of ['Holo', 'Crystal', 'Galaxy Prime']) assert.equal(await page.eval(`document.querySelector('#skins button[title="${skin}"]').classList.contains('locked')`), false, `${skin} stays unlocked`);
+    await page.click('#openStats');
+    await page.click('#achTitle');
+    assert.match(await rowText('titan'), /Earned/);
+    assert.match(await rowText('expert'), /Earned/);
+    await page.click('#closeStats');
   });
 });
