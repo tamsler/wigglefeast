@@ -33,8 +33,8 @@
 
 - [x] 5.1 Bump `VERSION` in `sw.js` to `1.36.0` (no new files, so `FILES` is unchanged). Verify with `tests/release.test.js` and `node --test "tests/**/*.test.js"`.
 - [x] 5.2 Sync documentation: update `README.md` if it lists game features or modes. Verify by reading it for the old single-mode wording.
-- [ ] 5.3 Manual checks on a real phone and a desktop browser (menu picker, a short Timed match to the buzzer, a Survival run past level 3, close and reopen mid-match, install/offline unaffected). Run test Chrome with the fake audio output from `tests/helpers`.
-- [ ] 5.4 Run the `pr-reviewer` agent on the PR, verify and fix each finding, note dismissed ones in the PR, then squash-merge once checks pass.
+- [x] 5.3 Manual checks on a real phone and a desktop browser (menu picker, a short Timed match to the buzzer, a Survival run past level 3, close and reopen mid-match, install/offline unaffected). Run test Chrome with the fake audio output from `tests/helpers`.
+- [x] 5.4 Run the `pr-reviewer` agent on the PR, verify and fix each finding, note dismissed ones in the PR, then squash-merge once checks pass.
 
 ## Workflow follow-up
 
