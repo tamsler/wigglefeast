@@ -178,6 +178,15 @@ test('sounds follow the game', async (t) => {
     const got = await during(() => page.click('#endRun'));
     assert.ok(!got.includes('death'), `no death sound: ${got}`);
   });
+
+  await t.test('the clock running out in a Timed match is not a death either (#12)', async () => {
+    await page.waitFor(`!document.getElementById('menu').classList.contains('hidden')`, 'menu');
+    await page.click('#modePick button[data-v="timed"]');
+    await page.startRun();
+    await page.eval('window.__player.shield = 1e5; window.__game.time = window.__player.born + 299.9');
+    const got = await during(() => page.waitFor(`!document.getElementById('death').classList.contains('hidden')`, 'the result screen'));
+    assert.ok(!got.includes('death'), `no death sound: ${got}`);
+  });
 });
 
 // #9: sound and music toggles, remembered between sessions, and the M key.

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const { Game, CFG, SKINS, angleDiff, SAVE_APP_IDS, DIFFICULTIES, difficultyOf, MIN_BOTS, MAX_BOTS, validateSnapshot, TAU, freshHabits, validHabits, knowsTactic } = window.WormEngine;
+  const { Game, CFG, SKINS, angleDiff, SAVE_APP_IDS, DIFFICULTIES, difficultyOf, MODES, modeOf, MIN_BOTS, MAX_BOTS, validateSnapshot, TAU, freshHabits, validHabits, knowsTactic } = window.WormEngine;
   const $ = (id) => document.getElementById(id);
 
   const canvas = $('game');
@@ -55,13 +55,14 @@
   // Rebuilt from checked fields: a corrupted stored value must not stop startup (#26).
   const settings = {};
   function loadSettings() {
-    Object.assign(settings, { name: '', skin: 0, botCount: 30, difficulty: 'normal', theme: 'auto', sound: true, music: true });
+    Object.assign(settings, { name: '', skin: 0, botCount: 30, difficulty: 'normal', mode: 'classic', theme: 'auto', sound: true, music: true });
     const s = store.get('settings', null);
     if (s && typeof s === 'object') {
       if (typeof s.name === 'string') settings.name = s.name.slice(0, 16);
       if (Number.isInteger(s.skin) && s.skin >= 0 && s.skin < SKINS.length) settings.skin = s.skin;
       if (Number.isInteger(s.botCount) && s.botCount >= MIN_BOTS && s.botCount <= MAX_BOTS) settings.botCount = s.botCount;
       if (difficultyOf(s.difficulty)) settings.difficulty = difficultyOf(s.difficulty); // Expert became Hard (#177)
+      if (MODES.includes(s.mode)) settings.mode = s.mode; // settings from before modes (#12) stay Classic
       if (['auto', 'classic', 'halloween', 'christmas', 'snacks', 'tech'].includes(s.theme)) settings.theme = s.theme; // #64
       if (typeof s.sound === 'boolean') settings.sound = s.sound; // #9: older settings have neither, so both stay on
       if (typeof s.music === 'boolean') settings.music = s.music;
@@ -140,7 +141,7 @@
   const TIP_IDS = ['steer', 'boost', 'danger', 'powerups'];
   const emptyProfile = () => ({
     v: PROFILE_VERSION,
-    totals: { games: 0, kills: 0, time: 0, eaten: 0, best: 0, bestByDiff: Object.fromEntries(DIFFICULTIES.map((d) => [d, 0])), specials: 0, firsts: 0 },
+    totals: { games: 0, kills: 0, time: 0, eaten: 0, best: 0, bestByDiff: Object.fromEntries(DIFFICULTIES.map((d) => [d, 0])), bestByMode: Object.fromEntries(MODES.map((m) => [m, 0])), specials: 0, firsts: 0 },
     top: [],
     recent: [],
     ach: {}, // achievement id -> when it was earned (#14)
@@ -163,7 +164,10 @@
     const cleanRun = (r) => {
       if (!isObj(r) || !['date', 'score', 'peak', 'kills', 'eaten', 'time'].every((k) => num(r[k]))) return null;
       if (!str(r.name) || !str(r.by) || !difficultyOf(r.diff) || !Number.isInteger(r.bots) || r.bots < 0 || r.bots > 1000) return null;
-      return { date: r.date, name: r.name, score: r.score, peak: r.peak, kills: r.kills, eaten: r.eaten, time: r.time, by: r.by, diff: difficultyOf(r.diff), bots: r.bots };
+      // Runs from before modes (#12) have none: they were Classic. A Timed match that ran out the clock has its final rank.
+      const run = { date: r.date, name: r.name, score: r.score, peak: r.peak, kills: r.kills, eaten: r.eaten, time: r.time, by: r.by, diff: difficultyOf(r.diff), bots: r.bots, mode: modeOf(r.mode) };
+      if (Number.isInteger(r.rank) && r.rank >= 1 && r.rank <= 1000) run.rank = r.rank;
+      return run;
     };
     const top = p.top.map(cleanRun), recent = p.recent.map(cleanRun);
     if (!keepGoodRuns && (top.includes(null) || recent.includes(null))) return null;
@@ -176,10 +180,14 @@
     const tips = {};
     if (isObj(p.tips)) { for (const id of Object.keys(p.tips)) if (TIP_IDS.includes(id) && num(p.tips[id])) tips[id] = p.tips[id]; }
     else if (t.games > 0) for (const id of TIP_IDS) tips[id] = 0;
+    // Best per mode (#12): Classic's peak, Timed's score at the buzzer, Survival's seconds. A profile from before
+    // modes had only Classic runs, so its best is the Classic best.
+    const bm = isObj(t.bestByMode) ? t.bestByMode : null;
+    const bestByMode = Object.fromEntries(MODES.map((m) => [m, bm ? (num(bm[m]) ? bm[m] : 0) : m === 'classic' ? t.best : 0]));
     return {
       v: PROFILE_VERSION,
       totals: {
-        games: t.games, kills: t.kills, time: t.time, eaten: t.eaten, best: t.best,
+        games: t.games, kills: t.kills, time: t.time, eaten: t.eaten, best: t.best, bestByMode,
         // Each level's best, the old Expert's folded into Hard (#177).
         bestByDiff: Object.fromEntries(DIFFICULTIES.map((d) => [d, Math.max(0, ...BEST_KEYS.filter((k) => difficultyOf(k) === d).map((k) => bd[k] || 0))])),
         specials: num(t.specials) ? t.specials : 0, firsts: num(t.firsts) ? t.firsts : 0,
@@ -266,7 +274,7 @@
   }
   checkAchievements(); // past play counts, silently
 
-  function recordRun(w, killer, cause) {
+  function recordRun(w, killer, cause, rank) {
     const run = {
       date: Date.now(),
       name: w.name,
@@ -275,15 +283,20 @@
       kills: w.kills,
       eaten: w.eaten,
       time: Math.max(0, Math.round(game.time - w.born)),
-      by: cause === 'quit' ? 'Quit' : killer ? killer.name : 'Wall',
+      by: cause === 'quit' ? 'Quit' : cause === 'time' ? 'Time up' : killer ? killer.name : 'Wall',
       diff: game.settings.difficulty,
       bots: game.settings.botCount,
+      mode: game.settings.mode,
     };
+    if (cause === 'time' && rank) run.rank = rank;
     // Add to the stats as they are stored now, so runs recorded by another window are kept (#45).
     const stored = cleanProfile(store.get('profile', null), true);
     if (stored) profile = stored;
     const t = profile.totals;
-    const isBest = run.peak > t.best;
+    // The score each mode is measured by (#12). Only a Timed match that ran out the clock has one.
+    const value = run.mode === 'survival' ? run.time : run.mode === 'timed' ? (cause === 'time' ? run.score : 0) : run.peak;
+    const isBest = value > t.bestByMode[run.mode];
+    t.bestByMode[run.mode] = Math.max(t.bestByMode[run.mode], value);
     t.games++;
     t.kills += run.kills;
     t.time += run.time;
@@ -1156,7 +1169,7 @@
   let spectate = null;
 
   function newGame(snapshot) {
-    game = snapshot ? new Game(null, snapshot, { habits }) : new Game({ botCount: settings.botCount, difficulty: settings.difficulty }, null, { habits });
+    game = snapshot ? new Game(null, snapshot, { habits }) : new Game({ botCount: settings.botCount, difficulty: settings.difficulty, mode: settings.mode }, null, { habits });
     learningSeen.clear(); // learning cues belong to the old world's bots
     game.on('death', onDeath);
     game.on('powerup', onPowerup);
@@ -1166,19 +1179,22 @@
     if (spectate) { cam.x = spectate.x; cam.y = spectate.y; }
   }
 
-  function onDeath({ victim, killer, cause }) {
+  function onDeath({ victim, killer, cause, rank, total }) {
     // killer.isPlayer, not game.player: the player may have died in the same tick (#47).
     if (killer && killer.isPlayer) {
       feed(`You ate ${victim.name}! (+${Math.round(victim.mass * 0.8)})`, 'good');
       sound.play('kill');
     } else if (victim.isPlayer) {
-      if (cause !== 'quit') sound.play('death');
+      if (cause !== 'quit' && cause !== 'time') sound.play('death'); // running out the clock is not a death (#12)
       // Another window took over in the meantime: its last save wins, so this run isn't kept (#45).
       if (!isActive()) return;
-      const isBest = recordRun(victim, killer, cause);
+      const isBest = recordRun(victim, killer, cause, rank);
       saveWorld();
       if (cause === 'quit') { showMenu(); return; }
-      $('deathTitle').textContent = killer ? `Eaten by ${killer.name}` : 'You hit the wall!';
+      // How the run ended (#12): the clock ran out in Timed, or a death in any mode.
+      $('deathTitle').textContent = cause === 'time' ? (rank === 1 ? 'You won!' : "Time's up!") : killer ? `Eaten by ${killer.name}` : 'You hit the wall!';
+      const m = game.settings.mode;
+      $('dMode').textContent = cause === 'time' ? `Finished #${rank} of ${total}` : m === 'survival' ? `Survived ${fmtClock(game.matchTime(victim))} · Level ${game.survivalLevel()}` : '';
       showDeath(victim, isBest);
     } else if (victim === game.leaderboard[0] && victim.mass > 500) {
       feed(`#1 ${victim.name} was taken down${killer ? ' by ' + killer.name : ''}!`, 'info');
@@ -1212,7 +1228,8 @@
     settings.name = $('name').value.trim().slice(0, 16);
     if (isActive()) store.set('settings', settings);
     activeTheme = resolveTheme();
-    if (!game || game.settings.botCount !== settings.botCount || game.settings.difficulty !== settings.difficulty) newGame();
+    // Timed and Survival always start in a fresh, even world (#12); Classic reuses its own.
+    if (!game || game.settings.botCount !== settings.botCount || game.settings.difficulty !== settings.difficulty || game.settings.mode !== settings.mode || settings.mode !== 'classic') newGame();
     const p = game.spawnPlayer(settings.name || 'You', settings.skin);
     cam.x = p.x; cam.y = p.y;
     input.keyAngle = p.angle;
@@ -1225,12 +1242,16 @@
 
   function showDeath(w, isBest) {
     mode = 'dead';
-    const score = Math.round(w.mass), peak = Math.round(w.peak), best = profile.totals.best;
+    const score = Math.round(w.mass), peak = Math.round(w.peak);
     $('dScore').textContent = score.toLocaleString();
     $('dPeak').textContent = peak.toLocaleString();
     $('dKills').textContent = w.kills;
     $('dTime').textContent = fmtTime(game.time - w.born);
-    $('dBest').textContent = isBest ? '🏆 New personal best!' : `Personal best: ${best.toLocaleString()}`;
+    // The best of the mode just played (#12): Classic's peak, Timed's score at the buzzer, Survival's longest time.
+    const m = game.settings.mode, modeBest = profile.totals.bestByMode[m];
+    const shown = m === 'survival' ? fmtClock(modeBest) : modeBest.toLocaleString();
+    $('dBest').textContent = isBest ? (m === 'classic' ? '🏆 New personal best!' : `🏆 New ${MODE_NAMES[m]} best!`)
+      : m === 'classic' ? `Personal best: ${shown}` : modeBest ? `${MODE_NAMES[m]} best: ${shown}` : '';
     clearTimeout(deathTimer);
     deathTimer = setTimeout(() => { if (mode === 'dead') $('death').classList.remove('hidden'); }, 1100);
   }
@@ -1249,7 +1270,9 @@
       mode = 'paused';
       $('pausedTitle').textContent = welcomeBack ? 'Welcome back!' : 'Paused';
       $('pausedText').innerHTML = welcomeBack && game.player
-        ? `Your worm <b>${escapeHtml(game.player.name)}</b> is waiting with a score of <b>${Math.round(game.player.mass).toLocaleString()}</b>.`
+        ? `Your worm <b>${escapeHtml(game.player.name)}</b> is waiting with a score of <b>${Math.round(game.player.mass).toLocaleString()}</b>.` +
+          (game.settings.mode === 'timed' ? ` <b>${fmtClock(Math.max(0, Math.ceil(CFG.TIMED_LENGTH - game.matchTime(game.player))))}</b> left in the match.`
+            : game.settings.mode === 'survival' ? ` You are on level <b>${game.survivalLevel()}</b>.` : '')
         : 'Press <kbd>P</kbd> or <kbd>Esc</kbd> to resume';
       $('paused').classList.remove('hidden');
     } else if (!on && mode === 'paused') {
@@ -1287,6 +1310,10 @@
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
     return h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s`;
   }
+  // m:ss, for the clock and Survival times (#12)
+  const fmtClock = (s) => { s = Math.max(0, Math.floor(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  const MODE_NAMES = { classic: 'Classic', timed: 'Timed', survival: 'Survival' };
+  const MODE_HELP = { classic: 'No clock: play for as long as you last', timed: '5 minutes: the biggest worm at the buzzer wins', survival: 'Bots get tougher and more numerous each minute' };
   function fmtDate(ms) {
     const d = new Date(ms);
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -1296,10 +1323,12 @@
   function runsTable(runs, ranked) {
     if (!runs.length) return '<tr><td class="empty">No games yet. Go eat something!</td></tr>';
     const e = escapeHtml;
-    let h = `<tr>${ranked ? '<th>#</th>' : ''}<th class="num">Peak</th><th class="num">Kills</th><th class="num">Time</th><th>Killed by</th><th class="hide-sm">Mode</th><th class="hide-sm">Date</th></tr>`;
+    let h = `<tr>${ranked ? '<th>#</th>' : ''}<th class="num">Peak</th><th class="num">Kills</th><th class="num">Time</th><th>Killed by</th><th class="hide-sm">Mode</th><th class="hide-sm">Setup</th><th class="hide-sm">Date</th></tr>`;
     runs.forEach((r, i) => {
+      // A Timed match that ran out the clock shows its final rank (#12).
+      const by = r.rank ? `${r.by} · #${r.rank}` : r.by;
       h += `<tr>${ranked ? `<td class="dim">${i + 1}</td>` : ''}<td class="num"><b>${e(fmtNum(r.peak))}</b></td><td class="num">${e(fmtNum(r.kills))}</td><td class="num">${e(fmtDuration(r.time))}</td>` +
-        `<td>${e(r.by)}</td><td class="hide-sm dim">${e(r.diff)} · ${e(r.bots)}</td><td class="hide-sm dim">${e(fmtDate(r.date))}</td></tr>`;
+        `<td>${e(by)}</td><td class="hide-sm">${e(MODE_NAMES[r.mode] || MODE_NAMES.classic)}</td><td class="hide-sm dim">${e(r.diff)} · ${e(r.bots)}</td><td class="hide-sm dim">${e(fmtDate(r.date))}</td></tr>`;
     });
     return h;
   }
@@ -1312,6 +1341,8 @@
       tile(fmtNum(avg), 'avg (recent)') + tile(fmtNum(t.eaten), 'food eaten') + tile(t.games ? (t.kills / t.games).toFixed(1) : '0', 'kills / game') +
       tile(t.games ? fmtDuration(Math.round(t.time / t.games)) : '0s', 'avg survival');
     $('bestByDiff').innerHTML = DIFFICULTIES.map((d) => tile(fmtNum(t.bestByDiff[d]), d)).join('');
+    // Classic: best peak. Timed: best score at the buzzer. Survival: longest time (#12).
+    $('bestByMode').innerHTML = MODES.map((m) => tile(m === 'survival' ? fmtClock(t.bestByMode[m]) : fmtNum(t.bestByMode[m]), m)).join('');
     renderAchievements();
     $('topRuns').innerHTML = runsTable(profile.top, true);
     $('recentRuns').innerHTML = runsTable(profile.recent.slice(0, 15), false);
@@ -1468,6 +1499,8 @@
   $('botCount').addEventListener('input', (e) => { settings.botCount = +e.target.value; refreshMenu(); });
   document.querySelectorAll('#difficulty button').forEach((b) =>
     b.addEventListener('click', () => { settings.difficulty = b.dataset.v; refreshMenu(); }));
+  document.querySelectorAll('#modePick button').forEach((b) =>
+    b.addEventListener('click', () => { settings.mode = b.dataset.v; refreshMenu(); }));
   function refreshMenu() {
     [...skinsEl.children].forEach((b) => {
       const skin = SKINS[+b.dataset.skin], locked = !isUnlocked(skin);
@@ -1480,6 +1513,8 @@
     $('skinName').textContent = SKINS[settings.skin].name;
     $('botCountVal').textContent = settings.botCount;
     document.querySelectorAll('#difficulty button').forEach((b) => b.classList.toggle('on', b.dataset.v === settings.difficulty));
+    document.querySelectorAll('#modePick button').forEach((b) => b.classList.toggle('on', b.dataset.v === settings.mode));
+    $('modeHelp').textContent = MODE_HELP[settings.mode];
     activeTheme = resolveTheme();
     // Auto comes first; the theme it currently follows isn't listed again unless it's the explicit choice (#67).
     const seasonal = window.WormEngine.seasonalTheme(new Date());
@@ -2176,6 +2211,17 @@
     if (!p) return;
     const lb = game.leaderboard;
     $('score').textContent = Math.round(p.mass).toLocaleString();
+    // Timed counts down, Survival counts up with its level; Classic has no clock (#12).
+    const m = game.settings.mode, clock = $('clock'), secs = game.matchTime(p);
+    clock.classList.toggle('hidden', m === 'classic');
+    if (m === 'timed') {
+      const left = Math.max(0, Math.ceil(CFG.TIMED_LENGTH - secs));
+      clock.textContent = fmtClock(left);
+      clock.classList.toggle('low', left <= 10);
+    } else if (m === 'survival') {
+      clock.textContent = `${fmtClock(secs)} · Level ${game.survivalLevel()}`;
+      clock.classList.remove('low');
+    }
 
     let html = '';
     const top = lb.slice(0, 10);

@@ -75,11 +75,12 @@ const MEASURE_HUD = `(() => Object.fromEntries(${JSON.stringify(HUD)}.map((s) =>
   return [s, { shown: el.getClientRects().length > 0, left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }];
 })))()`;
 
-async function startTouchRun(t, width, height, coarse) {
+async function startTouchRun(t, width, height, coarse, mode = 'classic') {
   const page = await launch({ width, height });
   t.after(() => page.close());
   if (coarse) await page.coarsePointer();
   await page.goto(gameUrl());
+  if (mode !== 'classic') await page.click(`#modePick button[data-v="${mode}"]`);
   await page.startRun();
   // Shielded, with every power-up running so their badges take the most space in the HUD.
   await page.eval(`Object.assign(window.__player, { shield: 1e9 }); Object.assign(window.__player.pw, { magnet: 15, x2: 15, x5: 15, speed: 15, zoom: 15, turn: 15 })`);
@@ -97,6 +98,7 @@ async function startTouchRun(t, width, height, coarse) {
     g.update = () => {};
     g.worms.filter((w) => w.ai).forEach((b, i) => { b.name = 'Captain Slurp 99'; b.mass = 199999 - i; });
     p.name = 'WWWWWWWWWWWWWWWW';
+    if (g.settings.mode === 'survival') g.time = p.born + 59 * 60 + 59; // the clock's widest text: 59:59 · Level 60
     g.updateLeaderboard();
   })()`);
   await page.frames(15);
@@ -143,4 +145,32 @@ for (const [width, height] of [[1280, 713], [1440, 900], [601, 600], [640, 360],
       }
     }
   });
+}
+
+// The Timed and Survival clock (#12) sits above the score and must overlap nothing, with every power-up
+// running, the player outside the top 10, the boost badge showing and (on touch) the buttons in place.
+for (const mode of ['timed', 'survival']) {
+  for (const [width, height, coarse] of [[390, 844, true], [360, 640, true], [844, 390, true], [640, 360, true], [1280, 713, false], [1440, 900, false]]) {
+    test(`the ${mode} clock fits without overlaps at ${width}x${height}`, async (t) => {
+      const page = await startTouchRun(t, width, height, coarse, mode);
+      const shown = mode === 'timed' ? /^\d:\d\d$/ : /^\d+:\d\d · Level \d+$/;
+      await page.waitFor(`${shown}.test(document.getElementById('clock').textContent)`, 'the clock text');
+      const m = await page.eval(MEASURE_HUD);
+      const c = await page.eval(`(() => { const e = document.getElementById('clock'), r = e.getBoundingClientRect(); return { shown: e.getClientRects().length > 0, left: r.left, top: r.top, right: r.right, bottom: r.bottom, clipped: e.scrollWidth > e.clientWidth }; })()`);
+      assert.ok(c.shown, 'the clock is shown');
+      assert.ok(c.left >= 0 && c.top >= 0 && c.right <= width + 0.5 && c.bottom <= height + 0.5, `the clock is inside the screen: ${JSON.stringify(c)}`);
+      assert.equal(c.clipped, false, 'the clock text is not cut off');
+      // The clock is part of the score area (#stats), so that area, clock included, is what must stay clear of the rest.
+      const parts = HUD.filter((s) => coarse || !s.endsWith('Btn'));
+      for (const s of parts) assert.ok(m[s].shown, `${s} is shown`);
+      const inStats = (r) => r.left >= m['#stats'].left - 0.5 && r.right <= m['#stats'].right + 0.5 && r.top >= m['#stats'].top - 0.5 && r.bottom <= m['#stats'].bottom + 0.5;
+      assert.ok(inStats(c), 'the clock is inside the score area');
+      for (let i = 0; i < parts.length; i++) {
+        for (let j = i + 1; j < parts.length; j++) {
+          const a = m[parts[i]], b = m[parts[j]];
+          assert.ok(!(a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom), `${parts[i]} overlaps ${parts[j]}: ${JSON.stringify(a)} ${JSON.stringify(b)}`);
+        }
+      }
+    });
+  }
 }

@@ -993,3 +993,62 @@ test('a shadow cuts in only with a clear, in-time cut from beside its worm, neve
   front.think();
   assert.ok(!front.bot.ai.prey, 'never from in front');
 });
+
+// --- Survival levels (#12) ----------------------------------------------------
+
+test('Survival adds bots each level up to a cap; Classic and Timed keep the configured count (#12)', () => {
+  const target = (mode, bots, level) => {
+    const g = new Game({ botCount: bots, difficulty: 'normal', mode }, null, { seed: 5 });
+    const p = g.spawnPlayer('T', 0);
+    g.time = p.born + (level - 1) * 60;
+    return g.botTarget();
+  };
+  assert.deepEqual([1, 2, 3, 4, 11, 12, 20].map((l) => target('survival', 30, l)), [30, 33, 36, 39, 60, 60, 60]);
+  assert.deepEqual([1, 2, 30].map((l) => target('survival', 150, l)), [150, 150, 150], 'no room above the maximum');
+  assert.deepEqual([1, 2, 3, 6].map((l) => target('survival', 5, l)), [5, 6, 7, 10], 'at least one extra per level, up to twice the count');
+  assert.equal(target('survival', 5, 99), 10, 'twice the configured count');
+  for (const mode of ['classic', 'timed']) assert.deepEqual([1, 5, 30].map((l) => target(mode, 30, l)), [30, 30, 30], mode);
+});
+
+test('Survival bots join a level at a time, through the usual respawn delay (#12)', () => {
+  const g = new Game({ botCount: 30, difficulty: 'normal', mode: 'survival' }, null, { seed: 5 });
+  const p = g.spawnPlayer('T', 0);
+  p.shield = 1e6;
+  // Bots that die are replaced 1-3 s later, so the world holds the target between its living bots and its queue.
+  const bots = () => g.worms.filter((w) => w.ai).length;
+  const held = () => bots() + g.respawnQueue.length;
+  g.update(1 / 60);
+  assert.equal(held(), 30);
+  g.time = p.born + 2 * 60 + 1; // level 3
+  g.update(1 / 60);
+  assert.equal(bots(), 30, 'not instantly');
+  assert.equal(held(), 36, 'but six are on their way');
+  for (let i = 0; i < 4 * 60; i++) g.update(1 / 60);
+  assert.equal(held(), 36);
+  assert.ok(bots() >= 30, `most of them have arrived (${bots()})`);
+});
+
+test('bots spawned in a later Survival level are sharper and more aggressive, within range (#12)', () => {
+  const sample = (level) => {
+    const g = new Game({ botCount: 30, difficulty: 'normal', mode: 'survival' }, null, { seed: 9 });
+    const p = g.spawnPlayer('T', 0);
+    g.time = p.born + (level - 1) * 60;
+    const bots = Array.from({ length: 200 }, () => g.spawnBot(false));
+    const mean = (k) => bots.reduce((s, b) => s + b.ai[k], 0) / bots.length;
+    assert.ok(bots.every((b) => b.ai.skill <= 1 && b.ai.aggro <= 1 && b.ai.interval >= 0.05 && b.ai.interval <= 1), 'all within the validated ranges');
+    return { skill: mean('skill'), aggro: mean('aggro') };
+  };
+  const one = sample(1), six = sample(6), huge = sample(60);
+  assert.ok(six.skill > one.skill + 0.15 && six.aggro > one.aggro + 0.15, `level 6 (${six.skill.toFixed(2)}, ${six.aggro.toFixed(2)}) vs level 1 (${one.skill.toFixed(2)}, ${one.aggro.toFixed(2)})`);
+  assert.equal(huge.skill, 1, 'never above the maximum');
+  // Bots already in the world keep their traits.
+  const g = new Game({ botCount: 30, difficulty: 'normal', mode: 'survival' }, null, { seed: 9 });
+  const p = g.spawnPlayer('T', 0);
+  const before = g.worms.filter((w) => w.ai).map((w) => [w.ai.skill, w.ai.aggro]);
+  g.time = p.born + 600;
+  p.shield = 1e6;
+  for (let i = 0; i < 60; i++) g.update(1 / 60);
+  const traits = new Set(g.worms.filter((w) => w.ai).map((w) => w.ai.skill + ':' + w.ai.aggro));
+  const survivors = before.filter(([s, a]) => traits.has(s + ':' + a)).length;
+  assert.ok(survivors >= 25, `bots from before keep their skill and aggression (${survivors} of 30 still alive and unchanged)`);
+});
