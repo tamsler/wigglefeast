@@ -27,6 +27,11 @@ html, body {
   position: absolute; left: calc(16px + env(safe-area-inset-left)); bottom: calc(16px + env(safe-area-inset-bottom));
   text-shadow: 0 2px 6px rgba(0,0,0,.6);
 }
+/* Timed and Survival clock (#12): above the score, so it shares that corner's safe space. */
+#clock { font-size: 22px; font-weight: 800; line-height: 1.2; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+#clock.low { color: #ff5a5f; animation: clockLow 1s steps(2, jump-none) infinite; }
+@keyframes clockLow { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { #clock.low { animation: none; } }
 #stats .score { font-size: 38px; font-weight: 800; line-height: 1; }
 #stats .score small { font-size: 13px; font-weight: 600; opacity: .7; margin-left: 6px; text-transform: uppercase; letter-spacing: .08em; }
 #boostBadge {
@@ -168,6 +173,10 @@ html, body {
 .panel h3 { margin: 18px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; opacity: .6; text-align: left; }
 .grid.four { grid-template-columns: repeat(4, 1fr); }
 .grid.four b { font-size: 20px; }
+.grid.three { grid-template-columns: repeat(3, 1fr); }
+.grid.three b { font-size: 20px; }
+.bests { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+@media (max-width: 560px) { .bests { grid-template-columns: 1fr; } }
 /* Achievements on the stats screen (#14) */
 #statsTabs { margin: 4px 0 12px; }
 #statsTabs button { flex: 1; }
@@ -203,6 +212,11 @@ h2 { margin: 0 0 14px; font-size: 26px; }
 .tag { margin: 4px 0 18px; opacity: .65; }
 .label { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; opacity: .65; margin: 14px 0 6px; }
 .label span { text-transform: none; letter-spacing: 0; opacity: 1; color: #ffd60a; margin-left: 4px; }
+/* Bots, Mode and Difficulty: the label beside its control rather than above it */
+.setting { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.setting .label { margin: 0; flex: 0 0 78px; white-space: nowrap; }
+.setting > .seg, .setting > input[type=range] { flex: 1; min-width: 0; }
+#modeHelp { margin-top: 5px; font-size: 12px; line-height: 1.3; opacity: .65; text-align: left; min-height: 1.3em; }
 
 #name {
   width: 100%; padding: 13px 14px; font: inherit; font-size: 17px; font-weight: 700; text-align: center;
@@ -307,6 +321,7 @@ kbd {
 #updateDismiss { color: #cfd6f5; background: transparent; padding: 7px 10px !important; }
 
 #best, #dBest { margin-top: 10px; font-size: 13px; color: #ffd60a; min-height: 1em; }
+#dMode { margin-top: 10px; font-size: 18px; font-weight: 800; min-height: 1em; }
 
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .grid div { background: rgba(255,255,255,.05); border-radius: 12px; padding: 12px 6px; }
@@ -322,6 +337,7 @@ kbd {
   #cluster { flex-direction: column; gap: 8px; }
   #powerups { max-width: 132px; } /* three badges per row */
   #stats .score { font-size: 28px; }
+  #clock { font-size: 18px; }
 }
 
 /* Laptop-height viewports: trim spacing so the menu fits without scrolling. */
@@ -350,8 +366,10 @@ kbd {
   .tag { margin: 0 0 8px; }
   .label { margin: 7px 0 4px; }
   #name { padding: 7px 12px; }
-  #skinPreview { height: 48px; margin-bottom: 6px; }
+  #skinPreview { height: 40px; margin-bottom: 6px; }
   .seg button { padding: 6px 0; }
+  .setting { margin-top: 5px; }
+  #modeHelp { margin-top: 3px; font-size: 11.5px; }
   button.primary { margin-top: 10px; padding: 9px; }
   button.ghost { margin-top: 6px; padding: 8px; }
   .help { margin-top: 6px; line-height: 1.6; }
@@ -375,7 +393,7 @@ kbd {
   #name { padding: 8px 12px; font-size: 15px; }
   .label { margin: 8px 0 4px; }
   #skins { gap: 5px; }
-  #skinPreview { height: 44px; margin-bottom: 6px; }
+  #skinPreview { height: 40px; margin-bottom: 6px; }
   .seg button { padding: 6px 0; }
   button.primary { margin-top: 10px; padding: 9px; font-size: 16px; }
   button.ghost { margin-top: 6px; padding: 7px; }

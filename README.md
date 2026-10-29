@@ -42,7 +42,8 @@ Head-on collisions are won by the bigger worm. The red ring is the arena edge. B
 ## Menu
 
 - **Name** and **skin**: 24 skins in eight finishes (stripes, gradients, neon, metallic, spots, scales, galaxy and pulse).
-- **Bots** (5–150, default 30) and **difficulty** (easy, normal, hard). Changing either starts a new world.
+- **Bots** (5–150, default 30), **mode** and **difficulty** (easy, normal, hard). Changing any of them starts a new world.
+- **Mode:** **Classic** is the open-ended game. **Timed** is a 5-minute match: the biggest worm when the clock runs out wins, and the result screen shows your final rank. If you die first, the match is over. **Survival** has no end: every minute is a new level, with more bots (10% more per level, up to double) and tougher bots spawning in. Your score is how long you last. Timed and Survival always start in a fresh world where every bot starts small (Classic keeps its starting giants), and their clock stops while the game is paused.
 - **Food:** pick how food looks: Classic dots, Halloween, Christmas, Snacks or Tech. **Auto** (the default) uses Halloween from 15–31 October, Christmas from 1–26 December and Classic otherwise. Themes only change how food looks.
 - **Stats & high scores** (see Saving below).
 
@@ -65,7 +66,7 @@ Difficulty and growth numbers live at the top of `engine.js` (`CFG`, `DIFFICULTY
 Everything is saved automatically in the browser's `localStorage`, so there's nothing to do by hand:
 
 - **The world** (every worm, food, special food, power-ups, your current run) is saved every 10 seconds, whenever the tab is hidden, and when the tab is closed or reloaded. When you reopen the game you land on a paused "Welcome back" screen and can resume your run (with a 2-second shield) or end it.
-- **Stats** (lifetime totals, best score per difficulty, top 10 runs, last 50 games) are saved whenever a run ends. Open them from **Stats & high scores** in the menu.
+- **Stats** (lifetime totals, best score per difficulty and per mode, top 10 runs, last 50 games) are saved whenever a run ends. Runs in every mode count toward the totals and achievements; each mode also keeps its own best (Classic: peak score, Timed: score when the clock ran out, Survival: longest time). Open them from **Stats & high scores** in the menu.
 - **Your habits** (how you escape a cut-off, which Hard bots learn from) are saved with the world. They stay on the device: exports don't include them, imports leave them alone, and **Reset stats** clears them.
 - **One window at a time:** if the game is open in two tabs or windows (say, the installed app and a browser tab), only one plays and saves. The other shows *"Wigglefeast is open in another window"*; **Play here** asks the active one to save, then continues there with the same run and stats, so neither copy can overwrite the other.
 - **Export / Import** on the stats screen writes everything to a `.json` file and loads it back. Use it as a backup or to move to another browser/computer. Clearing your browser's site data erases the in-browser save.

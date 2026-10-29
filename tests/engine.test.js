@@ -1110,3 +1110,143 @@ test('bots treat a smaller body under their own as clear, like the collision rul
   assert.ok(Math.abs(heading(true) + Math.PI / 2) < 0.05, `straight down across the covered body (${heading(true).toFixed(2)})`);
   assert.ok(Math.abs(heading(false) + Math.PI / 2) > 0.1, `around B's body when it isn't covered (${heading(false).toFixed(2)})`);
 });
+
+// --- Game modes (#12) ---------------------------------------------------------
+
+// A world with a live, shielded player (so nothing but the clock can end the run), advanced by `secs` of game time.
+const modeWorld = (mode, extra = {}, seed = 7) => {
+  const g = new Game({ botCount: 30, difficulty: 'normal', mode, ...extra }, null, { seed });
+  const p = g.spawnPlayer('Tester', 0);
+  p.shield = 1e6;
+  return { g, p };
+};
+const warp = (g, secs) => { g.time += secs; };
+
+test('a mode is saved with the world; worlds and saves from before modes are Classic (#12)', () => {
+  assert.equal(new Game({ botCount: 10, difficulty: 'easy' }).settings.mode, 'classic');
+  assert.equal(new Game({ botCount: 10, difficulty: 'easy', mode: 'nonsense' }).settings.mode, 'classic', 'an unknown mode in the settings falls back');
+  for (const mode of ['classic', 'timed', 'survival']) {
+    const snap = clone(new Game({ botCount: 10, difficulty: 'easy', mode }));
+    assert.equal(snap.settings.mode, mode);
+    assert.equal(new Game(null, snap).settings.mode, mode, `${mode} round-trips`);
+  }
+  const save = fixture();
+  assert.equal(save.world.settings.mode, undefined, 'the fixture predates modes');
+  assert.doesNotThrow(() => validateSnapshot(save.world));
+  assert.equal(new Game(null, save.world).settings.mode, 'classic');
+  const bad = clone(save.world);
+  bad.settings.mode = 'zen';
+  assert.throws(() => validateSnapshot(bad), /mode/);
+  assert.throws(() => new Game(null, bad), /mode/);
+});
+
+test('the Timed clock and the Survival level come from game time, and survive a save (#12)', () => {
+  const { g, p } = modeWorld('survival');
+  const levelAt = (secs) => { g.time = p.born + secs; return g.survivalLevel(); };
+  assert.deepEqual([0, 59, 59.9, 60, 61, 125, 600].map(levelAt), [1, 1, 1, 2, 2, 3, 11]);
+  g.time = p.born + 125;
+  assert.equal(g.matchTime(p), 125);
+  const again = new Game(null, clone(g));
+  assert.equal(again.matchTime(again.player), 125, 'the same match time after a save');
+  assert.equal(again.survivalLevel(), 3);
+  // Held at its last value after the player dies.
+  g.kill(p, null, 'quit');
+  g.time += 500;
+  assert.equal(g.survivalLevel(), 3);
+  const { g: classic } = modeWorld('classic');
+  warp(classic, 900);
+  assert.equal(classic.survivalLevel(), 1, 'Classic has no levels');
+});
+
+test('a Timed match ends when the clock reaches zero, with the rank taken before the worm is removed (#12)', () => {
+  const run = (mass) => {
+    const { g, p } = modeWorld('timed');
+    p.mass = p.peak = mass;
+    const events = [];
+    g.on('death', (e) => events.push(e));
+    warp(g, 299.9);
+    g.update(0.05);
+    assert.equal(events.length, 0, 'not before 5:00');
+    assert.ok(g.player && !p.dead);
+    g.update(0.1);
+    return { events, g, p };
+  };
+  const top = run(1e6);
+  assert.equal(top.events.length, 1);
+  const e = top.events[0];
+  assert.equal(e.cause, 'time');
+  assert.equal(e.killer, null);
+  assert.equal(e.victim, top.p);
+  assert.equal(e.rank, 1);
+  assert.equal(e.total, 31, '30 bots and the player');
+  assert.equal(top.g.player, null, 'the run is over');
+  assert.ok(top.g.food.length > 0 && top.p.dead);
+  assert.equal(run(15).events[0].rank, 31, 'last place');
+  // A middle rank: exactly 4 bots heavier.
+  const { g, p } = modeWorld('timed');
+  const masses = g.worms.filter((w) => w.ai).map((w) => w.mass).sort((a, b) => b - a);
+  p.mass = p.peak = (masses[3] + masses[4]) / 2;
+  const got = [];
+  g.on('death', (ev) => got.push(ev));
+  warp(g, 300);
+  g.update(1 / 60);
+  assert.equal(got[0].rank, 5, 'four worms are bigger');
+});
+
+test('the clock only ends Timed matches, and only for a living player (#12)', () => {
+  for (const mode of ['classic', 'survival']) {
+    const { g } = modeWorld(mode);
+    const causes = [];
+    g.on('death', (e) => causes.push(e.cause));
+    warp(g, 400);
+    g.update(1 / 60);
+    assert.ok(!causes.includes('time'), `${mode} has no time limit`);
+    assert.ok(g.player);
+  }
+  const { g, p } = modeWorld('timed');
+  p.shield = 0;
+  const causes = [];
+  g.on('death', (e) => causes.push(e.cause));
+  g.kill(p, null, 'wall');
+  warp(g, 400);
+  g.update(1 / 60);
+  assert.deepEqual(causes, ['wall'], 'a player who already died is not ended again');
+});
+
+test('Timed and Survival worlds start even: no starting giants or big bots (#12)', () => {
+  const masses = (mode) => new Game({ botCount: 30, difficulty: 'hard', mode }, null, { seed: 3 }).worms.map((w) => w.mass);
+  assert.ok(masses('classic').filter((m) => m > 200).length >= 3, 'Classic keeps its giants');
+  for (const mode of ['timed', 'survival']) {
+    const m = masses(mode);
+    assert.equal(m.length, 30);
+    assert.ok(m.every((x) => x >= 15 && x <= 200), `${mode}: every bot between 15 and 200 (max ${Math.max(...m)})`);
+  }
+});
+
+test('a Classic world replays exactly the same whether or not it names its mode (#12)', () => {
+  const a = new Game({ botCount: 20, difficulty: 'hard' }, null, { seed: 11 });
+  const b = new Game({ botCount: 20, difficulty: 'hard', mode: 'classic' }, null, { seed: 11 });
+  for (let i = 0; i < 600; i++) { a.update(1 / 60); b.update(1 / 60); }
+  assert.deepEqual(a.worms.map((w) => [w.name, Math.round(w.mass), Math.round(w.sx[0])]), b.worms.map((w) => [w.name, Math.round(w.mass), Math.round(w.sx[0])]));
+});
+
+test('a Survival world at its bot cap saves and restores (#12)', () => {
+  for (const [bots, cap] of [[30, 60], [150, 150]]) {
+    const { g, p } = modeWorld('survival', { botCount: bots });
+    g.time = p.born + 20 * 60; // level 21
+    for (let i = 0; i < 6 * 60; i++) g.update(1 / 60); // replacements arrive 1-3 s after the target rises
+    // Bots that die are replaced 1-3 s later, so the world holds the cap between its living bots and its queue.
+    const held = (w) => w.worms.filter((x) => x.ai).length + w.respawnQueue.length;
+    assert.equal(held(g), cap, `${bots} configured: ${cap} bots`);
+    const snap = clone(g);
+    assert.equal(snap.settings.botCount, bots, 'the arena is still sized by the configured count');
+    assert.ok(snap.worms.length <= 200 && snap.respawnQueue.length <= 500);
+    assert.doesNotThrow(() => validateSnapshot(snap));
+    const back = new Game(null, snap);
+    assert.equal(held(back), cap);
+    assert.equal(back.survivalLevel(), g.survivalLevel());
+    assert.equal(back.botTarget(), cap);
+    for (let i = 0; i < 120; i++) back.update(1 / 60);
+    assert.ok(held(back) <= cap, 'never above the cap');
+  }
+});

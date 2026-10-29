@@ -24,6 +24,7 @@
 
   <div id="hud" class="hidden">
     <div id="stats">
+      <div id="clock" class="hidden"></div>
       <div class="score"><span id="score">0</span><small>score</small><span id="boostBadge" class="hidden">Boost</span></div>
     </div>
     <div id="leaderboard"><h3>Leaderboard</h3><div id="lbHead" aria-hidden="true"><span></span><span></span><span>Kills</span><span>Score</span></div><ol id="lb"></ol></div>
@@ -55,13 +56,27 @@
       <div class="label">Skin <span id="skinName"></span></div>
       <canvas id="skinPreview" aria-hidden="true"></canvas>
       <div id="skins"></div>
-      <div class="label">Bots <span id="botCountVal">30</span></div>
-      <input type="range" id="botCount" min="5" max="150" step="1" value="30">
-      <div class="label">Difficulty</div>
-      <div class="seg" id="difficulty">
-        <button data-v="easy">Easy</button>
-        <button data-v="normal">Normal</button>
-        <button data-v="hard">Hard</button>
+      <!-- Label and control share a row, so adding the mode (#12) doesn't push the menu into scrolling -->
+      <div class="setting">
+        <div class="label">Bots <span id="botCountVal">30</span></div>
+        <input type="range" id="botCount" min="5" max="150" step="1" value="30">
+      </div>
+      <div class="setting">
+        <div class="label">Mode</div>
+        <div class="seg" id="modePick">
+          <button data-v="classic">Classic</button>
+          <button data-v="timed">Timed</button>
+          <button data-v="survival">Survival</button>
+        </div>
+      </div>
+      <div id="modeHelp"></div>
+      <div class="setting">
+        <div class="label">Difficulty</div>
+        <div class="seg" id="difficulty">
+          <button data-v="easy">Easy</button>
+          <button data-v="normal">Normal</button>
+          <button data-v="hard">Hard</button>
+        </div>
       </div>
       <div class="label">Food <span id="themeName"></span></div>
       <div id="themes" role="group" aria-label="Food theme"></div>
@@ -87,6 +102,7 @@
         <div><b id="dKills">0</b><small>kills</small></div>
         <div><b id="dTime">0s</b><small>survived</small></div>
       </div>
+      <div id="dMode"></div>
       <div id="dBest"></div>
       <button id="again" class="primary">Play again</button>
       <button id="toMenu" class="ghost">Main menu</button>
@@ -125,8 +141,11 @@
       </div>
       <div id="statsPane" role="tabpanel">
         <div class="grid four" id="totals"></div>
-        <h3>Best by difficulty</h3>
-        <div class="grid four" id="bestByDiff"></div>
+        <!-- Side by side on wide screens, so the best by mode (#12) doesn't make the stats panel scroll -->
+        <div class="bests">
+          <div><h3>Best by difficulty</h3><div class="grid three" id="bestByDiff"></div></div>
+          <div><h3>Best by mode</h3><div class="grid three" id="bestByMode"></div></div>
+        </div>
         <h3>Top runs</h3>
         <table class="runs" id="topRuns"></table>
         <h3>Recent games</h3>

@@ -57,6 +57,14 @@
     // A new worm's body is laid out behind its head up to this long; the rest grows on as it moves, so a giant's
     // body neither piles into a ball nor leaves a small arena (#204).
     BODY_LAYOUT_MAX: 5000,
+    // Game modes (#12): a Timed match lasts TIMED_LENGTH seconds from the player's spawn; Survival gets a
+    // level every SURVIVAL_LEVEL seconds. Each level adds SURVIVAL_STEP of the configured bots (at least one), up
+    // to SURVIVAL_CAP times that count, and bots spawned above level 1 get SURVIVAL_TOUGH more skill and aggro per level.
+    TIMED_LENGTH: 300,
+    SURVIVAL_LEVEL: 60,
+    SURVIVAL_STEP: 0.1,
+    SURVIVAL_CAP: 2,
+    SURVIVAL_TOUGH: 0.05,
   };
 
   const TAU = Math.PI * 2;
@@ -239,6 +247,9 @@
   const MAX_FOOD = 50000;
   const MAX_ID = 1e9;
   const MIN_BOTS = 5, MAX_BOTS = 150; // #81
+  // How a run is played (#12). Worlds and settings from before modes have none: they are Classic.
+  const MODES = ['classic', 'timed', 'survival'];
+  const modeOf = (name) => (MODES.includes(name) ? name : 'classic');
   // How many of a new world's bots start as giants: 3, or one per 10 bots, never more than all but two (#204).
   const giantCount = (bots) => Math.min(bots - 2, Math.max(CFG.GIANT_MIN, Math.round(bots / CFG.GIANT_PER_BOTS)));
 
@@ -292,6 +303,7 @@
     if (!isObj(snap) || !SAVE_APP_IDS.includes(snap.app) || snap.v !== 1) fail('not a world snapshot');
     const s = snap.settings;
     if (!isObj(s) || !Number.isInteger(s.botCount) || s.botCount < MIN_BOTS || s.botCount > MAX_BOTS || !difficultyOf(s.difficulty)) fail('settings');
+    if (s.mode !== undefined && !MODES.includes(s.mode)) fail('mode');
     if (!inRange(snap.time, 0, MAX_TIME)) fail('time');
     if (snap.nextId !== undefined && !isId(snap.nextId)) fail('nextId');
     // Everything lives inside the arena; twice its radius leaves plenty of slack.
@@ -1370,6 +1382,7 @@
       }
       this.settings = Object.assign({ botCount: 30, difficulty: 'normal' }, settings);
       this.settings.difficulty = difficultyOf(this.settings.difficulty) || 'normal'; // old names (#177)
+      this.settings.mode = modeOf(this.settings.mode); // saves from before modes (#12)
       const bc = this.settings.botCount;
       this.R = arenaRadius(bc);
       const area = Math.PI * this.R * this.R;
@@ -1405,7 +1418,7 @@
       else {
         for (let i = 0; i < this.foodTarget; i++) this.spawnNaturalFood();
         for (let i = 0; i < this.powerupTarget; i++) this.spawnPowerup();
-        const giants = giantCount(bc);
+        const giants = this.settings.mode === 'classic' ? giantCount(bc) : 0; // Timed and Survival start even (#12)
         for (let i = 0; i < bc; i++) this.spawnBot(true, i < giants);
       }
       this.rebuildSegGrid();
@@ -1437,7 +1450,7 @@
         app: 'wigglefeast',
         v: 1,
         savedAt: Date.now(),
-        settings: { botCount: this.settings.botCount, difficulty: this.settings.difficulty },
+        settings: { botCount: this.settings.botCount, difficulty: this.settings.difficulty, mode: this.settings.mode },
         time: r2(this.time),
         nextId: this.nextId,
         worms: this.worms.filter((w) => !w.dead).map((w) => ({
@@ -1551,9 +1564,11 @@
 
     spawnBot(initial, giant = false) {
       const d = DIFFICULTY[this.settings.difficulty] || DIFFICULTY.normal;
-      const skill = rand(this.rng, d.skill[0], d.skill[1]);
+      // Survival toughens the bots spawned after level 1 (#12); both stay within 0..1, so saves stay valid.
+      const tough = CFG.SURVIVAL_TOUGH * (this.survivalLevel() - 1);
+      const skill = Math.min(1, rand(this.rng, d.skill[0], d.skill[1]) + tough);
       // A new world starts mostly small, with a few large bots (bigShare) to look up to (#16).
-      const big = initial && !giant && this.rng() < d.bigShare;
+      const big = initial && !giant && this.settings.mode === 'classic' && this.rng() < d.bigShare;
       const mass = giant ? rand(this.rng, CFG.GIANT_MIN_MASS, d.giantMax)
         : big ? 400 + Math.pow(this.rng(), 2) * (d.bigMax - 400)
         : initial ? CFG.START_MASS + Math.pow(this.rng(), 2) * 185
@@ -1571,7 +1586,7 @@
         angle: Math.atan2(-p.y, -p.x) + rand(this.rng, -1.2, 1.2),
         worldR: this.R,
         time: this.time,
-        ai: { skill, aggro: rand(this.rng, d.aggro[0], d.aggro[1]), interval: 0.32 - 0.22 * skill, wx: wp.x, wy: wp.y, prey: null, huntUntil: 0 },
+        ai: { skill, aggro: Math.min(1, rand(this.rng, d.aggro[0], d.aggro[1]) + tough), interval: 0.32 - 0.22 * skill, wx: wp.x, wy: wp.y, prey: null, huntUntil: 0 },
       });
       this.worms.push(w);
       return w;
@@ -1639,16 +1654,50 @@
       let bots = 0;
       for (const w of this.worms) if (w.ai) bots++;
       const q = this.respawnQueue;
-      while (bots + q.length < this.settings.botCount) q.push(this.time + rand(this.rng, 1, 3));
+      const target = this.botTarget();
+      while (bots + q.length < target) q.push(this.time + rand(this.rng, 1, 3));
       q.sort((a, b) => a - b);
       while (q.length && q[0] <= this.time) {
         q.shift();
-        if (bots < this.settings.botCount) { this.spawnBot(false); bots++; }
+        if (bots < target) { this.spawnBot(false); bots++; }
       }
 
       this.rebuildFoodGrid();
       if (this.recentDeaths.length && this.time >= this.remainsAt) this.refreshRemains();
       if (this.tick % 10 === 0) this.updateLeaderboard();
+      this.checkTimeUp();
+    }
+
+    // --- game modes (#12) -----------------------------------------------------
+    // How long a worm's run has lasted in game time, so it stops while paused. A dead worm's stops at its death.
+    matchTime(w) {
+      return w ? Math.max(0, (w.dead ? w.diedAt : this.time) - w.born) : 0;
+    }
+
+    // The Survival level: 1 in the first minute, then one more each minute. Held at its last value once the player has died.
+    survivalLevel() {
+      if (this.settings.mode !== 'survival') return 1;
+      return 1 + Math.floor(this.matchTime(this.player || this.lastPlayer) / CFG.SURVIVAL_LEVEL + 1e-9);
+    }
+
+    // The bots the world keeps: the configured count, plus the Survival level's extras up to twice that (never above MAX_BOTS).
+    botTarget() {
+      const base = this.settings.botCount;
+      if (this.settings.mode !== 'survival') return base;
+      const step = Math.max(1, Math.round(base * CFG.SURVIVAL_STEP));
+      return Math.min(MAX_BOTS, Math.round(base * CFG.SURVIVAL_CAP), base + step * (this.survivalLevel() - 1));
+    }
+
+    // Time up in a Timed match: the rank is taken before the worm is removed, then the run ends like a quit.
+    checkTimeUp() {
+      const p = this.player;
+      if (this.settings.mode !== 'timed' || !p || p.dead || this.time - p.born < CFG.TIMED_LENGTH - 1e-9) return;
+      this.updateLeaderboard();
+      const rank = this.rankOf(p), total = this.leaderboard.length;
+      const e = this.die(p, null, 'time');
+      e.rank = rank;
+      e.total = total;
+      this.emit('death', e);
     }
 
     // Watches a bot cutting the player off and records how the player escaped (#135). It reads
@@ -1918,7 +1967,7 @@
   }
 
   root.WormEngine = {
-    CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, MIN_BOTS, MAX_BOTS, arenaRadius, giantCount, DIFFICULTY, DIFFICULTIES, difficultyOf, TACTICS, SPECIALS, validateSnapshot, seasonalTheme,
+    CFG, SKINS, PICKABLE_SKINS, SAVE_APP_IDS, MIN_BOTS, MAX_BOTS, MODES, modeOf, arenaRadius, giantCount, DIFFICULTY, DIFFICULTIES, difficultyOf, TACTICS, SPECIALS, validateSnapshot, seasonalTheme,
     freshHabits, validHabits, recordHabit, habitBias, habitBoost,
     Game, Worm, botThink, knowsTactic, predictHead, reachPath, reachAt, freedom, radiusFor, lengthFor, foodRadius, angleDiff, TAU,
   };
