@@ -6,15 +6,23 @@ Long-term goals across many runs: the achievements, how progress toward them is 
 ## Requirements
 
 ### Requirement: Growth achievements
-The game SHALL have these achievements for size, each earned when the player's worm reaches the given score (peak mass) in a run: Snack Time (1,000), Big Noodle (5,000), Titan (25,000), Hard Mode (5,000 on Hard difficulty) and Hard Survivor (10,000 on Hard difficulty). Hard Survivor was called Expert Survivor before there were three levels; earning it under either name counts.
+The game SHALL have these achievements for size, each earned when the player's worm reaches the given score (peak mass) in a run: Snack Time (1,000), Big Noodle (10,000), Titan (100,000), Hard Mode (25,000 on Hard difficulty) and Hard Survivor (250,000 on Hard difficulty). These goals were raised when worms became able to grow into the millions; an achievement earned before that stays earned, with its reward. Hard Survivor was called Expert Survivor before there were three levels; earning it under either name counts.
 
-#### Scenario: Reaching 5,000
-- **WHEN** the player's worm reaches a score of 5,000 for the first time, on any difficulty
+#### Scenario: Reaching 10,000
+- **WHEN** the player's worm reaches a score of 10,000 for the first time, on any difficulty
 - **THEN** Snack Time and Big Noodle are earned (Snack Time if not already)
 
 #### Scenario: Difficulty goals
-- **WHEN** the player reaches 5,000 on Normal
+- **WHEN** the player reaches 25,000 on Normal
 - **THEN** Hard Mode is not earned, because it needs Hard
+
+#### Scenario: Just short of a goal
+- **WHEN** the player's best score is 99,999 overall and 24,999 on Hard
+- **THEN** Titan and Hard Mode are not earned, and they are earned at 100,000 and at 25,000 on Hard
+
+#### Scenario: Earned before the goals were raised
+- **WHEN** a player who earned Titan, Hard Mode and Hard Survivor at the old goals (25,000, 5,000 and 10,000) opens the game with a best score of 30,000
+- **THEN** all three are still earned, with the date they were earned, and Crystal and Galaxy Prime are still unlocked
 
 #### Scenario: Earned as Expert Survivor
 - **WHEN** a player who earned Expert Survivor before this change opens the game
@@ -49,7 +57,7 @@ The game SHALL have these achievements: Grazer (eat 10,000 pieces of food in tot
 When achievements first appear, and whenever a profile is loaded or imported, every achievement that the saved stats prove (best scores overall and by difficulty, totals, and the saved top and recent runs) SHALL be earned at once, without a pop-up. Stargazer and Top of the Board, which older stats can't prove, SHALL count from then on.
 
 #### Scenario: Existing player
-- **WHEN** a player whose saved best score is 6,000 with 120 total kills opens the new version
+- **WHEN** a player whose saved best score is 12,000 with 120 total kills opens the new version
 - **THEN** Snack Time, Big Noodle, First Bite and Apex are already earned, Holo and Ghost are unlocked, and no pop-ups appear
 
 ### Requirement: Earning an achievement
@@ -64,11 +72,11 @@ The moment an achievement is earned during a run, the game SHALL show a short po
 - **THEN** no pop-up appears
 
 ### Requirement: Achievement progress on the stats screen
-The stats screen SHALL list every achievement with its name, goal and progress (for example 3,200 / 5,000), earned ones marked as earned with the date, and the skin each unlocks, if any.
+The stats screen SHALL list every achievement with its name, goal and progress (for example 3,200 / 10,000), earned ones marked as earned with the date, and the skin each unlocks, if any.
 
 #### Scenario: Viewing progress
 - **WHEN** a player with a best score of 3,200 opens the stats screen
-- **THEN** Big Noodle shows 3,200 / 5,000 and that it unlocks Holo
+- **THEN** Big Noodle shows 3,200 / 10,000 and that it unlocks Holo
 
 ### Requirement: Skin rewards
 Earning Big Noodle SHALL unlock Holo, First Bite Ghost, Hungry Hunter Inferno, Marathon Storm, Titan Crystal and Hard Survivor Galaxy Prime.

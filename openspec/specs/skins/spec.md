@@ -126,7 +126,7 @@ The skin picker SHALL show every unlockable skin, after the free ones: unlocked 
 
 #### Scenario: Tapping a locked skin
 - **WHEN** the player taps the locked Galaxy Prime swatch
-- **THEN** the skin doesn't change, and the menu says "Reach 10,000 on Hard to unlock Galaxy Prime"
+- **THEN** the skin doesn't change, and the menu says "Reach 250,000 on Hard to unlock Galaxy Prime"
 
 #### Scenario: After unlocking
 - **WHEN** the player has earned Big Noodle and opens the menu
