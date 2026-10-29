@@ -1185,7 +1185,7 @@
       feed(`You ate ${victim.name}! (+${Math.round(victim.mass * 0.8)})`, 'good');
       sound.play('kill');
     } else if (victim.isPlayer) {
-      if (cause !== 'quit') sound.play('death');
+      if (cause !== 'quit' && cause !== 'time') sound.play('death'); // running out the clock is not a death (#12)
       // Another window took over in the meantime: its last save wins, so this run isn't kept (#45).
       if (!isActive()) return;
       const isBest = recordRun(victim, killer, cause, rank);

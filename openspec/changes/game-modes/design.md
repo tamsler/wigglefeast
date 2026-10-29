@@ -89,6 +89,7 @@ They read `totals`, `top`, `recent` and the live run, all of which now include r
 - [A Survival save above the validator's limits] → Cap at `min(150, 2 × base)`, test save and restore at the cap, and keep `settings.botCount` unchanged.
 - [Classic replays shift because of new random draws] → New logic is gated on mode and adds no draws for Classic; the existing simulation and bot tests must pass unchanged.
 - [Timed #1 might still be hard or too easy] → The even start is the lever; the 300 s and the survival numbers are `CFG` constants so they can be tuned in a later release. A simulation test checks a bot-only world reaches a sensible spread in 5 minutes (no giants).
+- [A saved Survival world with no living player reports level 1] → `lastPlayer` is not saved, so a world restored without a player (after a death or End run) has its bot target back at the configured count: extra bots already in it just die off without being replaced. This only affects the world running behind the menu, since every Survival run starts a new world; a world with a living player resumes at its own level.
 - [Rank ties or a mid-update leaderboard] → Refresh the leaderboard right before taking the rank and use its order (the same order the player saw).
 - [Dropping `Timed` runs from top-10 ordering] → Top runs stay ordered by peak across modes, and each row shows its mode; a per-mode top list is out of scope.
 - [HUD clutter on small phones] → The overlap test runs at both phone sizes before release.
