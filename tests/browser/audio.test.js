@@ -7,6 +7,11 @@ const { launch, gameUrl } = require('../helpers/browser');
 const STATE = 'window.WormAudio.state()';
 const LOG = 'window.WormAudio.log().map((e) => e.name)';
 
+// The audio log keeps only the newest 50 entries, so "how many were there before" plus slice() goes
+// wrong once it is full (#216). Mark the time instead, and ask for what was logged since.
+const mark = (page) => page.eval('performance.now()');
+const since = (page, m) => page.eval(`window.WormAudio.log().filter((e) => e.at >= ${m}).map((e) => e.name)`);
+
 test('audio module', async (t) => {
   let page;
   t.after(() => page && page.close());
@@ -29,12 +34,18 @@ test('audio module', async (t) => {
   });
 
   await t.test('at most 12 eating pops per second', async () => {
-    const n = await page.eval(`(() => {
-      const before = window.WormAudio.log().length;
-      for (let i = 0; i < 40; i++) window.WormAudio.play('eat', { size: 0.2 });
-      return window.WormAudio.log().slice(before).filter((e) => e.name === 'eat').length;
+    // A frozen clock, so a slow machine can't refill the allowance in the middle of the loop (#216).
+    const pops = (advance) => page.eval(`(() => {
+      const real = performance.now.bind(performance), t = real() + ${advance};
+      performance.now = () => t;
+      try {
+        const m = t;
+        for (let i = 0; i < 40; i++) window.WormAudio.play('eat', { size: 0.2 });
+        return window.WormAudio.log().filter((e) => e.at >= m && e.name === 'eat').length;
+      } finally { performance.now = real; }
     })()`);
-    assert.ok(n <= 12 && n >= 10, `${n} pops logged from 40 within a moment`);
+    assert.equal(await pops(0), 12, 'a full second of pops at once');
+    assert.equal(await pops(1000), 12, 'and a second later, another 12');
   });
 });
 
@@ -87,10 +98,10 @@ test('sounds follow the game', async (t) => {
   const state = () => page.eval('window.wigglefeastDebug.audioState()');
   // What got logged while running fn.
   const during = async (fn) => {
-    const n = (await sounds()).length;
+    const m = await mark(page);
     await fn();
     await page.frames(3);
-    return (await sounds()).slice(n);
+    return since(page, m);
   };
 
   await t.test('the first real click unlocks audio; Play swooshes', async () => {
@@ -103,19 +114,28 @@ test('sounds follow the game', async (t) => {
     await page.eval('window.__player.shield = 1e9');
   });
 
+  // #216: the sound log keeps only the newest 50, and a busy run on a slow machine fills it. The
+  // checks below must still see every new sound then.
+  await t.test('a full sound log still shows new sounds', async () => {
+    await page.eval(`for (let i = 0; i < 60; i++) window.WormAudio.play('powerup')`);
+    assert.equal((await sounds()).length, 50, 'the log is full');
+    const got = await during(() => page.eval(`window.WormAudio.play('special')`));
+    assert.deepEqual(got.filter((n) => n === 'special'), ['special']);
+  });
+
   await t.test('music plays during the run', async () => {
     await page.waitFor('window.wigglefeastDebug.audioState().musicPlaying', 'music');
   });
 
   await t.test('eating food pops', async () => {
-    const n = (await sounds()).length;
+    const m = await mark(page);
     await page.eval(`(() => {
       const g = window.__game, p = window.__player;
       g.food.push({ x: p.sx[0], y: p.sy[0], v: 2, r: 5, c: '#fff', life: Infinity, ph: 0, dead: false, natural: true });
       g.rebuildFoodGrid();
     })()`);
     // Wait for it rather than a fixed number of frames: a busy machine may need a few more.
-    await page.waitFor(`window.wigglefeastDebug.sounds().slice(${n}).includes('eat')`, 'eating pop', 5000);
+    await page.waitFor(`window.WormAudio.log().some((e) => e.at >= ${m} && e.name === 'eat')`, 'eating pop', 5000);
   });
 
   await t.test('power-ups, special food and kills', async () => {
@@ -130,18 +150,23 @@ test('sounds follow the game', async (t) => {
   await t.test('bots make no sound', async () => {
     // The kill above earned First Bite (#14); let its fanfare play before listening.
     await page.waitFor(`window.wigglefeastDebug.toasts().includes('firstbite')`, 'First Bite fanfare');
-    const got = await during(() => page.eval(`(() => {
+    // The mark is taken in the same synchronous step that clears the food, so no frame can run
+    // between them and let the player eat something and log a pop of its own (#216).
+    const m = await page.eval(`(() => {
       const g = window.__game, b = g.worms.find((w) => w.ai && !w.dead);
       // So the player eats and picks up nothing meanwhile.
       Object.assign(g, { food: [], foodTarget: 0, powerups: [], powerupTarget: 0, specials: [], specialTarget: 0 }); g.rebuildFoodGrid();
+      const m = performance.now();
       g.emit('eat', { worm: b, r: 5 });
       g.emit('powerup', { worm: b, type: 'magnet' });
       g.emit('special', { worm: b, kind: 'nova', value: 25 });
       b.boosting = true;
       b.sx = b.sx.map((x) => x + 5000); b.updateBounds(); // far away, so the player can't eat what it drops
       g.kill(b, null, 'wall');
-    })()`));
-    assert.deepEqual(got, []);
+      return m;
+    })()`);
+    await page.frames(3);
+    assert.deepEqual(await since(page, m), []);
     assert.equal((await state()).boosting, false, 'a boosting bot makes no whoosh');
   });
 
@@ -203,9 +228,9 @@ test('sound and music toggles', async (t) => {
     await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 5, y: 5, button: 'left', clickCount: 1 });
   };
   const logged = async (name) => {
-    const n = (await page.eval('window.wigglefeastDebug.sounds()')).length;
+    const m = await mark(page);
     await page.eval(`window.WormAudio.play('${name}')`);
-    return (await page.eval('window.wigglefeastDebug.sounds()')).length > n;
+    return (await since(page, m)).includes(name);
   };
 
   await t.test('both start on', async () => {
