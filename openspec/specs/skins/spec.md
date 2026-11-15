@@ -6,7 +6,7 @@ How worms look: the skins players and bots can wear, how each skin's body is dra
 ## Requirements
 
 ### Requirement: Skin finishes
-Every skin SHALL have a finish that decides how its body is drawn: stripes (colour bands), gradient (a smooth blend from head to tail), neon (a dark body with a glowing line along it and running lights), metallic (a shine that moves along the body), spots, scales (a diamond pattern down the spine), galaxy (twinkling stars), or pulse (glowing waves running toward the tail). The finish SHALL decide the body's colours and the markings drawn on top of its ridges. Every finish keeps the worm's eyes and size, and its dark outline, except a see-through finish (Ghost), whose body would show the outline through it (#187). No finish SHALL draw a glow or anything else around the body beyond that outline: the edge of the body is where another worm's head kills (#190).
+Every skin SHALL have a finish that decides how its body is drawn: stripes (colour bands), gradient (a smooth blend from head to tail), neon (a dark body with a glowing line along it and running lights), metallic (a shine that moves along the body), spots, scales (a diamond pattern down the spine), galaxy (twinkling stars), or pulse (glowing waves running toward the tail). The finish SHALL decide the body's colours and the markings drawn on top of its ridges.
 
 #### Scenario: Animated finishes
 - **WHEN** a worm with the metallic, neon, galaxy or pulse finish is on screen while the game is running
@@ -19,6 +19,17 @@ Every skin SHALL have a finish that decides how its body is drawn: stripes (colo
 #### Scenario: Markings stay visible
 - **WHEN** a worm wears a spots, scales, galaxy or neon skin
 - **THEN** its spots, diamond scales, stars or running lights are drawn over the ridged body, not hidden by it
+
+### Requirement: Finishes keep the outline and the edge
+Every finish SHALL keep the worm's eyes and size, and its dark outline, except a see-through finish (Ghost), whose body would show the outline through it (#187). No finish SHALL draw a glow or anything else around the body beyond that outline: the edge of the body is where another worm's head kills (#190).
+
+#### Scenario: See-through finish
+- **WHEN** a worm wears the Ghost skin
+- **THEN** its eyes and size are drawn as usual, but its body is drawn without the dark outline, which would show through it
+
+#### Scenario: Nothing beyond the outline
+- **WHEN** a worm wears a neon, galaxy or pulse skin
+- **THEN** nothing is drawn around its body beyond the dark outline, so the edge you see is where another worm's head kills
 
 ### Requirement: Ridged round body
 Every worm's body SHALL look like a stack of thin round discs, one per segment, laid from the tail to the head: a smooth outline with a fine curved ridge across the body at each segment (the back edge of each disc, curving toward the tail) and a soft highlight along its length, so the body looks round. Ridges MAY be left out on worms only a few pixels wide on screen. The body SHALL keep its outline, width and length, so collisions still match what the player sees.
@@ -84,11 +95,14 @@ The main menu SHALL show a preview of a worm wearing the selected skin, larger t
 - **THEN** the preview fits the menu's width without sideways scrolling
 
 ### Requirement: Hidden skins stay compatible
-Holo and Ghost (formerly Rainbow and Lavender) SHALL be unlockable rewards: not offered in the picker until unlocked, and never given to new bots. Skins SHALL keep their position in the skin list, so a saved world or remembered setting that refers to any skin SHALL keep loading; a skin whose look was replaced is drawn with its new look. A locked reward SHALL NOT be worn: when the chosen skin is locked (on load, after Reset stats, after importing a save, or when another window takes over), the choice SHALL fall back to the first free skin, Cherry Pop, and a run in progress in a locked skin SHALL continue in that free skin (#178).
+Holo and Ghost (formerly Rainbow and Lavender) SHALL be unlockable rewards: not offered in the picker until unlocked, and never given to new bots. Skins SHALL keep their position in the skin list, so a saved world or remembered setting that refers to any skin SHALL keep loading; a skin whose look was replaced is drawn with its new look.
 
 #### Scenario: Old save with a hidden skin
 - **WHEN** a world saved with a Rainbow bot or player (position of Holo) is loaded
 - **THEN** that worm is drawn as Holo
+
+### Requirement: A locked reward is never worn
+A locked reward SHALL NOT be worn: when the chosen skin is locked (on load, after Reset stats, after importing a save, or when another window takes over), the choice SHALL fall back to the first free skin, Cherry Pop, and a run in progress in a locked skin SHALL continue in that free skin (#178).
 
 #### Scenario: Remembered hidden skin
 - **WHEN** the player's remembered skin is Ghost and they haven't unlocked it

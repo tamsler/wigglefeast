@@ -139,7 +139,7 @@ Newly spawned players SHALL be shielded for 2.5 seconds; shielded worms can neit
 - **THEN** the player does not die
 
 ### Requirement: Power-ups
-The arena SHALL contain power-ups that any worm (player or bot) can collect by touching them. A power-up within reach of a worm's head (just beyond its glow) SHALL slide toward the nearest such head, the way food does. Each lasts 16 seconds: magnet (pulls food and power-ups from much farther away), x2, x5 and x10 (multiply the value of natural food, not of food dropped by worms; the highest one applies; x10 is rarer than x5), speed (1.25× speed and boosting costs no mass), zoom (player camera zooms out), and tight turns (the worm turns twice as fast as normal for its size).
+The arena SHALL contain power-ups that any worm (player or bot) can collect by touching them. A power-up within reach of a worm's head (just beyond its glow) SHALL slide toward the nearest such head, the way food does. Each lasts 16 seconds.
 
 #### Scenario: Collecting a power-up
 - **WHEN** a worm's head touches a power-up
@@ -148,6 +148,9 @@ The arena SHALL contain power-ups that any worm (player or bot) can collect by t
 #### Scenario: Passing close by
 - **WHEN** a worm's head passes beside a power-up, close enough to brush its glow
 - **THEN** the power-up slides to the head and is collected without the worm steering at it
+
+### Requirement: Power-up types
+The power-ups SHALL be: magnet (pulls food and power-ups from much farther away), x2, x5 and x10 (multiply the value of natural food, not of food dropped by worms; the highest one applies; x10 is rarer than x5), speed (1.25× speed and boosting costs no mass), zoom (player camera zooms out), and tight turns (the worm turns twice as fast as normal for its size).
 
 #### Scenario: Magnet pulls power-ups
 - **WHEN** a worm with the magnet passes about 200 units from a power-up

@@ -43,15 +43,18 @@ Pressing Play with a bot count, difficulty or mode different from the current wo
 - **THEN** the existing world continues, as before modes existed
 
 ### Requirement: Stats and high scores
-Each finished run (death, quit or the end of a Timed match) SHALL be recorded with date, name, final and peak score, kills, food eaten, time survived, cause, difficulty, bot count, mode and, for a Timed match that ended by the clock, its final rank. The profile SHALL keep lifetime totals, best peak score per difficulty (easy, normal, hard), the top 10 runs by peak score and the 50 most recent runs, and SHALL be shown on the Stats & high scores screen. The profile SHALL also keep a best per mode, shown on the stats screen: Classic's is its best peak score, Timed's is its best final score in a match that ended by the clock, and Survival's is its longest time survived. Recording a run SHALL add it to the profile as it is stored at that moment, so runs recorded by another window are kept. The run tables SHALL show each run's mode, difficulty and bot count.
-
-#### Scenario: Personal best
-- **WHEN** a run's peak score beats the previous best
-- **THEN** the death screen says it is a new personal best and the stats screen shows it first in Top runs
+Each finished run (death, quit or the end of a Timed match) SHALL be recorded with date, name, final and peak score, kills, food eaten, time survived, cause, difficulty, bot count, mode and, for a Timed match that ended by the clock, its final rank. Recording a run SHALL add it to the profile as it is stored at that moment, so runs recorded by another window are kept.
 
 #### Scenario: Runs from two windows
 - **WHEN** the player finishes a run in one window, then switches to another window with Play here and finishes a run there
 - **THEN** the stats show both runs and count both games
+
+### Requirement: Profile totals, bests and run tables
+The profile SHALL keep lifetime totals, best peak score per difficulty (easy, normal, hard), the top 10 runs by peak score and the 50 most recent runs, and SHALL be shown on the Stats & high scores screen. The run tables SHALL show each run's mode, difficulty and bot count.
+
+#### Scenario: Personal best
+- **WHEN** a run's peak score beats the previous best
+- **THEN** the death screen says it is a new personal best and the stats screen shows it first in Top runs
 
 #### Scenario: Expert best
 - **WHEN** the player finishes a run on hard (the level that was Expert)
@@ -65,14 +68,6 @@ Each finished run (death, quit or the end of a Timed match) SHALL be recorded wi
 - **WHEN** a profile with Expert runs and an Expert best is loaded or imported
 - **THEN** its Expert runs are listed as "hard", and the Hard best is the higher of its old Hard and Expert bests
 
-#### Scenario: Best by mode
-- **WHEN** the player has finished a Classic run with a peak of 8,000, a Timed match ended by the clock with a score of 1,200, and a Survival run of 6 minutes 10 seconds
-- **THEN** the stats screen shows 8,000 for Classic, 1,200 for Timed and 6:10 for Survival
-
-#### Scenario: Timed death does not set the Timed best
-- **WHEN** the player is eaten during a Timed match with a peak of 3,000
-- **THEN** the run is listed and counts toward the totals, but the Timed best is unchanged
-
 #### Scenario: A Timed run is remembered after the next run
 - **WHEN** the player finishes a Timed match ranked #2 and then finishes a Classic run
 - **THEN** the Timed run still shows its mode and rank in the run tables, and the Timed best is still there
@@ -81,16 +76,33 @@ Each finished run (death, quit or the end of a Timed match) SHALL be recorded wi
 - **WHEN** the stats screen lists a Timed run on normal with 30 bots
 - **THEN** its row shows the mode Timed along with normal and 30
 
+### Requirement: Best by mode
+The profile SHALL also keep a best per mode, shown on the stats screen: Classic's is its best peak score, Timed's is its best final score in a match that ended by the clock, and Survival's is its longest time survived.
+
+#### Scenario: Best by mode
+- **WHEN** the player has finished a Classic run with a peak of 8,000, a Timed match ended by the clock with a score of 1,200, and a Survival run of 6 minutes 10 seconds
+- **THEN** the stats screen shows 8,000 for Classic, 1,200 for Timed and 6:10 for Survival
+
+#### Scenario: Timed death does not set the Timed best
+- **WHEN** the player is eaten during a Timed match with a peak of 3,000
+- **THEN** the run is listed and counts toward the totals, but the Timed best is unchanged
+
 ### Requirement: Export, import and reset
-The stats screen SHALL export the profile and world to a JSON file, import such a file after confirmation (replacing profile and world), and reset stats after confirmation. Files with app id 'wigglefeast' or 'worm-arena' SHALL be accepted; anything else SHALL be rejected with a message. Exported files SHALL NOT include the record of the player's habits, and importing SHALL leave it unchanged. Resetting stats SHALL also clear that record. Earned achievements are part of the profile: exporting SHALL include them, importing SHALL replace them with the file's (plus any its stats prove), and resetting stats SHALL clear them and lock the skins they unlocked.
+The stats screen SHALL export the profile and world to a JSON file, import such a file after confirmation (replacing profile and world), and reset stats after confirmation. Files with app id 'wigglefeast' or 'worm-arena' SHALL be accepted; anything else SHALL be rejected with a message.
 
 #### Scenario: Importing a non-save file
 - **WHEN** the player imports a JSON file that is not a Wigglefeast save
 - **THEN** nothing changes and an error message is shown
 
+### Requirement: The record of the player's habits in saves and resets
+Exported files SHALL NOT include the record of the player's habits, and importing SHALL leave it unchanged. Resetting stats SHALL also clear that record.
+
 #### Scenario: Reset forgets habits
 - **WHEN** the player resets their stats
 - **THEN** the record of their habits is empty afterwards
+
+### Requirement: Achievements in saves and resets
+Earned achievements are part of the profile: exporting SHALL include them, importing SHALL replace them with the file's (plus any its stats prove), and resetting stats SHALL clear them and lock the skins they unlocked.
 
 #### Scenario: Achievements travel with a save
 - **WHEN** a player exports a save with Top of the Board earned and imports it on another device

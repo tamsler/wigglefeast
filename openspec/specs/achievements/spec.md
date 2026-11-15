@@ -6,7 +6,7 @@ Long-term goals across many runs: the achievements, how progress toward them is 
 ## Requirements
 
 ### Requirement: Growth achievements
-The game SHALL have these achievements for size, each earned when the player's worm reaches the given score (peak mass) in a run: Snack Time (1,000), Big Noodle (10,000), Titan (100,000), Hard Mode (25,000 on Hard difficulty) and Hard Survivor (250,000 on Hard difficulty). These goals were raised when worms became able to grow into the millions; an achievement earned before that stays earned, with its reward. Hard Survivor was called Expert Survivor before there were three levels; earning it under either name counts.
+The game SHALL have these achievements for size, each earned when the player's worm reaches the given score (peak mass) in a run: Snack Time (1,000), Big Noodle (10,000), Titan (100,000), Hard Mode (25,000 on Hard difficulty) and Hard Survivor (250,000 on Hard difficulty).
 
 #### Scenario: Reaching 10,000
 - **WHEN** the player's worm reaches a score of 10,000 for the first time, on any difficulty
@@ -19,6 +19,9 @@ The game SHALL have these achievements for size, each earned when the player's w
 #### Scenario: Just short of a goal
 - **WHEN** the player's best score is 99,999 overall and 24,999 on Hard
 - **THEN** Titan and Hard Mode are not earned, and they are earned at 100,000 and at 25,000 on Hard
+
+### Requirement: Size achievements earned before the goals were raised
+The size goals were raised when worms became able to grow into the millions; an achievement earned before that SHALL stay earned, with its reward. Hard Survivor was called Expert Survivor before there were three levels; earning it under either name SHALL count.
 
 #### Scenario: Earned before the goals were raised
 - **WHEN** a player who earned Titan, Hard Mode and Hard Survivor at the old goals (25,000, 5,000 and 10,000) opens the game with a best score of 30,000
