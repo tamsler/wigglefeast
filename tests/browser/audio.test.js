@@ -44,6 +44,7 @@ test('audio module', async (t) => {
         return window.WormAudio.log().filter((e) => e.at >= m && e.name === 'eat').length;
       } finally { performance.now = real; }
     })()`);
+    // Leaves the page's eat clock a second ahead, so keep this the last test on this page.
     assert.equal(await pops(0), 12, 'a full second of pops at once');
     assert.equal(await pops(1000), 12, 'and a second later, another 12');
   });
