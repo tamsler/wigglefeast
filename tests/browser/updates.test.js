@@ -18,6 +18,17 @@ const checkForUpdate = (page) => page.eval(`navigator.serviceWorker.getRegistrat
 const bannerShown = (page) => page.eval(`!document.getElementById('updateBanner').classList.contains('hidden')`);
 const versionLabel = (page) => page.eval(`document.getElementById('version').textContent`);
 
+// Chrome can wait about a minute before it looks for the first update (#220), and a run left alone
+// that long would end. A shield keeps the worm alive, and holding a turn key keeps it circling:
+// a shielded worm passes through the wall, and a save with a worm far outside the arena is
+// rejected on load. Call release() before pausing. The waits for the new release stop at 100 s so
+// they fail with their own message before CI's 120 s limit for the whole file cancels the test.
+const surviveAMinute = async (page) => {
+  await page.eval('window.__player.shield = 1e5');
+  await page.key('keyDown', 'ArrowLeft');
+  return () => page.key('keyUp', 'ArrowLeft');
+};
+
 test('offline play and release updates', async (t) => {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'wigglefeast-updates-'));
   let page, server;
@@ -53,10 +64,12 @@ test('offline play and release updates', async (t) => {
     server.setVersion('90.0.0-test');
     await page.reload();
     await page.startRun();
+    const release = await surviveAMinute(page);
     await checkForUpdate(page);
-    await page.waitFor(`navigator.serviceWorker.getRegistration().then((r) => !!(r && r.waiting))`, 'new release downloaded');
+    await page.waitFor(`navigator.serviceWorker.getRegistration().then((r) => !!(r && r.waiting))`, 'new release downloaded', 100000);
     await page.frames(10);
     assert.equal(await bannerShown(page), false, 'no banner during a run');
+    await release();
     await page.press('KeyP');
     await page.waitFor(`!document.getElementById('updateBanner').classList.contains('hidden')`, 'banner on pause');
     assert.equal(await page.eval(`document.getElementById('updateText').textContent`), 'Version 90.0.0-test is ready');
@@ -75,11 +88,13 @@ test('offline play and release updates', async (t) => {
   await t.test('the banner appears on the death screen (#15)', async () => {
     await page.click('#endRun');
     await page.startRun();
+    const release = await surviveAMinute(page);
     server.setVersion('91.0.0-test');
     await checkForUpdate(page);
-    await page.waitFor(`navigator.serviceWorker.getRegistration().then((r) => !!(r && r.waiting))`, 'new release downloaded');
+    await page.waitFor(`navigator.serviceWorker.getRegistration().then((r) => !!(r && r.waiting))`, 'new release downloaded', 100000);
     await page.frames(10);
     assert.equal(await bannerShown(page), false, 'no banner during a run');
+    await release();
     await page.eval('window.__game.kill(window.__player, null)');
     await page.waitFor(`!document.getElementById('updateBanner').classList.contains('hidden')`, 'banner on death screen');
     await page.click('#updateReload');
@@ -90,7 +105,7 @@ test('offline play and release updates', async (t) => {
   await t.test('a dismissed update takes over on the next launch', async () => {
     server.setVersion('92.0.0-test');
     await checkForUpdate(page);
-    await page.waitFor(`navigator.serviceWorker.getRegistration().then((r) => !!(r && r.waiting))`, 'new release downloaded');
+    await page.waitFor(`navigator.serviceWorker.getRegistration().then((r) => !!(r && r.waiting))`, 'new release downloaded', 100000);
     await page.waitFor(`!document.getElementById('updateBanner').classList.contains('hidden')`, 'banner on menu');
     await page.click('#updateDismiss');
     await page.frames(5);
