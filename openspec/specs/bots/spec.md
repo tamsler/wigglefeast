@@ -44,7 +44,7 @@ Each bot SHALL re-plan its heading several times per second, choosing among cand
 - **THEN** it may steer ahead of that worm's head to cut it off, boosting when close
 
 ### Requirement: Difficulty
-Each bot SHALL get a skill and aggression value drawn from the selected difficulty (easy, normal, hard). Higher skill means faster re-planning, more candidate headings and farther look-ahead. The intended feel: easy is a calm arena for learning, normal has bots that eat efficiently and hunt now and then, and hard has bots that play like experienced players.
+Each bot SHALL get a skill and aggression value drawn from the selected difficulty (easy, normal, hard). Higher skill means faster re-planning, more candidate headings and farther look-ahead. The intended feel: easy is a calm arena for learning, normal has bots that eat efficiently and hunt now and then, and hard has bots that play like experienced players, for players who find Normal easy.
 
 #### Scenario: Hard difficulty
 - **WHEN** a world is created on hard
@@ -60,7 +60,7 @@ Each bot SHALL get a skill and aggression value drawn from the selected difficul
 
 #### Scenario: Easy feel
 - **WHEN** a world is created on easy
-- **THEN** it is a calm arena for learning: few large worms, bots that steer clumsily, rarely hunt, and only go after worms smaller than themselves, so a new player survives for minutes
+- **THEN** it is a calm arena for learning: few large worms, bots that steer clumsily, rarely hunt, and only go after worms smaller than themselves (the aim: a new player survives for minutes)
 
 #### Scenario: Normal feel
 - **WHEN** a world is created on normal
@@ -68,7 +68,7 @@ Each bot SHALL get a skill and aggression value drawn from the selected difficul
 
 #### Scenario: Hard feel
 - **WHEN** a world is created on hard
-- **THEN** bots play like experienced players: they read turns, coil, pin against the wall, trap and flank, and get out of danger; with Hard sharpness they react faster, see danger sooner and escape cut-offs better; more of them start large; this is for players who find Normal easy
+- **THEN** bots play like experienced players: they read turns, coil, pin against the wall, trap and flank, and get out of danger; on top of the highest skills, with Hard sharpness they react faster, see danger sooner and escape cut-offs better; more of them start large
 
 ### Requirement: Difficulty names from older saves
 A difficulty saved under an older name SHALL load as its current level: "expert" and "hard" both load as hard.
@@ -107,7 +107,7 @@ Before boosting, a sharp bot SHALL check the path the boost would actually take 
 - **THEN** it still turns toward that heading, but does not boost
 
 ### Requirement: Sharp bots see cutters coming
-A sharp bot SHALL notice threatening heads from farther away and keep track of more of them at once. When one or more heads are lining up to cut it off, it SHALL steer for the heading that best clears all of them, rather than turning away from the nearest one alone.
+Compared with a bot of the same skill without Hard sharpness, a sharp bot SHALL notice threatening heads from farther away and keep track of more of them at once. When one or more heads are lining up to cut it off, it SHALL steer for the heading that best clears all of them, rather than turning away from the nearest one alone.
 
 #### Scenario: Two cutters at once
 - **WHEN** two heads close in on a hard bot from different sides, each lining up to cut it off, and turning away from the nearer one alone would run into the other's path
