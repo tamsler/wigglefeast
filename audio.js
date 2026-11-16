@@ -9,8 +9,10 @@
   const EAT_PER_SEC = 12; // eating pops allowed per second; extra ones are skipped
   const LOG_SIZE = 50;
 
-  let ac = null, master = null, musicBus = null, noiseBuf = null;
+  let ac = null, master = null, sfx = null, musicBus = null, noiseBuf = null;
   let soundOn = true, musicOn = true, quietOn = false, musicWanted = false, boostNodes = null;
+  // Volume levels from Settings (#13), each 0 to 1; 1 on all three is the loudness from before they existed.
+  let masterLevel = 1, sfxLevel = 1, musicLevel = 1;
   let eatTokens = EAT_PER_SEC, eatAt = 0;
   const played = [];
 
@@ -29,7 +31,7 @@
 
   // ---- Building blocks -------------------------------------------------------------------------
   // A short tone with an attack/decay envelope and an optional pitch glide.
-  function tone({ type = 'sine', f0, f1 = f0, t = 0, dur = 0.15, vol = 0.3, attack = 0.005, out = master, at }) {
+  function tone({ type = 'sine', f0, f1 = f0, t = 0, dur = 0.15, vol = 0.3, attack = 0.005, out = sfx, at }) {
     const start = at !== undefined ? at : ac.currentTime + t, o = ac.createOscillator(), g = ac.createGain();
     o.type = type;
     o.frequency.setValueAtTime(f0, start);
@@ -62,7 +64,7 @@
     g.gain.setValueAtTime(0, at);
     g.gain.linearRampToValueAtTime(vol, at + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    s.connect(f).connect(g).connect(master);
+    s.connect(f).connect(g).connect(sfx);
     s.start(at);
     s.stop(at + dur + 0.02);
   }
@@ -94,7 +96,7 @@
       f.frequency.exponentialRampToValueAtTime(200, at + 0.9);
       g.gain.setValueAtTime(0.22, at);
       g.gain.exponentialRampToValueAtTime(0.0001, at + 1.0);
-      o.connect(f).connect(g).connect(master);
+      o.connect(f).connect(g).connect(sfx);
       o.start(at);
       o.stop(at + 1.05);
     },
@@ -132,7 +134,7 @@
     if (musicPlaying()) {
       if (!musicTimer) {
         nextBar = ac.currentTime + 0.05;
-        ramp(musicBus.gain, 1, 0.3);
+        ramp(musicBus.gain, musicLevel, 0.3);
         scheduleMusic();
         musicTimer = setInterval(scheduleMusic, 100);
       }
@@ -165,7 +167,7 @@
       lfo.frequency.value = 5;
       lg.gain.value = 250;
       lfo.connect(lg).connect(f.frequency);
-      s.connect(f).connect(g).connect(master);
+      s.connect(f).connect(g).connect(sfx);
       s.start(t);
       lfo.start(t);
       boostNodes = { s, g, lfo };
@@ -189,8 +191,11 @@
         if (!ac) {
           ac = new Ctx();
           master = ac.createGain();
-          master.gain.value = soundOn ? MASTER : 0;
+          master.gain.value = soundOn ? MASTER * masterLevel : 0;
           master.connect(ac.destination);
+          sfx = ac.createGain();
+          sfx.gain.value = sfxLevel;
+          sfx.connect(master);
           musicBus = ac.createGain();
           musicBus.gain.value = 0;
           musicBus.connect(master);
@@ -217,7 +222,18 @@
     music(on) { on = !!on; if (on !== musicWanted) { musicWanted = on; syncMusic(); } },
     setSound(on) {
       soundOn = !!on;
-      if (ac) ramp(master.gain, soundOn ? MASTER : 0, 0.05);
+      if (ac) ramp(master.gain, soundOn ? MASTER * masterLevel : 0, 0.05);
+    },
+    // Master, effects and music levels, each 0 to 1 (anything else is ignored).
+    setVolumes(v) {
+      const ok = (x) => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1;
+      if (v && ok(v.master)) masterLevel = v.master;
+      if (v && ok(v.effects)) sfxLevel = v.effects;
+      if (v && ok(v.music)) musicLevel = v.music;
+      if (!ac) return;
+      ramp(master.gain, soundOn ? MASTER * masterLevel : 0, 0.05);
+      ramp(sfx.gain, sfxLevel, 0.05);
+      if (musicTimer) ramp(musicBus.gain, musicLevel, 0.05);
     },
     setMusic(on) { musicOn = !!on; syncMusic(); },
     // Paused, standing by for another window, or hidden: suspend everything; resume where it was.
@@ -238,6 +254,12 @@
       musicPlaying: musicPlaying() && soundOn && !quietOn,
       boosting: !!boostNodes && soundOn && !quietOn,
       context: ac ? ac.state : 'none',
+      volumes: { master: masterLevel, effects: sfxLevel, music: musicLevel },
+      // The gain nodes' values, once they exist. While nothing is playing the browser may report a stale
+      // value, so tests that need the truth measure the output instead.
+      gains: ac ? { master: master.gain.value, effects: sfx.gain.value, music: musicBus.gain.value } : null,
+      // What reaches the speakers at full effect (0 when muted): effects, and music while it plays.
+      levels: { effects: soundOn ? MASTER * masterLevel * sfxLevel : 0, music: soundOn && musicOn ? MASTER * masterLevel * musicLevel : 0 },
     }),
   };
   root.WormAudio = api;

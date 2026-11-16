@@ -206,6 +206,17 @@ button.ghost.danger { color: #ff8fa3; border-color: rgba(255,90,120,.35); }
   table.runs .hide-sm { display: none; }
   .buttons { flex-direction: column; }
 }
+/* Stats and Settings side by side on the main menu (#13): normal ghost buttons, so the menu gets no taller. */
+.pair { display: flex; gap: 8px; }
+.pair button.ghost { flex: 1 1 auto; width: auto; white-space: nowrap; }
+.pair #openSettings { flex: 0 0 auto; padding-left: 14px; padding-right: 14px; }
+/* Settings screen (#13): one setting per row, panel scrolls on short screens. */
+#settingsPanel h2 { margin-bottom: 0; }
+#settingsPanel h3 { margin: 14px 0 6px; }
+#settingsPanel .setting .label { flex-basis: 112px; }
+#qualityHelp { margin-top: 5px; font-size: 12px; line-height: 1.3; opacity: .65; text-align: left; }
+#settingsPanel input[type=range] { height: 28px; }
+#settingsPanel .seg button { padding: 9px 0; }
 h1 { margin: 0; font-size: 44px; font-weight: 900; letter-spacing: -.02em; }
 h1 span { background: var(--brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
 h2 { margin: 0 0 14px; font-size: 26px; }

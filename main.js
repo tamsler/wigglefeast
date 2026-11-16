@@ -41,6 +41,7 @@
   if (active) claimSession();
   // Declared here, not with the game state: checkAchievements() at startup can reach goStandby() (#185).
   let mode = 'menu'; // menu | playing | dead | paused | standby (another window is active, #45)
+  let settingsFrom = null; // 'menu' or 'paused' while the Settings screen (#13) is open over it
   let deathTimer = 0;
   // Before every write: still ours? If another window took over, stop and stand by.
   function isActive() {
@@ -54,8 +55,12 @@
 
   // Rebuilt from checked fields: a corrupted stored value must not stop startup (#26).
   const settings = {};
+  // Low graphics (#13) is read by resize() and the drawing code; `sized` is set once resize() can run.
+  let lowGfx = false, sized = false;
+  const unit = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1; // a volume level
   function loadSettings() {
-    Object.assign(settings, { name: '', skin: 0, botCount: 30, difficulty: 'normal', mode: 'classic', theme: 'auto', sound: true, music: true });
+    Object.assign(settings, { name: '', skin: 0, botCount: 30, difficulty: 'normal', mode: 'classic', theme: 'auto', sound: true, music: true,
+      quality: 'high', botNames: true, volume: 1, sfxVolume: 1, musicVolume: 1 });
     const s = store.get('settings', null);
     if (s && typeof s === 'object') {
       if (typeof s.name === 'string') settings.name = s.name.slice(0, 16);
@@ -66,11 +71,27 @@
       if (['auto', 'classic', 'halloween', 'christmas', 'snacks', 'tech'].includes(s.theme)) settings.theme = s.theme; // #64
       if (typeof s.sound === 'boolean') settings.sound = s.sound; // #9: older settings have neither, so both stay on
       if (typeof s.music === 'boolean') settings.music = s.music;
+      // #13: each is taken only if valid, so older or damaged settings keep their defaults one by one
+      if (s.quality === 'high' || s.quality === 'low') settings.quality = s.quality;
+      if (typeof s.botNames === 'boolean') settings.botNames = s.botNames;
+      if (unit(s.volume)) settings.volume = s.volume;
+      if (unit(s.sfxVolume)) settings.sfxVolume = s.sfxVolume;
+      if (unit(s.musicVolume)) settings.musicVolume = s.musicVolume;
     }
     window.WormAudio.setSound(settings.sound);
     window.WormAudio.setMusic(settings.music);
+    applyVolumes();
+    applyQuality();
     syncSoundButtons(); // also when another window changed them and this one takes over (#45)
+    if (syncSettingsScreen) syncSettingsScreen();
   }
+  const applyVolumes = () => window.WormAudio.setVolumes({ master: settings.volume, effects: settings.sfxVolume, music: settings.musicVolume });
+  // Low graphics cap the canvas at one pixel per CSS pixel; the pixel ratio changes, so resize.
+  function applyQuality() {
+    lowGfx = settings.quality === 'low';
+    if (sized) resize();
+  }
+  let syncSettingsScreen = null; // set once the Settings screen exists
   loadSettings();
 
   // ---------------------------------------------------------------------------
@@ -421,14 +442,15 @@
     active = false;
     mode = 'standby';
     clearTimeout(deathTimer);
-    for (const id of ['menu', 'death', 'hud', 'paused', 'statsScreen']) $(id).classList.add('hidden');
+    for (const id of ['menu', 'death', 'hud', 'paused', 'statsScreen', 'settingsScreen']) $(id).classList.add('hidden');
+    settingsFrom = null;
     $('standby').classList.remove('hidden');
   }
 
   // ---------------------------------------------------------------------------
   let W = 0, H = 0, DPR = 1;
   function resize() {
-    DPR = Math.min(2, window.devicePixelRatio || 1);
+    DPR = Math.min(lowGfx ? 1 : 2, window.devicePixelRatio || 1);
     W = window.innerWidth;
     H = window.innerHeight;
     canvas.width = Math.round(W * DPR);
@@ -439,6 +461,7 @@
   }
   window.addEventListener('resize', resize);
   resize();
+  sized = true;
 
   // ---------------------------------------------------------------------------
   // Pre-rendered sprites
@@ -508,6 +531,26 @@
     g.fillStyle = grad;
     g.fillRect(0, 0, 64, 64);
     foodSprites.set(color, s);
+    return s;
+  }
+  // Low graphics (#13): just the solid core of the glow sprite, with no halo to blend. Drawn at about
+  // 0.4 of the glow's size, so the dot is as big as the dot inside the halo.
+  const DOT_SCALE = 0.4;
+  const dotSprites = new Map();
+  function dotSprite(color) {
+    let s = dotSprites.get(color);
+    if (s) return s;
+    s = document.createElement('canvas');
+    s.width = s.height = 32;
+    const g = s.getContext('2d');
+    const grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.35, color);
+    grad.addColorStop(0.9, color);
+    grad.addColorStop(1, hexAlpha(color, 0));
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 32, 32);
+    dotSprites.set(color, s);
     return s;
   }
   function hexAlpha(hex, a) {
@@ -783,6 +826,7 @@
     return (Math.sin(t * TAU * 5) > 0 ? 1 : 0.3) * Math.min(1, life / 0.5);
   }
   const specialsDrawn = []; // looks drawn in the last frame, for the test hook
+  const namesDrawn = []; // labels drawn in the last frame (#13), for the test hook
 
   const pwSprites = {};
   for (const type in POWERUP_INFO) {
@@ -844,6 +888,7 @@
   // are traced, so a massive body costs only what is visible (#82). Segment numbers stay
   // absolute, so skins' patterns don't shift. null elsewhere (menu swatches draw everything).
   let span = null;
+  let highlightStrokes = 0, ridgeStrokes = 0; // body highlights and ridge sets drawn in the last frame (#13), for the test hook
   function traceOn(g, sx, sy, from, to) {
     g.beginPath();
     if (span) { from = Math.min(from, span[1]); to = Math.max(to, span[0]); if (from < to) return; }
@@ -1097,7 +1142,8 @@
   // once, which costs about the same as the tube itself. Worms under a few pixels wide skip them.
   const RIDGE_MIN_PX = 6; // body width on screen, in pixels
   // Paints a body: the tube, ridges and a soft highlight, then the finish's markings. px: screen pixels per world unit.
-  function paintBody(g, sx, sy, r, skin, t, px) {
+  // flat (Low graphics, #13): leave out the light rim and the soft highlight, the two long extra strokes.
+  function paintBody(g, sx, sy, r, skin, t, px, flat) {
     const f = FINISH[skin.finish], n = sx.length, last = n - 1, aOuter = g.globalAlpha;
     // A see-through finish (Ghost, #180) draws the body, ridges and markings at its own alpha.
     const a0 = aOuter * (f.alpha || 1);
@@ -1133,29 +1179,33 @@
       g.strokeStyle = 'rgba(0,0,0,0.28)';
       g.lineWidth = Math.max(1 / px, r * 0.08);
       g.stroke();
-      // A faint light rim just inside each ridge, so each disc looks raised.
-      g.beginPath();
-      const ri = r * 0.88;
-      for (let i = hi; i >= lo; i--) {
-        const dx = sx[i - 1] - sx[i], dy = sy[i - 1] - sy[i], d = Math.hypot(dx, dy);
-        if (d < 1e-6) continue;
-        const ahead = Math.atan2(dy, dx), half = Math.acos(Math.max(-1, Math.min(1, (d * d + ri * ri - r * r) / (2 * d * ri))));
-        if (half >= Math.PI) continue; // all of this rim is covered
-        const from = ahead + half;
-        g.moveTo(sx[i] + Math.cos(from) * ri, sy[i] + Math.sin(from) * ri);
-        g.arc(sx[i], sy[i], ri, from, ahead + TAU - half);
+      ridgeStrokes++;
+      if (!flat) {
+        // A faint light rim just inside each ridge, so each disc looks raised.
+        g.beginPath();
+        const ri = r * 0.88;
+        for (let i = hi; i >= lo; i--) {
+          const dx = sx[i - 1] - sx[i], dy = sy[i - 1] - sy[i], d = Math.hypot(dx, dy);
+          if (d < 1e-6) continue;
+          const ahead = Math.atan2(dy, dx), half = Math.acos(Math.max(-1, Math.min(1, (d * d + ri * ri - r * r) / (2 * d * ri))));
+          if (half >= Math.PI) continue; // all of this rim is covered
+          const from = ahead + half;
+          g.moveTo(sx[i] + Math.cos(from) * ri, sy[i] + Math.sin(from) * ri);
+          g.arc(sx[i], sy[i], ri, from, ahead + TAU - half);
+        }
+        g.strokeStyle = 'rgba(255,255,255,0.14)';
+        g.stroke();
+        // A soft highlight along the body, so it reads as a round tube.
+        g.save();
+        g.translate(-r * 0.18, -r * 0.26);
+        g.globalAlpha = a0 * k * 0.2;
+        g.strokeStyle = '#fff';
+        g.lineWidth = r * 0.6;
+        traceOn(g, sx, sy, last, 0);
+        g.stroke();
+        g.restore();
+        highlightStrokes++;
       }
-      g.strokeStyle = 'rgba(255,255,255,0.14)';
-      g.stroke();
-      // A soft highlight along the body, so it reads as a round tube.
-      g.save();
-      g.translate(-r * 0.18, -r * 0.26);
-      g.globalAlpha = a0 * k * 0.2;
-      g.strokeStyle = '#fff';
-      g.lineWidth = r * 0.6;
-      traceOn(g, sx, sy, last, 0);
-      g.stroke();
-      g.restore();
       g.globalAlpha = a0;
     }
     if (f.marks) f.marks(g, sx, sy, r, skin, t);
@@ -1258,7 +1308,8 @@
 
   function showMenu() {
     mode = 'menu';
-    for (const id of ['death', 'hud', 'paused', 'statsScreen']) $(id).classList.add('hidden');
+    settingsFrom = null;
+    for (const id of ['death', 'hud', 'paused', 'statsScreen', 'settingsScreen']) $(id).classList.add('hidden');
     $('menu').classList.remove('hidden');
     refreshMenu(); // rewards earned in the run show unlocked (#14)
     const t = profile.totals;
@@ -1333,7 +1384,6 @@
     return h;
   }
   function showStats() {
-    $('showTips').textContent = '\u{1F4A1} Show tips again';
     const t = profile.totals;
     const avg = t.games ? Math.round(profile.recent.reduce((s, r) => s + r.peak, 0) / Math.max(1, profile.recent.length)) : 0;
     const tile = (v, label) => `<div><b>${escapeHtml(v)}</b><small>${escapeHtml(label)}</small></div>`;
@@ -1565,6 +1615,63 @@
   }
   document.querySelectorAll('#statsTabs button').forEach((b) => b.addEventListener('click', () => showStatsTab(b.dataset.tab)));
   $('closeStats').addEventListener('click', showMenu);
+
+  // ---------------------------------------------------------------------------
+  // Settings screen (#13): over the main menu or the pause panel. Back returns there. `mode` is never
+  // touched, so a paused run stays paused and nothing ticks behind it.
+  const saveSettings = () => { if (isActive()) store.set('settings', settings); };
+  const VOLUME_SLIDERS = [['volMaster', 'volMasterVal', 'volume'], ['volSfx', 'volSfxVal', 'sfxVolume'], ['volMusic', 'volMusicVal', 'musicVolume']];
+  syncSettingsScreen = () => {
+    for (const b of document.querySelectorAll('#qualityPick button')) { const on = b.dataset.v === settings.quality; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
+    for (const b of document.querySelectorAll('#namesPick button')) { const on = (b.dataset.v === 'on') === settings.botNames; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
+    for (const [id, valId, key] of VOLUME_SLIDERS) {
+      const pct = Math.round(settings[key] * 100);
+      $(id).value = pct;
+      $(valId).textContent = pct + '%';
+    }
+  };
+  syncSettingsScreen();
+  function openSettings() {
+    if (settingsFrom || (mode !== 'menu' && mode !== 'paused')) return;
+    settingsFrom = mode;
+    $(mode === 'menu' ? 'menu' : 'paused').classList.add('hidden');
+    $('showTips').textContent = '\u{1F4A1} Show tips again';
+    syncSettingsScreen();
+    $('settingsScreen').classList.remove('hidden');
+  }
+  function closeSettings() {
+    if (!settingsFrom) return;
+    const from = settingsFrom;
+    settingsFrom = null;
+    $('settingsScreen').classList.add('hidden');
+    $(from === 'menu' ? 'menu' : 'paused').classList.remove('hidden');
+  }
+  $('openSettings').addEventListener('click', openSettings);
+  $('pausedSettings').addEventListener('click', openSettings);
+  $('closeSettings').addEventListener('click', closeSettings);
+  for (const b of document.querySelectorAll('#qualityPick button')) b.addEventListener('click', () => {
+    settings.quality = b.dataset.v;
+    applyQuality();
+    saveSettings();
+    syncSettingsScreen();
+  });
+  for (const b of document.querySelectorAll('#namesPick button')) b.addEventListener('click', () => {
+    settings.botNames = b.dataset.v === 'on';
+    saveSettings();
+    syncSettingsScreen();
+  });
+  // Volume: the audio follows the slider as it moves; the level is saved when it is let go.
+  for (const [id, valId, key] of VOLUME_SLIDERS) {
+    $(id).addEventListener('input', (e) => {
+      settings[key] = e.target.value / 100;
+      $(valId).textContent = e.target.value + '%';
+      applyVolumes();
+    });
+    $(id).addEventListener('change', () => {
+      saveSettings();
+      if (key === 'sfxVolume' && settings.sfxVolume > 0) sound.play('eat', { size: 0.5 }); // so the level can be judged
+    });
+  }
   $('exportSave').addEventListener('click', exportSave);
   $('importSave').addEventListener('click', () => $('importFile').click());
   $('importFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importSave(f); });
@@ -1691,7 +1798,11 @@
   });
 
   window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT') return;
+    if (e.target.tagName === 'INPUT') {
+      // A volume slider has the keyboard focus: Esc and P still close Settings (#13).
+      if (e.target.type === 'range' && settingsFrom && (e.code === 'Escape' || e.code === 'KeyP')) { closeSettings(); e.preventDefault(); }
+      return;
+    }
     if (ALL_KEYS.includes(e.code)) {
       // Outside a run, Space on a focused button presses it instead of boosting (#50).
       if (e.code === 'Space' && mode !== 'playing' && e.target.closest && e.target.closest('button, a[href]')) return;
@@ -1702,7 +1813,10 @@
     }
     if (e.repeat) return; // holding a toggle key must not flip it back and forth (#49)
     switch (e.code) {
-      case 'KeyP': case 'Escape': setPaused(mode === 'playing'); break;
+      case 'KeyP': case 'Escape':
+        if (settingsFrom) closeSettings(); // closes Settings first; it never resumes a run (#13)
+        else setPaused(mode === 'playing');
+        break;
       case 'KeyM': // #9; Ctrl/Cmd/Alt+M belong to the browser or system
         if (e.ctrlKey || e.metaKey || e.altKey) break;
         setAudio('sound', !settings.sound);
@@ -1763,6 +1877,7 @@
   // pointing where it is going, pulsing from back to front.
   let boostArrowsDrawn = 0; // worms whose arrows were drawn in the last frame
   let foodDrawn = 0; // pieces of food drawn in the last frame (#163)
+  let foodHalos = 0, foodDots = 0; // food drawn with its glow, and as a plain dot in Low graphics (#13)
   let headRepaints = 0; // heads repainted over another body in the last frame (#102, #161)
   function drawBoostArrows(w, t, alpha) {
     const r = w.r, a = w.angle, arm = r * 1.05, spread = Math.PI / 4;
@@ -1826,6 +1941,9 @@
     foodSizes: (r, themed) => foodSizes(r, 1, themed), // #163
     floorTile: () => ({ w: FLOOR_W, h: FLOOR_H, s: FLOOR_S }), // #163
     foodDrawn: () => foodDrawn,
+    settings: () => ({ ...settings }), // #13
+    gfx: () => ({ quality: settings.quality, low: lowGfx, dpr: DPR, canvas: [canvas.width, canvas.height], halos: foodHalos, dots: foodDots, highlights: highlightStrokes, ridges: ridgeStrokes }),
+    namesDrawn: () => namesDrawn.map((n) => ({ ...n })),
     previewFrames: () => previewFrames,
     learningCues: () => learningAlpha.size, // #138
     learningCue: (id) => learningAlpha.get(id) || 0,
@@ -1927,7 +2045,7 @@
       }
 
       // Body in the skin's finish, with ridges (#58, #161)
-      paintBody(ctx, sx, sy, r, skin, game.time, cam.z * DPR);
+      paintBody(ctx, sx, sy, r, skin, game.time, cam.z * DPR, lowGfx);
       if (part === 'head') ctx.restore();
     }
 
@@ -1976,6 +2094,9 @@
     const z = cam.z;
     boostArrowsDrawn = 0;
     headRepaints = 0;
+    highlightStrokes = 0;
+    ridgeStrokes = 0;
+    namesDrawn.length = 0;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#0b0f1c';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -2012,6 +2133,8 @@
     // Food: a glow in the food's colour, plus the theme's item unless the theme is Classic (#64)
     const themed = activeTheme !== 'classic';
     foodDrawn = 0;
+    foodHalos = 0;
+    foodDots = 0;
     for (const f of game.food) {
       // Culled by its drawn size, so a big piece's glow doesn't pop in at the screen edge (#163).
       const m = f.r * 3.7 - 40; // glow radius at the peak of its pulse, beyond the view's own margin
@@ -2021,10 +2144,20 @@
       const { glow: G, item: D } = foodSizes(f.r, pulse, themed);
       if (!themed) {
         ctx.globalAlpha = a;
-        ctx.drawImage(foodSprite(f.c), f.x - G / 2, f.y - G / 2, G, G);
+        if (lowGfx) { // a plain dot, no glow halo (#13)
+          const d = G * DOT_SCALE;
+          ctx.drawImage(dotSprite(f.c), f.x - d / 2, f.y - d / 2, d, d);
+          foodDots++;
+        } else {
+          ctx.drawImage(foodSprite(f.c), f.x - G / 2, f.y - G / 2, G, G);
+          foodHalos++;
+        }
       } else {
-        ctx.globalAlpha = a * 0.55;
-        ctx.drawImage(foodSprite(f.c), f.x - G / 2, f.y - G / 2, G, G);
+        if (!lowGfx) {
+          ctx.globalAlpha = a * 0.55;
+          ctx.drawImage(foodSprite(f.c), f.x - G / 2, f.y - G / 2, G, G);
+          foodHalos++;
+        } else foodDots++;
         ctx.globalAlpha = a;
         ctx.drawImage(itemSprite(activeTheme, itemIndex(f)), f.x - D / 2, f.y - D / 2, D, D);
       }
@@ -2082,6 +2215,7 @@
     ctx.lineWidth = 3 / z;
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     for (const w of game.worms) {
+      if (w !== player && !settings.botNames) continue; // Show bot names off (#13): no label, tag or grudge colour
       const x = w.sx[0], y = w.sy[0];
       if (x < view.x0 || x > view.x1 || y < view.y0 || y > view.y1) continue;
       const ty = y - w.r - 8 / z;
@@ -2091,6 +2225,7 @@
       ctx.fillStyle = w === player ? '#ffd60a' : player && w.ai && w.ai.retaliating === player ? PLAYER_DOT : 'rgba(255,255,255,0.85)';
       ctx.strokeText(label, x, ty);
       ctx.fillText(label, x, ty);
+      namesDrawn.push({ id: w.id, label, color: ctx.fillStyle });
     }
     drawLearningCues(t, z, view);
   }
