@@ -209,11 +209,14 @@ test('Show tips again turns them back on; Reset stats leaves them alone (#10)', 
   await page.click('#resetStats');
   await page.frames(3);
   assert.deepEqual((await storedTips(page)).sort(), [...ALL].sort(), 'tips kept after Reset stats');
+  await page.click('#closeStats');
 
+  // "Show tips again" lives in Settings now (#13)
+  await page.click('#openSettings');
   await page.click('#showTips');
   assert.match(await page.eval(`document.getElementById('showTips').textContent`), /Tips on/);
   assert.deepEqual(await storedTips(page), [], 'forgotten and saved');
-  await page.click('#closeStats');
+  await page.click('#closeSettings');
   await page.startRun();
   await current(page, 'steer');
 });

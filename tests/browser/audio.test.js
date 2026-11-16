@@ -310,3 +310,153 @@ test('sound and music toggles', async (t) => {
     assert.equal(await page.eval(`document.querySelector('#difficulty button.on').dataset.v`), 'hard');
   });
 });
+
+// #13: master, effects and music volume, set in Settings. 100% on all three is today's loudness.
+// What is heard is measured, not read from the gain nodes (which the browser can report stale while
+// nothing plays): a tap on the master output records the peak level while one effect plays.
+test('volume levels', async (t) => {
+  let page;
+  t.after(() => page && page.close());
+  page = await launch();
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+    const C = window.AudioContext, make = C.prototype.createGain;
+    window.__gains = [];
+    C.prototype.createGain = function () {
+      const g = make.call(this);
+      window.__gains.push(g);
+      if (window.__gains.length === 2) { // the master gain is made first, the effects gain second
+        window.__tap = this.createAnalyser();
+        window.__tap.fftSize = 2048;
+        window.__gains[0].connect(window.__tap);
+      }
+      return g;
+    };
+  })()` });
+  await page.goto(gameUrl());
+  const state = () => page.eval('window.wigglefeastDebug.audioState()');
+  const slide = (id, v) => page.eval(`(() => { const e = document.getElementById('${id}'); e.value = ${v}; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); })()`);
+  const eats = () => page.eval(`window.wigglefeastDebug.sounds().filter((n) => n === 'eat').length`);
+  // The highest level at the master output while one eating pop plays, after a short wait so that a
+  // volume change has finished ramping and earlier sounds have died away.
+  const peak = () => page.eval(`new Promise((res) => setTimeout(() => {
+    let max = 0; const t0 = performance.now(), buf = new Float32Array(window.__tap.fftSize);
+    window.WormAudio.play('eat', { size: 0.5 });
+    (function sample() {
+      window.__tap.getFloatTimeDomainData(buf);
+      for (const v of buf) max = Math.max(max, Math.abs(v));
+      performance.now() - t0 < 250 ? requestAnimationFrame(sample) : res(max);
+    })();
+  }, 250))`);
+  const ratio = async (base) => (await peak()) / base;
+  await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: 5, y: 5, button: 'left', clickCount: 1 });
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 5, y: 5, button: 'left', clickCount: 1 });
+  let base;
+
+  await t.test('100% on all three is exactly as loud as before volume existed', async () => {
+    const s = await state();
+    assert.deepEqual(s.volumes, { master: 1, effects: 1, music: 1 });
+    assert.deepEqual(s.levels, { effects: 0.7, music: 0.7 });
+    base = await peak();
+    // 0.7 master level x the pop's own 0.2 volume at this size
+    assert.ok(base > 0.12 && base < 0.16, `an eating pop peaks at ${base}`);
+  });
+
+  await t.test('Master scales effects and music together', async () => {
+    await page.click('#openSettings');
+    await slide('volMaster', 50);
+    assert.equal(await page.eval(`document.getElementById('volMasterVal').textContent`), '50%');
+    const r = await ratio(base);
+    assert.ok(Math.abs(r - 0.5) < 0.05, `the pop is ${r} of its old level`);
+    const s = await state();
+    assert.ok(Math.abs(s.levels.effects - 0.35) < 0.001 && Math.abs(s.levels.music - 0.35) < 0.001, JSON.stringify(s.levels));
+  });
+
+  await t.test('Effects scales only the effects', async () => {
+    await slide('volMaster', 100);
+    await slide('volSfx', 0);
+    assert.ok((await peak()) < 0.001, 'silent at 0%');
+    const s = await state();
+    assert.deepEqual([s.levels.effects, s.levels.music], [0, 0.7], 'the music keeps its level');
+    await slide('volSfx', 60);
+    const r = await ratio(base);
+    assert.ok(Math.abs(r - 0.6) < 0.06, `the pop is ${r} of its old level`);
+  });
+
+  await t.test('releasing the Effects slider plays one effect to judge it by, unless it is at 0%', async () => {
+    await slide('volSfx', 0);
+    const n = await eats();
+    await slide('volSfx', 0);
+    assert.equal(await eats(), n, 'nothing at 0%');
+    await slide('volSfx', 60);
+    assert.equal(await eats(), n + 1, 'one pop at 60%');
+  });
+
+  await t.test('Music scales only the music, once it plays', async () => {
+    await slide('volSfx', 100);
+    await slide('volMusic', 25);
+    const s = await state();
+    assert.ok(Math.abs(s.levels.music - 0.175) < 0.001 && s.levels.effects === 0.7, JSON.stringify(s.levels));
+    await page.click('#closeSettings');
+    await page.startRun();
+    await page.waitFor('window.wigglefeastDebug.audioState().musicPlaying', 'music');
+    // The music node is busy while it plays, so its gain can be read.
+    await page.waitFor(`Math.abs(window.wigglefeastDebug.audioState().gains.music - 0.25) < 0.02`, 'the music gain to follow the slider', 5000);
+  });
+
+  await t.test('the mute buttons and M stay mutes at any level, and unmute to the level that was set', async () => {
+    // Back to the menu first: the run's music would add to the level measured below.
+    await page.press('KeyP');
+    await page.click('#endRun');
+    await page.waitFor(`!document.getElementById('menu').classList.contains('hidden')`, 'the menu');
+    await page.click('#openSettings');
+    await slide('volMaster', 80);
+    await page.click('#closeSettings');
+    await page.press('KeyM');
+    let s = await state();
+    assert.deepEqual([s.sound, s.levels.effects, s.levels.music], [false, 0, 0], 'muted');
+    assert.ok((await peak()) < 0.001, 'silent');
+    await page.press('KeyM');
+    s = await state();
+    assert.ok(Math.abs(s.levels.effects - 0.56) < 0.001, 'back at 80% of the old level');
+    const r = await ratio(base);
+    assert.ok(Math.abs(r - 0.8) < 0.08, `the pop is ${r} of its old level`);
+  });
+
+  await t.test('moving a slider while muted does not unmute', async () => {
+    await page.click('#menu .audioToggles button[data-toggle="music"]');
+    await page.click('#openSettings');
+    await slide('volMusic', 90);
+    const s = await state();
+    assert.deepEqual([s.music, s.musicPlaying, s.volumes.music], [false, false, 0.9]);
+    await page.click('#closeSettings');
+    await page.click('#menu .audioToggles button[data-toggle="music"]');
+    assert.equal((await state()).music, true, 'unmuted, at the level that was set');
+    assert.equal((await state()).volumes.music, 0.9);
+  });
+
+  await t.test('the sample also plays when Settings is opened from the pause panel, and the game is quiet again after', async () => {
+    await page.startRun();
+    await page.press('KeyP');
+    await page.waitFor(`window.wigglefeastDebug.audioState().quiet`, 'the pause to go quiet');
+    await page.click('#pausedSettings');
+    await page.waitFor(`!window.wigglefeastDebug.audioState().quiet`, 'effects to be heard behind Settings');
+    assert.equal((await state()).musicPlaying, false, 'the music stays off');
+    await page.waitFor(`window.wigglefeastDebug.audioState().context === 'running'`, 'audio running', 5000);
+    const n = await eats();
+    await slide('volSfx', 60);
+    assert.equal(await eats(), n + 1, 'one pop at 60%');
+    await page.click('#closeSettings');
+    await page.waitFor(`window.wigglefeastDebug.audioState().quiet`, 'quiet again on the pause panel');
+    await page.click('#endRun');
+    await slide('volSfx', 100);
+  });
+
+  await t.test('levels are remembered', async () => {
+    await page.reload();
+    const s = await state();
+    assert.deepEqual(s.volumes, { master: 0.8, effects: 1, music: 0.9 });
+    await page.click('#openSettings');
+    assert.equal(await page.eval(`document.getElementById('volMaster').value`), '80');
+    assert.equal(await page.eval(`document.getElementById('volMusicVal').textContent`), '90%');
+  });
+});

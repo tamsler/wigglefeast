@@ -174,3 +174,47 @@ for (const mode of ['timed', 'survival']) {
     });
   }
 }
+
+// The Settings screen (#13) fits phones and desktops: every control can be reached, nothing scrolls
+// sideways, no control overlaps its label or another control, and each can be pressed with a finger.
+for (const [width, height, mobile] of [[1280, 713, false], [360, 640, true], [640, 360, true], [844, 390, true]]) {
+  test(`Settings fits and every control is usable at ${width}x${height} (#13)`, async (t) => {
+    const page = await launch({ width, height, mobile });
+    t.after(() => page.close());
+    if (mobile) await page.coarsePointer();
+    await page.goto(gameUrl());
+    await page.frames(3);
+    await page.click('#openSettings');
+    await page.frames(3);
+    const m = await page.eval(`(() => {
+      const panel = document.querySelector('#settingsScreen .panel'), p = panel.getBoundingClientRect();
+      const controls = [...panel.querySelectorAll('button, input[type=range]')];
+      const rects = controls.map((c) => ({ id: c.id || c.dataset.v, r: c.getBoundingClientRect() }));
+      const overlap = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+      const clashes = [];
+      for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) if (overlap(rects[i].r, rects[j].r)) clashes.push(rects[i].id + '/' + rects[j].id);
+      for (const row of panel.querySelectorAll('.setting')) { // a label never runs into its control
+        const [label, ctl] = [row.querySelector('.label').getBoundingClientRect(), row.querySelector('.seg, input').getBoundingClientRect()];
+        if (overlap(label, ctl)) clashes.push('label/' + (row.querySelector('input') || row.querySelector('.seg')).id);
+        if (row.querySelector('.label').scrollWidth > row.querySelector('.label').clientWidth + 1) clashes.push('label cut off: ' + row.querySelector('.label').textContent);
+      }
+      return {
+        inView: p.top >= 0 && p.bottom <= innerHeight + 0.5 && p.left >= 0 && p.right <= innerWidth + 0.5,
+        reachable: rects.every(({ r }) => r.left >= p.left - 1 && r.right <= p.right + 1 && r.top - p.top + panel.scrollTop >= 0 && r.bottom - p.top + panel.scrollTop <= panel.scrollHeight + 1),
+        sideways: document.documentElement.scrollWidth > innerWidth || panel.scrollWidth > panel.clientWidth + 1,
+        clashes,
+        smallest: Math.min(...rects.map(({ r }) => r.height)),
+        count: controls.length,
+      };
+    })()`);
+    assert.ok(m.inView, 'the panel fits the screen');
+    assert.ok(m.reachable, 'every control is inside the panel');
+    assert.equal(m.sideways, false, 'no sideways scrolling');
+    assert.deepEqual(m.clashes, [], 'nothing overlaps');
+    assert.ok(m.count >= 8, `${m.count} controls`);
+    assert.ok(m.smallest >= 28, `the smallest control is ${m.smallest}px high`);
+    // Back stays reachable even when the panel scrolls.
+    await page.eval(`document.querySelector('#settingsScreen .panel').scrollTop = 1e6`);
+    assert.ok(await page.eval(`(() => { const r = document.getElementById('closeSettings').getBoundingClientRect(); return r.bottom <= innerHeight + 0.5 && r.top >= 0; })()`), 'Back can be scrolled into view');
+  });
+}

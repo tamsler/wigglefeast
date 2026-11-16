@@ -22,6 +22,7 @@ const SECONDS = {
   'tests/browser/bots.test.js': 13,
   'tests/browser/massive.test.js': 10,
   'tests/browser/updates.test.js': 70, // Chrome waits ~60 s before the first update check (#220)
+  'tests/browser/settings.test.js': 40, // Settings screen (#13), includes a 15 s frame-time check
   'tests/browser/boost.test.js': 5,
   'tests/browser/habits.test.js': 5,
   'tests/browser/import.test.js': 5,
