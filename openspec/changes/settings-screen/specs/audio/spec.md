@@ -1,5 +1,26 @@
 # Spec Delta
 
+## MODIFIED Requirements
+
+### Requirement: Audio follows browser rules
+Audio SHALL only start after the player's first click, tap or key press on the page, and SHALL go quiet while the game is paused, standing by for another window, or hidden, except that effects SHALL be heard while Settings is open over the pause panel, so a volume can be judged. The game SHALL keep working without errors where audio isn't available, including when opened from disk.
+
+#### Scenario: Before any interaction
+- **WHEN** the page has loaded and the player hasn't clicked, tapped or pressed a key yet
+- **THEN** no audio plays and no audio error is shown
+
+#### Scenario: No audio support
+- **WHEN** the browser has no Web Audio
+- **THEN** the game plays normally, silently, with no errors
+
+#### Scenario: Paused
+- **WHEN** the player pauses a run and does not open Settings
+- **THEN** all sound stops, and the music starts again on resume
+
+#### Scenario: Settings over the pause panel
+- **WHEN** the player opens Settings from the pause panel and releases the Effects slider above 0%
+- **THEN** the sample effect plays, the music stays off, and the game is quiet again when Settings is closed
+
 ## ADDED Requirements
 
 ### Requirement: Volume levels

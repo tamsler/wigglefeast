@@ -106,6 +106,25 @@ test('Settings opens from the menu and from the pause panel, and Back returns th
     await page.send('Input.dispatchKeyEvent', { type: 'keyUp', code: 'Escape', key: 'Escape', windowsVirtualKeyCode: 27 });
     assert.equal(await hidden(page, 'settingsScreen'), true);
     assert.equal(await hidden(page, 'paused'), false, 'still paused');
+    // The slider must not keep the keyboard: P would be swallowed and the run could not be resumed.
+    assert.equal(await page.eval(`document.activeElement.id !== 'volMaster'`), true, 'the slider lost the focus');
+    await page.press('KeyP');
+    assert.equal(await hidden(page, 'paused'), true, 'P resumes the run straight away');
+    await page.press('KeyP');
+    await page.waitFor(`!document.getElementById('paused').classList.contains('hidden')`, 'pause again');
+  });
+
+  await t.test('coming back from the back/forward cache with Settings open shows one panel', async () => {
+    await page.click('#pausedSettings');
+    assert.equal(await hidden(page, 'settingsScreen'), false);
+    await page.eval(`window.dispatchEvent(new Event('pagehide')); window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))`);
+    await page.waitFor(`document.getElementById('settingsScreen').classList.contains('hidden')`, 'Settings to close', 5000);
+    assert.equal(await hidden(page, 'paused'), false, 'the Welcome back panel is showing, alone');
+    assert.equal(await page.eval(`document.getElementById('pausedTitle').textContent`), 'Welcome back!');
+    // and Settings still opens and closes normally afterwards
+    await page.click('#pausedSettings');
+    await page.click('#closeSettings');
+    assert.equal(await hidden(page, 'paused'), false);
   });
 
   await t.test('a window that loses the game hides Settings and writes nothing', async () => {

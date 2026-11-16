@@ -434,6 +434,23 @@ test('volume levels', async (t) => {
     assert.equal((await state()).volumes.music, 0.9);
   });
 
+  await t.test('the sample also plays when Settings is opened from the pause panel, and the game is quiet again after', async () => {
+    await page.startRun();
+    await page.press('KeyP');
+    await page.waitFor(`window.wigglefeastDebug.audioState().quiet`, 'the pause to go quiet');
+    await page.click('#pausedSettings');
+    await page.waitFor(`!window.wigglefeastDebug.audioState().quiet`, 'effects to be heard behind Settings');
+    assert.equal((await state()).musicPlaying, false, 'the music stays off');
+    await page.waitFor(`window.wigglefeastDebug.audioState().context === 'running'`, 'audio running', 5000);
+    const n = await eats();
+    await slide('volSfx', 60);
+    assert.equal(await eats(), n + 1, 'one pop at 60%');
+    await page.click('#closeSettings');
+    await page.waitFor(`window.wigglefeastDebug.audioState().quiet`, 'quiet again on the pause panel');
+    await page.click('#endRun');
+    await slide('volSfx', 100);
+  });
+
   await t.test('levels are remembered', async () => {
     await page.reload();
     const s = await state();

@@ -1349,6 +1349,8 @@
     $('menu').classList.add('hidden');
     $('death').classList.add('hidden');
     $('statsScreen').classList.add('hidden');
+    $('settingsScreen').classList.add('hidden'); // restored from the back/forward cache with Settings open (#13)
+    settingsFrom = null;
     $('hud').classList.remove('hidden');
     mode = 'playing';
     setPaused(true, true);
@@ -1645,6 +1647,8 @@
     settingsFrom = null;
     $('settingsScreen').classList.add('hidden');
     $(from === 'menu' ? 'menu' : 'paused').classList.remove('hidden');
+    // A slider that keeps the keyboard focus would swallow P and Esc (the INPUT early return in the key handler).
+    if (document.activeElement && $('settingsScreen').contains(document.activeElement)) document.activeElement.blur();
   }
   $('openSettings').addEventListener('click', openSettings);
   $('pausedSettings').addEventListener('click', openSettings);
@@ -2457,7 +2461,9 @@
     const p = game && game.player, playing = mode === 'playing' && p && !p.dead;
     sound.boost(playing && p.boosting);
     sound.music(playing);
-    sound.quiet(mode === 'paused' || mode === 'standby' || document.hidden);
+    // Paused is quiet, except while Settings is open over the pause panel: the volume sample must be heard (#13).
+    // Music stays off (it plays only in a run), and Back makes it quiet again.
+    sound.quiet((mode === 'paused' && !settingsFrom) || mode === 'standby' || document.hidden);
   }
   document.addEventListener('visibilitychange', syncAudio); // frames stop while hidden
 
